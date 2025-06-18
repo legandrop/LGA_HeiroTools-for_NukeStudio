@@ -7,3 +7,5 @@ __pycache__/
 +OLD/
 Building_Blocks/
 z_*.py
+.DS_Store
+Thumbs.db
