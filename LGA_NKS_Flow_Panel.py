@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.42 - Lega Pugliese
+  LGA_NKS_Flow_Panel v2.44 - Lega Pugliese
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
 ____________________________________________________________________________________
@@ -24,7 +24,7 @@ from PySide2.QtCore import Qt
 
 
 # Variable global para activar o desactivar los prints
-DEBUG = False
+DEBUG = True
 
 
 def debug_print(*message):
@@ -265,24 +265,24 @@ class ColorChangeWidget(QWidget):
     def run_review_pic_script(self):
         try:
             script_path = os.path.join(
-                os.path.dirname(__file__), "LGA_NKS", "LGA_NKS_SnapShot.py"
+                os.path.dirname(__file__), "LGA_NKS_Flow", "LGA_NKS_ReviewPic.py"
             )
             if os.path.exists(script_path):
                 import importlib.util
 
                 spec = importlib.util.spec_from_file_location(
-                    "LGA_NKS_SnapShot", script_path
+                    "LGA_NKS_ReviewPic", script_path
                 )
                 if spec is not None and spec.loader is not None:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     # Llamar a la funcion principal del script
                     module.main()
-                    debug_print("Ejecutado LGA_NKS_SnapShot script.")
+                    debug_print("Ejecutado LGA_NKS_ReviewPic script.")
             else:
                 debug_print(f"Script no encontrado en la ruta: {script_path}")
         except Exception as e:
-            debug_print(f"Error al ejecutar el script SnapShot: {e}")
+            debug_print(f"Error al ejecutar el script ReviewPic: {e}")
 
     #### Push
     def handle_color_button_click(self, color, button_name):

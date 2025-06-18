@@ -10,7 +10,7 @@ ______________________________________________________
 import hiero.core
 import hiero.ui
 import os
-from PySide2 import QtWidgets
+from PySide2.QtWidgets import QApplication
 from PySide2.QtCore import QRect
 
 DEBUG = True
@@ -90,9 +90,9 @@ def main():
             debug_print("❌ No se pudo crear el archivo.")
 
     # Copiar al portapapeles
-    app = QtWidgets.QApplication.instance()
+    app = QApplication.instance()
     if not app:
-        app = QtWidgets.QApplication([])
+        app = QApplication([])
 
     clipboard = app.clipboard()
     clipboard.setImage(qimage_cropped)
