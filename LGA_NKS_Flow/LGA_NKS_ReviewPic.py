@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_ReviewPic v0.2 - Lega
+  LGA_NKS_ReviewPic v0.3 - Lega
   Crea un snapshot de la imagen actual del viewer y lo guarda en ReviewPic_Cache
   organizando por clips del track EXR con numeracion de frames
 _______________________________________________________________________________________
@@ -15,6 +15,7 @@ import re
 import glob
 from PySide2.QtWidgets import QApplication
 from PySide2.QtCore import QRect
+import subprocess
 
 DEBUG = True
 
@@ -192,6 +193,22 @@ def main():
         if ok and os.path.exists(full_path):
             print(f"✅ ReviewPic guardado: {clip_folder_name}/{filename}")
             debug_print(f"Ruta completa: {full_path}")
+
+            # Ruta al ejecutable de ShareX_ImageEditor_LGA
+            # Se calcula la ruta relativa al directorio del script.
+            editor_dir = os.path.abspath(
+                os.path.join(script_dir, "..", "ShareX_ImageEditor_LGA")
+            )
+            editor_path = os.path.join(editor_dir, "ShareX_ImageEditor_LGA.exe")
+
+            # Abrir el JPG con el editor de imagenes
+            try:
+                subprocess.Popen([editor_path, full_path])
+                debug_print(f"Abriendo {full_path} con {editor_path}")
+            except Exception as e:
+                print(f"❌ Error al intentar abrir el editor de imágenes: {e}")
+                debug_print(f"Error completo al abrir editor: {e}")
+
         else:
             print("❌ No se pudo crear el archivo.")
             debug_print(f"save() result: {ok}, exists: {os.path.exists(full_path)}")
