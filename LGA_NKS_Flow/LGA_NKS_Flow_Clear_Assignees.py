@@ -12,7 +12,7 @@ from PySide2.QtCore import QRunnable, Slot, QThreadPool, Signal, QObject
 from PySide2.QtWidgets import QApplication, QMessageBox
 
 # Variable global para debug
-DEBUG = True
+debug = False
 
 debug_messages = []
 

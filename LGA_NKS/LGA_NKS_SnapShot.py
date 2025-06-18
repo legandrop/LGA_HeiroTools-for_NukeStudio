@@ -13,7 +13,7 @@ import os
 from PySide2.QtWidgets import QApplication
 from PySide2.QtCore import QRect
 
-DEBUG = True
+debug = False
 SaveToFile = False
 
 

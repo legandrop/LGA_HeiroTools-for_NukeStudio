@@ -29,7 +29,7 @@ import importlib.util
 import importlib.machinery
 
 # Variable global para activar o desactivar los prints
-DEBUG = True
+debug = False
 DEBUG_BASIC = True
 
 
