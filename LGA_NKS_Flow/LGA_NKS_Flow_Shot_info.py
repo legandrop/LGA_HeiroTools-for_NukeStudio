@@ -1,7 +1,7 @@
 """
 __________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.7 - Lega Pugliese
+  LGA_NKS_Flow_Shot_info v1.71 - Lega Pugliese
   Imprime informacion del shot y las versiones de la task comp
 __________________________________________________________________
 
@@ -180,7 +180,7 @@ class HieroOperations:
                         # Obtener las tres ultimas versiones
                         last_versions = sorted(
                             versions, key=lambda v: v["version_date"], reverse=True
-                        )[:3]
+                        )
                         version_info = []
                         for v in last_versions:
                             match = re.search(r"v(\d+)", v["version_number"])
