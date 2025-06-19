@@ -1,7 +1,7 @@
 """
 _______________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.6 - 2025 - Lega
+  LGA_NKS_CheckProjectVersions v1.61 - 2025 - Lega
   Chequea versiones de todos los proyectos abiertos en Hiero
 _______________________________________________________________
 
@@ -35,6 +35,9 @@ INTERVALO_TEMPORIZADOR = 4
 # Variable global para almacenar el temporizador activo
 temporizador_global = None
 temporizador_id = "LGA_CheckProjects_Timer"
+
+# Variable global para controlar si el temporizador esta habilitado
+is_timer_enabled = True
 
 DEBUG = False
 
@@ -227,7 +230,7 @@ class ProyectosAbertosDialog(QMainWindow):
         botones_layout = QHBoxLayout()
 
         # Botón para actualizar
-        boton_actualizar = QPushButton("Actualizar Ahora")
+        boton_actualizar = QPushButton("Volver a chequear")
         boton_actualizar.clicked.connect(self.actualizar_proyectos)
         botones_layout.addWidget(boton_actualizar)
 
@@ -236,7 +239,18 @@ class ProyectosAbertosDialog(QMainWindow):
         boton_cerrar.clicked.connect(self.close)
         botones_layout.addWidget(boton_cerrar)
 
+        # Nuevo botón para deshabilitar el temporizador
+        self.boton_deshabilitar = QPushButton("Deshabilitar")
+        self.boton_deshabilitar.clicked.connect(self.deshabilitar_temporizador_ui)
+        botones_layout.addWidget(self.boton_deshabilitar)
+
         layout.addLayout(botones_layout)
+
+        # Actualizar el estado del boton de deshabilitar y el label del timer al inicializar la UI
+        global is_timer_enabled
+        if not is_timer_enabled:
+            self.label_timer.setText("Temporizador Deshabilitado")
+            self.boton_deshabilitar.setEnabled(False)
 
         # Cargar proyectos o usar los datos proporcionados
         if proyectos_con_version_alta:
@@ -246,8 +260,13 @@ class ProyectosAbertosDialog(QMainWindow):
 
     def on_destroyed(self):
         """Se llama cuando la ventana se destruye"""
+        global is_timer_enabled
+        is_timer_enabled = False  # Asegura que el estado de 'deshabilitado' persista al cerrar la ventana
         # Detener el temporizador si la ventana se cierra
         detener_temporizador()
+        debug_print(
+            "Ventana de verificación de versiones cerrada. Temporizador deshabilitado."
+        )
 
     def actualizar_proyectos(self):
         """Actualiza la información de los proyectos abiertos en la tabla"""
@@ -370,6 +389,22 @@ class ProyectosAbertosDialog(QMainWindow):
         # Cargar datos de proyectos con versión más alta
         self.actualizar_proyectos_con_datos(proyectos_con_version_alta)
 
+    def deshabilitar_temporizador_ui(self):
+        """Deshabilita el temporizador y actualiza el label."""
+        self._disable_timer_and_update_ui()
+
+    def _disable_timer_and_update_ui(self):
+        """Deshabilita el temporizador y actualiza el label."""
+        global temporizador_global, is_timer_enabled
+        if temporizador_global and temporizador_global.isActive():
+            temporizador_global.stop()
+        is_timer_enabled = False
+        self.label_timer.setText("Temporizador Deshabilitado")
+        self.boton_deshabilitar.setEnabled(
+            False
+        )  # Deshabilitar el boton una vez presionado
+        print("Temporizador de verificación de versiones deshabilitado.")
+
 
 def buscar_ventana_existente(nombre_objeto):
     """
@@ -397,7 +432,10 @@ def detener_temporizador():
 
 def iniciar_temporizador():
     """Inicia o reinicia el temporizador global"""
-    global temporizador_global, INTERVALO_TEMPORIZADOR
+    global temporizador_global, is_timer_enabled, temporizador_id
+    if not is_timer_enabled:
+        debug_print("El temporizador esta deshabilitado globalmente. No se iniciara.")
+        return
 
     # Detener temporizador existente si hay alguno
     detener_temporizador()
@@ -413,6 +451,25 @@ def iniciar_temporizador():
     debug_print(
         f"Iniciado temporizador con ID: {temporizador_id}, intervalo: {INTERVALO_TEMPORIZADOR} minutos"
     )
+
+    # Si la ventana ya existe, actualiza el label del timer
+    ventana_existente = buscar_ventana_existente("LGA_ProyectosAbertosDialog")
+    if ventana_existente:
+        # Si el temporizador esta deshabilitado, actualiza el texto del label
+        if not is_timer_enabled:
+            ventana_existente.label_timer.setText("Temporizador Deshabilitado")
+            ventana_existente.boton_deshabilitar.setEnabled(False)
+        else:
+            ventana_existente.label_timer.setText(
+                f"Actualizando cada {INTERVALO_TEMPORIZADOR} minutos"
+            )
+            ventana_existente.boton_deshabilitar.setEnabled(True)
+
+    else:
+        # Si no existe, abre una nueva ventana y se encarga de la inicializacion
+        dialogo = ProyectosAbertosDialog()
+        dialogo.show()
+        debug_print("Nueva ventana de proyectos abiertos mostrada.")
 
 
 def actualizar_intervalo_temporizador(nuevo_intervalo):
