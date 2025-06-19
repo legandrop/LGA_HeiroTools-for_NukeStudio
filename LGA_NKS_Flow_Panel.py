@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.44 - Lega Pugliese
+  LGA_NKS_Flow_Panel v2.45 - Lega Pugliese
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
 ____________________________________________________________________________________
@@ -289,12 +289,17 @@ class ColorChangeWidget(QWidget):
                                     spec = importlib.util.spec_from_file_location(
                                         "LGA_H_DeleteClipTags", script_path
                                     )
-                                    module = importlib.util.module_from_spec(spec)
-                                    spec.loader.exec_module(module)
-                                    module.delete_tags_from_clip(
-                                        item
-                                    )  # Pasar el clip valido como parametro
-                                    # debug_print("Script ejecutado correctamente.")
+                                    if spec is not None and spec.loader is not None:
+                                        module = importlib.util.module_from_spec(spec)
+                                        spec.loader.exec_module(module)
+                                        module.delete_tags_from_clip(
+                                            item
+                                        )  # Pasar el clip valido como parametro
+                                        # debug_print("Script ejecutado correctamente.")
+                                    else:
+                                        debug_print(
+                                            f"Script no encontrado o loader no disponible en la ruta: {script_path}"
+                                        )
                                 except Exception as e:
                                     debug_print(
                                         f"Error al ejecutar el script para el clip {item}: {e}"
