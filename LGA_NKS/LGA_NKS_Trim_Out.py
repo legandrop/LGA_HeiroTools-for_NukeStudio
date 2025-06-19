@@ -17,7 +17,7 @@ from PySide2.QtWidgets import QAction
 from PySide2.QtGui import QIcon
 
 # Configurar depuración
-debug = False
+DEBUG = False
 
 
 def debug_print(message):

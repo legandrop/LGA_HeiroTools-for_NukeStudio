@@ -18,7 +18,7 @@ from PySide2.QtCore import QRect
 import subprocess
 import sys
 
-debug = False
+DEBUG = False
 
 
 def debug_print(*message):

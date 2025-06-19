@@ -24,7 +24,7 @@ from PySide2.QtCore import Qt
 
 
 # Variable global para activar o desactivar los prints
-DEBUG = False
+DEBUG = True
 
 
 def debug_print(*message):
@@ -258,6 +258,51 @@ class ColorChangeWidget(QWidget):
                         debug_print(f"Error al ejecutar el script: {e}")
                 else:
                     debug_print(f"Script no encontrado en la ruta: {script_path}")
+            finally:
+                project.endUndo()
+
+    #### Clear Tag
+    def run_clear_tag_script(self):
+        project = hiero.core.projects()[0] if hiero.core.projects() else None
+        if project:
+            project.beginUndo("Run External Script")
+            try:
+                seq = hiero.ui.activeSequence()
+                if seq:
+                    te = hiero.ui.getTimelineEditor(seq)
+                    selected_items = te.selection()
+
+                    for item in selected_items:
+                        if not isinstance(
+                            item, hiero.core.EffectTrackItem
+                        ):  # Verificacion de que el clip no sea un efecto
+                            # Importar y ejecutar el script de la subcarpeta para cada clip valido
+                            script_path = os.path.join(
+                                os.path.dirname(__file__),
+                                "LGA_NKS_Flow",
+                                "LGA_NKS_Delete_ClipTags.py",
+                            )
+                            if os.path.exists(script_path):
+                                try:
+                                    import importlib.util
+
+                                    spec = importlib.util.spec_from_file_location(
+                                        "LGA_H_DeleteClipTags", script_path
+                                    )
+                                    module = importlib.util.module_from_spec(spec)
+                                    spec.loader.exec_module(module)
+                                    module.delete_tags_from_clip(
+                                        item
+                                    )  # Pasar el clip valido como parametro
+                                    # debug_print("Script ejecutado correctamente.")
+                                except Exception as e:
+                                    debug_print(
+                                        f"Error al ejecutar el script para el clip {item}: {e}"
+                                    )
+                            else:
+                                debug_print(
+                                    f"Script no encontrado en la ruta: {script_path}"
+                                )
             finally:
                 project.endUndo()
 
