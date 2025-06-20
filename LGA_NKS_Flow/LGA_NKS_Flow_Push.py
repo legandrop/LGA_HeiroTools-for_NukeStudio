@@ -1,7 +1,7 @@
 """
 _____________________________________________________________
 
-  LGA_NKS_Flow_Push v3.51 - Lega Pugliese
+  LGA_NKS_Flow_Push v3.52 - Lega Pugliese
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -22,6 +22,7 @@ import shutil
 import tempfile
 from PySide2.QtCore import QRunnable, Slot, QThreadPool, Signal, QObject, Qt
 import datetime
+import subprocess  # Importar subprocess para abrir archivos
 
 # from PySide2.QtCore import QWaitCondition, QMutex
 from PySide2.QtWidgets import (
@@ -438,6 +439,11 @@ class InputDialog(QDialog):
                             "border: 1px solid #ccc; padding: 2px;"
                         )
 
+                        # Conectar el evento de clic del thumbnail
+                        image_label.mousePressEvent = lambda event, path=image_path: self.open_image_with_default_viewer(
+                            path
+                        )
+
                         container_layout.addWidget(
                             image_label, alignment=Qt.AlignCenter
                         )
@@ -563,6 +569,22 @@ class InputDialog(QDialog):
         Retorna la lista de imagenes de review encontradas.
         """
         return self.review_images
+
+    def open_image_with_default_viewer(self, image_path):
+        """
+        Abre la imagen especificada con el visor de imagenes predeterminado del sistema operativo.
+        """
+        debug_print(f"Intentando abrir imagen: {image_path}")
+        try:
+            if platform.system() == "Windows":
+                os.startfile(image_path)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.call(["open", image_path])
+            else:  # Linux y otros
+                subprocess.call(["xdg-open", image_path])
+            debug_print(f"Imagen abierta exitosamente: {image_path}")
+        except Exception as e:
+            debug_print(f"Error al abrir la imagen {image_path}: {e}")
 
 
 def delete_review_pic_cache():
