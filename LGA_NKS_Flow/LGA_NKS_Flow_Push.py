@@ -1,10 +1,13 @@
 """
 _____________________________________________________________
 
-  LGA_NKS_Flow_Push v3.1 - Lega Pugliese
+  LGA_NKS_Flow_Push v3.5 - Lega Pugliese
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
   También actualiza la base de datos local para mantenerla sincronizada
+
+  v3.2: Agregada integracion con ReviewPic - muestra thumbnails de imagenes
+        capturadas en el dialogo de notas para referencia visual
 _____________________________________________________________
 
 """
@@ -14,6 +17,9 @@ import re
 import shotgun_api3
 import sqlite3
 import platform
+import glob
+import shutil
+import tempfile
 from PySide2.QtCore import QRunnable, Slot, QThreadPool, Signal, QObject, Qt
 import datetime
 
@@ -23,12 +29,16 @@ from PySide2.QtWidgets import (
     QMessageBox,
     QDialog,
     QVBoxLayout,
+    QHBoxLayout,
     QPlainTextEdit,
     QPushButton,
     QLabel,
     QShortcut,
+    QScrollArea,
+    QWidget,
+    QCheckBox,
 )
-from PySide2.QtGui import QKeySequence
+from PySide2.QtGui import QKeySequence, QPixmap
 
 # Diccionario de traduccion de estados
 status_translation = {
@@ -44,13 +54,78 @@ status_translation = {
 }
 
 # Variable global para activar o desactivar los prints // En esta version el Debug se imprime al final del script
-DEBUG = False
+DEBUG = True
 debug_messages = []
 
 
 def debug_print(message):
     if DEBUG:
         debug_messages.append(message)
+
+
+def find_review_images(base_name):
+    """
+    Busca imagenes de ReviewPic para el shot y version especificados.
+    Retorna una lista de rutas de imagenes encontradas.
+    """
+    try:
+        # Extraer informacion del nombre base
+        parts = base_name.split("_")
+
+        # Buscar numero de version
+        version_number_str = None
+        for part in parts:
+            if part.startswith("v") and part[1:].isdigit():
+                version_number_str = part
+                break
+
+        if not version_number_str:
+            debug_print("No se encontro numero de version en el nombre base")
+            return []
+
+        # Construir el nombre de la carpeta del clip siguiendo el mismo patron que ReviewPic
+        # El patron es: {base_name_sin_version}_v{version}
+        # Ejemplo: si base_name es "PROJ_SEQ_SHOT_comp_v001_001.exr"
+        # necesitamos "PROJ_SEQ_SHOT_comp_v001"
+
+        # Encontrar la posicion de la version en el nombre
+        version_index = -1
+        for i, part in enumerate(parts):
+            if part == version_number_str:
+                version_index = i
+                break
+
+        if version_index == -1:
+            debug_print(
+                f"No se pudo encontrar la version {version_number_str} en las partes del nombre"
+            )
+            return []
+
+        # Tomar todas las partes hasta la version (inclusive)
+        base_parts = parts[: version_index + 1]
+        clip_folder_name = "_".join(base_parts)
+
+        # Obtener la ruta del script actual
+        script_dir = os.path.dirname(__file__)
+        cache_dir = os.path.join(script_dir, "ReviewPic_Cache")
+        clip_dir = os.path.join(cache_dir, clip_folder_name)
+
+        debug_print(f"Buscando imagenes en: {clip_dir}")
+        debug_print(f"Nombre de carpeta construido: {clip_folder_name}")
+
+        # Buscar archivos JPG en la carpeta
+        if os.path.exists(clip_dir):
+            image_pattern = os.path.join(clip_dir, "*.jpg")
+            images = glob.glob(image_pattern)
+            debug_print(f"Imagenes encontradas: {len(images)}")
+            return sorted(images)  # Ordenar para mostrar en orden consistente
+        else:
+            debug_print(f"Carpeta no existe: {clip_dir}")
+            return []
+
+    except Exception as e:
+        debug_print(f"Error buscando imagenes de review: {e}")
+        return []
 
 
 class DBManager:
@@ -271,15 +346,28 @@ class InputDialog(QDialog):
     def __init__(self, base_name):
         super(InputDialog, self).__init__()
         self.setWindowTitle("Input Dialog")
+        self.base_name = base_name
+        self.review_images = []
+        self.delete_images_checkbox = None
+
         self.layout = QVBoxLayout(self)
 
+        # Label para el mensaje
         self.label = QLabel(f"Message for {base_name}:")
         self.layout.addWidget(self.label)
 
+        # Area de texto para el mensaje
         self.text_edit = QPlainTextEdit(self)
         self.text_edit.setFixedHeight(120)  # Ajustar la altura de la caja de texto
         self.layout.addWidget(self.text_edit)
 
+        # Buscar imagenes de ReviewPic y mostrar thumbnails si existen
+        self.review_images = find_review_images(base_name)
+        if self.review_images:
+            self.add_thumbnails_section(self.review_images)
+            self.adjust_window_size()
+
+        # Boton OK
         self.ok_button = QPushButton("OK", self)
         self.ok_button.clicked.connect(self.accept)
         self.layout.addWidget(self.ok_button)
@@ -288,11 +376,204 @@ class InputDialog(QDialog):
         shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_Return), self)
         shortcut.activated.connect(self.accept)
 
+    def add_thumbnails_section(self, image_paths):
+        """
+        Agrega una seccion con thumbnails de las imagenes encontradas.
+        """
+        try:
+            # Label para la seccion de thumbnails
+            thumbnails_label = QLabel("Review Images:")
+            thumbnails_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+            self.layout.addWidget(thumbnails_label)
+
+            # Crear scroll area para los thumbnails
+            scroll_area = QScrollArea()
+            scroll_area.setMaximumHeight(
+                220
+            )  # Aumentar altura para incluir numeros de frame
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+            # Widget contenedor para los thumbnails
+            thumbnails_widget = QWidget()
+            thumbnails_layout = QHBoxLayout(thumbnails_widget)
+            thumbnails_layout.setSpacing(10)
+
+            # Crear thumbnails con numeros de frame
+            for image_path in image_paths:
+                if os.path.exists(image_path):
+                    # Crear contenedor vertical para imagen + numero de frame
+                    thumbnail_container = QWidget()
+                    container_layout = QVBoxLayout(thumbnail_container)
+                    container_layout.setSpacing(2)
+                    container_layout.setContentsMargins(0, 0, 0, 0)
+
+                    # Crear label para mostrar la imagen
+                    image_label = QLabel()
+
+                    # Cargar y redimensionar la imagen
+                    pixmap = QPixmap(image_path)
+                    if not pixmap.isNull():
+                        # Redimensionar manteniendo aspecto, ancho maximo 150px
+                        scaled_pixmap = pixmap.scaledToWidth(
+                            150, Qt.SmoothTransformation
+                        )
+                        image_label.setPixmap(scaled_pixmap)
+                        image_label.setToolTip(
+                            os.path.basename(image_path)
+                        )  # Mostrar nombre al hacer hover
+                        image_label.setAlignment(Qt.AlignCenter)
+
+                        # Agregar borde al thumbnail
+                        image_label.setStyleSheet(
+                            "border: 1px solid #ccc; padding: 2px;"
+                        )
+
+                        container_layout.addWidget(
+                            image_label, alignment=Qt.AlignCenter
+                        )
+
+                        # Agregar numero de frame debajo de la imagen
+                        frame_number = self.extract_frame_number_from_filename(
+                            image_path
+                        )
+                        frame_label = QLabel(f"Frame: {frame_number}")
+                        frame_label.setStyleSheet(
+                            "color: #666; font-size: 11px; margin-left: 4px;"
+                        )
+                        frame_label.setAlignment(Qt.AlignLeft)
+                        container_layout.addWidget(frame_label)
+
+                        thumbnails_layout.addWidget(thumbnail_container)
+                        debug_print(
+                            f"Thumbnail agregado: {os.path.basename(image_path)} - Frame: {frame_number}"
+                        )
+
+            # Agregar stretch al final para alinear thumbnails a la izquierda
+            thumbnails_layout.addStretch()
+
+            # Configurar el scroll area
+            scroll_area.setWidget(thumbnails_widget)
+            self.layout.addWidget(scroll_area)
+
+            # Agregar checkbox para borrar imagenes
+            self.delete_images_checkbox = QCheckBox("Delete saved images from disk")
+            self.delete_images_checkbox.setChecked(True)  # Tildado por defecto
+            self.delete_images_checkbox.setStyleSheet("margin-top: 5px;")
+            self.layout.addWidget(self.delete_images_checkbox)
+
+            debug_print(
+                f"Seccion de thumbnails agregada con {len(image_paths)} imagenes"
+            )
+
+        except Exception as e:
+            debug_print(f"Error agregando seccion de thumbnails: {e}")
+
+    def extract_frame_number_from_filename(self, filename):
+        """
+        Extrae el numero de frame de un nombre de archivo.
+        Busca patrones como _0001.jpg, _1234.jpg, etc.
+        """
+        try:
+            # Obtener solo el nombre sin extension
+            name_without_ext = os.path.splitext(os.path.basename(filename))[0]
+
+            # Buscar el ultimo grupo de 4 digitos precedido por guion bajo
+            import re
+
+            match = re.search(r"_(\d{4})(?:_\d+)?$", name_without_ext)
+            if match:
+                return match.group(1)
+
+            # Si no encuentra el patron, buscar cualquier numero al final
+            match = re.search(r"_(\d+)(?:_\d+)?$", name_without_ext)
+            if match:
+                return match.group(1).zfill(4)  # Rellenar con ceros a la izquierda
+
+            return "----"
+
+        except Exception as e:
+            debug_print(f"Error extrayendo numero de frame: {e}")
+            return "----"
+
+    def adjust_window_size(self):
+        """
+        Ajusta el ancho de la ventana basado en el numero de thumbnails.
+        Minimo: ancho actual, Maximo: 1500px
+        """
+        try:
+            if not self.review_images:
+                return
+
+            # Calcular ancho necesario basado en thumbnails
+            thumbnail_width = 150
+            thumbnail_spacing = 10
+            margin = 40  # Margen total (izquierda + derecha)
+
+            num_images = len(self.review_images)
+            required_width = (
+                (num_images * thumbnail_width)
+                + ((num_images - 1) * thumbnail_spacing)
+                + margin
+            )
+
+            # Obtener ancho actual de la ventana
+            current_width = self.width() if hasattr(self, "width") else 400
+
+            # Aplicar limites: minimo el ancho actual, maximo 1500
+            min_width = max(current_width, 400)
+            max_width = 1500
+
+            new_width = max(min_width, min(required_width, max_width))
+
+            debug_print(
+                f"Ajustando ancho de ventana: {num_images} imagenes, ancho requerido: {required_width}, nuevo ancho: {new_width}"
+            )
+
+            self.resize(new_width, self.height())
+
+        except Exception as e:
+            debug_print(f"Error ajustando tamaño de ventana: {e}")
+
     def get_text(self):
         if self.exec_() == QDialog.Accepted:
             return self.text_edit.toPlainText()
         else:
             return None
+
+    def should_delete_images(self):
+        """
+        Retorna True si el usuario marco el checkbox para borrar imagenes.
+        """
+        return self.delete_images_checkbox and self.delete_images_checkbox.isChecked()
+
+    def get_review_images(self):
+        """
+        Retorna la lista de imagenes de review encontradas.
+        """
+        return self.review_images
+
+
+def delete_review_pic_cache():
+    """
+    Borra completamente la carpeta ReviewPic_Cache y todo su contenido.
+    """
+    try:
+        script_dir = os.path.dirname(__file__)
+        cache_dir = os.path.join(script_dir, "ReviewPic_Cache")
+
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+            debug_print(f"Carpeta ReviewPic_Cache borrada: {cache_dir}")
+            return True
+        else:
+            debug_print(f"Carpeta ReviewPic_Cache no existe: {cache_dir}")
+            return False
+
+    except Exception as e:
+        debug_print(f"Error borrando carpeta ReviewPic_Cache: {e}")
+        return False
 
 
 class ShotGridManager:
@@ -456,24 +737,153 @@ class ShotGridManager:
                 ],
                 "addressings_to": addressings_to,
             }
-            self.sg.create("Note", note_data)
+            created_note = self.sg.create("Note", note_data)
+            return created_note
         except Exception as e:
             debug_print(f"Error al agregar comentario a la version: {e}")
+            return None
+
+    def attach_images_to_note(self, note_id, version_id, image_paths):
+        """
+        Adjunta imagenes a una nota con numeros de frame siguiendo la convencion de ShotGrid.
+        Usa upload directo a Note que es el metodo mas simple y efectivo.
+        """
+        if not self.sg:
+            debug_print("ShotGrid no inicializado")
+            return False
+
+        try:
+            # Crear una carpeta temporal para los archivos renombrados
+            temp_dir = tempfile.mkdtemp()
+            debug_print(f"Carpeta temporal creada: {temp_dir}")
+
+            attached_count = 0
+
+            for image_path in image_paths:
+                if not os.path.exists(image_path):
+                    debug_print(f"Imagen no encontrada: {image_path}")
+                    continue
+
+                # Extraer numero de frame del nombre del archivo
+                frame_number = self.extract_frame_number_from_path(image_path)
+
+                # Crear nombre de archivo con convencion de ShotGrid para mostrar frame number
+                # Formato: annot_version_<version_id>.<frame_number>.jpg
+                file_extension = os.path.splitext(image_path)[1]
+                new_filename = (
+                    f"annot_version_{version_id}.{frame_number}{file_extension}"
+                )
+                temp_file_path = os.path.join(temp_dir, new_filename)
+
+                # Copiar archivo con el nuevo nombre
+                shutil.copy2(image_path, temp_file_path)
+                debug_print(f"Archivo copiado: {image_path} -> {temp_file_path}")
+
+                # Subir archivo directamente a la nota usando el metodo que funciono en exploracion
+                try:
+                    uploaded_attachment_id = self.sg.upload(
+                        "Note", note_id, temp_file_path, field_name="attachments"
+                    )
+
+                    if uploaded_attachment_id:
+                        attached_count += 1
+                        debug_print(
+                            f"Imagen adjuntada exitosamente: {new_filename} (ID: {uploaded_attachment_id})"
+                        )
+                    else:
+                        debug_print(
+                            f"Error: No se obtuvo ID de attachment para {new_filename}"
+                        )
+
+                except Exception as upload_error:
+                    debug_print(
+                        f"Error subiendo archivo {new_filename}: {upload_error}"
+                    )
+                    continue
+
+            # Limpiar carpeta temporal
+            try:
+                shutil.rmtree(temp_dir)
+                debug_print(f"Carpeta temporal eliminada: {temp_dir}")
+            except Exception as cleanup_error:
+                debug_print(f"Error limpiando carpeta temporal: {cleanup_error}")
+
+            debug_print(
+                f"Adjuntadas {attached_count} imagenes de {len(image_paths)} totales"
+            )
+            return attached_count > 0
+
+        except Exception as e:
+            debug_print(f"Error adjuntando imagenes a la nota: {e}")
+            return False
+
+    def extract_frame_number_from_path(self, image_path):
+        """
+        Extrae el numero de frame de la ruta de una imagen.
+        Busca patrones como _0001.jpg, _1234.jpg, etc.
+        """
+        try:
+            filename = os.path.basename(image_path)
+            name_without_ext = os.path.splitext(filename)[0]
+
+            # Buscar el ultimo grupo de 4 digitos precedido por guion bajo
+            match = re.search(r"_(\d{4})(?:_\d+)?$", name_without_ext)
+            if match:
+                return match.group(1)
+
+            # Si no encuentra el patron, buscar cualquier numero al final
+            match = re.search(r"_(\d+)(?:_\d+)?$", name_without_ext)
+            if match:
+                return match.group(1).zfill(4)  # Rellenar con ceros a la izquierda
+
+            return "0001"  # Valor por defecto
+
+        except Exception as e:
+            debug_print(f"Error extrayendo numero de frame de {image_path}: {e}")
+            return "0001"
+
+    def get_project_id_from_version(self, version_id):
+        """
+        Obtiene el ID del proyecto a partir del ID de una version.
+        """
+        if not self.sg:
+            debug_print("ShotGrid no inicializado")
+            return None
+        try:
+            version = self.sg.find_one(
+                "Version", [["id", "is", version_id]], ["project"]
+            )
+            if version and version.get("project"):
+                return version["project"]["id"]
+            return None
+        except Exception as e:
+            debug_print(f"Error obteniendo project_id de version {version_id}: {e}")
+            return None
 
 
 class WorkerSignals(QObject):
     result_ready = Signal(str, int, int)
-    task_finished = Signal()
+    task_finished = Signal(bool)  # Ahora incluye el estado de exito
     debug_output = Signal()  # Nueva señal para imprimir logs
 
 
 class Worker(QRunnable):
-    def __init__(self, button_name, base_name, sg_manager, message):
+    def __init__(
+        self,
+        button_name,
+        base_name,
+        sg_manager,
+        message,
+        review_images=None,
+        should_delete_images=False,
+    ):
         super(Worker, self).__init__()
         self.button_name = button_name
         self.base_name = base_name
         self.sg_manager = sg_manager
         self.message = message
+        self.review_images = review_images or []
+        self.should_delete_images = should_delete_images
         self.signals = WorkerSignals()
 
     @Slot()
@@ -600,7 +1010,7 @@ class Worker(QRunnable):
                                 debug_print(
                                     f"Agregando comentario a la version (ID: {sg_highest_version['id']}): {self.message}"
                                 )
-                                self.sg_manager.add_comment_to_version(
+                                created_note = self.sg_manager.add_comment_to_version(
                                     sg_highest_version["id"],
                                     project_id,
                                     self.message,
@@ -608,6 +1018,17 @@ class Worker(QRunnable):
                                     task_assignee_id,
                                     shot["id"],
                                 )
+
+                                # Adjuntar imagenes si existen y se creo la nota
+                                if created_note and self.review_images:
+                                    debug_print(
+                                        f"Adjuntando {len(self.review_images)} imagenes a la nota"
+                                    )
+                                    self.sg_manager.attach_images_to_note(
+                                        created_note["id"],
+                                        sg_highest_version["id"],
+                                        self.review_images,
+                                    )
                         except Exception as e:
                             debug_print(f"Error while adding comment to version: {e}")
                     elif sg_status == "rev_su":
@@ -630,7 +1051,7 @@ class Worker(QRunnable):
                                 debug_print(
                                     f"Agregando comentario a la version (ID: {sg_highest_version['id']}): {self.message}"
                                 )
-                                self.sg_manager.add_comment_to_version(
+                                created_note = self.sg_manager.add_comment_to_version(
                                     sg_highest_version["id"],
                                     project_id,
                                     self.message,
@@ -638,6 +1059,17 @@ class Worker(QRunnable):
                                     task_assignee_id,
                                     shot["id"],
                                 )
+
+                                # Adjuntar imagenes si existen y se creo la nota
+                                if created_note and self.review_images:
+                                    debug_print(
+                                        f"Adjuntando {len(self.review_images)} imagenes a la nota"
+                                    )
+                                    self.sg_manager.attach_images_to_note(
+                                        created_note["id"],
+                                        sg_highest_version["id"],
+                                        self.review_images,
+                                    )
                         except Exception as e:
                             debug_print(f"Error while adding comment to version: {e}")
                 else:
@@ -646,13 +1078,26 @@ class Worker(QRunnable):
                     )
             else:
                 debug_print(f"No se encontro el Shot con el codigo: {shot_code}")
+            # Marcar como exitoso si llegamos hasta aqui sin excepciones
+            success = True
         except Exception as e:
             debug_print(f"Exception in Worker.run: {e}")
+            success = False
         finally:
             # Cerrar la conexión a la base de datos
             if db_manager:
                 db_manager.close()
-            self.signals.task_finished.emit()
+
+            # Borrar imagenes SOLO si se completó exitosamente y el usuario lo solicitó
+            if success and self.should_delete_images:
+                debug_print(
+                    "Operacion exitosa: Borrando carpeta ReviewPic_Cache como solicitó el usuario"
+                )
+                delete_review_pic_cache()
+            elif not success and self.should_delete_images:
+                debug_print("Operacion fallida: NO se borra la carpeta ReviewPic_Cache")
+
+            self.signals.task_finished.emit(success)
             self.signals.debug_output.emit()  # Emitir señal al finalizar
 
 
@@ -731,6 +1176,8 @@ def Push_Task_Status(button_name, base_name, update_callback=None):
 
     # Primero solicitar el mensaje al usuario para ciertos estados
     message = None
+    review_images = []
+    should_delete_images = False
     sg_status = status_translation.get(button_name, None)
     if sg_status in ["rev_di", "corr", "revleg", "revhld"]:
         app = QApplication.instance()
@@ -742,6 +1189,10 @@ def Push_Task_Status(button_name, base_name, update_callback=None):
         if message is None:
             # Operación cancelada por el usuario al cerrar el diálogo de comentarios
             return False
+
+        # Obtener información adicional del diálogo
+        review_images = input_dialog.get_review_images()
+        should_delete_images = bool(input_dialog.should_delete_images())
 
     # Ahora extraer información del nombre base y verificar versiones
     try:
@@ -793,7 +1244,14 @@ def Push_Task_Status(button_name, base_name, update_callback=None):
 
     # Una vez que el usuario ha confirmado (o no hay problema de versiones), proceder con las actualizaciones
     if sg_status in ["rev_di", "corr", "revleg", "revhld"]:
-        worker = Worker(button_name, base_name, sg_manager, message)
+        worker = Worker(
+            button_name,
+            base_name,
+            sg_manager,
+            message,
+            review_images,
+            should_delete_images,
+        )
         worker.signals.result_ready.connect(handle_results)
         worker.signals.debug_output.connect(
             lambda: print_debug_messages()
@@ -802,7 +1260,7 @@ def Push_Task_Status(button_name, base_name, update_callback=None):
             worker.signals.task_finished.connect(update_callback)
         QThreadPool.globalInstance().start(worker)
     else:
-        worker = Worker(button_name, base_name, sg_manager, None)
+        worker = Worker(button_name, base_name, sg_manager, None, [], False)
         worker.signals.result_ready.connect(handle_results)
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         if update_callback:
