@@ -1,13 +1,13 @@
 """
 _____________________________________________________________
 
-  LGA_NKS_Flow_Push v3.5 - Lega Pugliese
+  LGA_NKS_Flow_Push v3.51 - Lega Pugliese
+
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
   También actualiza la base de datos local para mantenerla sincronizada
-
-  v3.2: Agregada integracion con ReviewPic - muestra thumbnails de imagenes
-        capturadas en el dialogo de notas para referencia visual
+  Muestra thumbnails de imagenes capturadas en el dialogo de notas para referencia visual
+  y envía las imagenes a la nota en Flow
 _____________________________________________________________
 
 """
@@ -365,7 +365,10 @@ class InputDialog(QDialog):
         self.review_images = find_review_images(base_name)
         if self.review_images:
             self.add_thumbnails_section(self.review_images)
-            self.adjust_window_size()
+            self.adjust_window_size()  # Esto establece el ancho y la altura actual
+            self.setFixedWidth(
+                self.width()
+            )  # Fijar el ancho para que adjustSize solo afecte la altura
 
         # Boton OK
         self.ok_button = QPushButton("OK", self)
@@ -376,15 +379,20 @@ class InputDialog(QDialog):
         shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_Return), self)
         shortcut.activated.connect(self.accept)
 
+        # Ajustar el tamaño del diálogo para que se ajuste a su contenido (ahora solo ajusta la altura)
+        self.adjustSize()
+
     def add_thumbnails_section(self, image_paths):
         """
         Agrega una seccion con thumbnails de las imagenes encontradas.
         """
         try:
             # Label para la seccion de thumbnails
+            """ "
             thumbnails_label = QLabel("Review Images:")
             thumbnails_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
             self.layout.addWidget(thumbnails_label)
+            """
 
             # Crear scroll area para los thumbnails
             scroll_area = QScrollArea()
@@ -440,7 +448,7 @@ class InputDialog(QDialog):
                         )
                         frame_label = QLabel(f"Frame: {frame_number}")
                         frame_label.setStyleSheet(
-                            "color: #666; font-size: 11px; margin-left: 4px;"
+                            "color: #9c9c9c; font-size: 11px; margin-left: 4px;"
                         )
                         frame_label.setAlignment(Qt.AlignLeft)
                         container_layout.addWidget(frame_label)
@@ -458,7 +466,9 @@ class InputDialog(QDialog):
             self.layout.addWidget(scroll_area)
 
             # Agregar checkbox para borrar imagenes
-            self.delete_images_checkbox = QCheckBox("Delete saved images from disk")
+            self.delete_images_checkbox = QCheckBox(
+                "Delete all saved review images from disk"
+            )
             self.delete_images_checkbox.setChecked(True)  # Tildado por defecto
             self.delete_images_checkbox.setStyleSheet("margin-top: 5px;")
             self.layout.addWidget(self.delete_images_checkbox)
@@ -1188,11 +1198,13 @@ def Push_Task_Status(button_name, base_name, update_callback=None):
         message = input_dialog.get_text()
         if message is None:
             # Operación cancelada por el usuario al cerrar el diálogo de comentarios
+            print_debug_messages()  # Imprimir logs si el usuario cancela
             return False
 
         # Obtener información adicional del diálogo
         review_images = input_dialog.get_review_images()
         should_delete_images = bool(input_dialog.should_delete_images())
+        print_debug_messages()  # Imprimir logs después de obtener la información del diálogo
 
     # Ahora extraer información del nombre base y verificar versiones
     try:
