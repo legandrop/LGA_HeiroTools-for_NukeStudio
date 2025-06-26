@@ -1,7 +1,7 @@
 """
 _______________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.70 - 2025 - Lega
+  LGA_NKS_CheckProjectVersions v1.71 - 2025 - Lega
   Chequea versiones de todos los proyectos abiertos en Hiero
 _______________________________________________________________
 
@@ -237,25 +237,20 @@ class ProyectosAbertosDialog(QMainWindow):
         # Botones inferiores en layout horizontal
         botones_layout = QHBoxLayout()
 
-        # Botón para abrir nueva versión
-        boton_abrir_nueva = QPushButton("Abrir nueva versión")
-        boton_abrir_nueva.clicked.connect(self.abrir_nueva_version)
-        botones_layout.addWidget(boton_abrir_nueva)
-
         # Botón para abrir nueva versión y cerrar actual
         boton_abrir_y_cerrar = QPushButton("Abrir nueva versión y cerrar actual")
         boton_abrir_y_cerrar.clicked.connect(self.abrir_nueva_version_y_cerrar_actual)
         botones_layout.addWidget(boton_abrir_y_cerrar)
 
+        # Botón para abrir nueva versión
+        boton_abrir_nueva = QPushButton("Abrir nueva versión")
+        boton_abrir_nueva.clicked.connect(self.abrir_nueva_version)
+        botones_layout.addWidget(boton_abrir_nueva)
+
         # Nuevo botón para deshabilitar el temporizador
-        self.boton_deshabilitar = QPushButton("Deshabilitar")
+        self.boton_deshabilitar = QPushButton("Deshabilitar chequeos automáticos")
         self.boton_deshabilitar.clicked.connect(self.deshabilitar_temporizador_ui)
         botones_layout.addWidget(self.boton_deshabilitar)
-
-        # Botón para solo cerrar la ventana
-        boton_cerrar = QPushButton("Cerrar")
-        boton_cerrar.clicked.connect(self.close)
-        botones_layout.addWidget(boton_cerrar)
 
         layout.addLayout(botones_layout)
 
