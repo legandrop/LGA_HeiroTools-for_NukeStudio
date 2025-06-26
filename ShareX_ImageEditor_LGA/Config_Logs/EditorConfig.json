@@ -65,7 +65,7 @@
       ],
       "SelectedStickerPack": 0,
       "RegionCornerRadius": 0,
-      "BorderColor": "242, 60, 60",
+      "BorderColor": "60, 242, 77",
       "BorderSize": 4,
       "BorderStyle": "Solid",
       "FillColor": "0, 0, 0, 0",
@@ -136,7 +136,7 @@
     "ZoomToFitOnOpen": false,
     "EditorAutoCopyImage": false,
     "AutoCloseEditorOnTask": false,
-    "ShowEditorPanTip": true,
+    "ShowEditorPanTip": false,
     "ImageEditorResizeInterpolationMode": "Bicubic",
     "EditorNewImageSize": "800, 600",
     "EditorNewImageTransparent": false,
@@ -150,6 +150,7 @@
     "ScreenColorPickerInfoText": ""
   },
   "RecentColors": [
+    "60, 242, 77",
     "242, 60, 60",
     "60, 99, 242"
   ],

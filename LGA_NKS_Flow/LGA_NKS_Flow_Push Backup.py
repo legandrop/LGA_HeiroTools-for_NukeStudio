@@ -2,12 +2,9 @@
 _____________________________________________________________
 
   LGA_NKS_Flow_Push v3.2 - Lega Pugliese
-  Envia a flow nuevos estados de las tasks comps.
-  En algunos estados permite enviar un mensaje a la version
-  También actualiza la base de datos local para mantenerla sincronizada
 
-  v3.2: Agregada integracion con ReviewPic - muestra thumbnails de imagenes
-        capturadas en el dialogo de notas para referencia visual
+  ** Antes de implementar el upload de imagenes.
+
 _____________________________________________________________
 
 """
