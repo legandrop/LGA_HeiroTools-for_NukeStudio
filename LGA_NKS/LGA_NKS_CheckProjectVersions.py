@@ -1,7 +1,7 @@
 """
 _______________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.71 - 2025 - Lega
+  LGA_NKS_CheckProjectVersions v1.80 - 2025 - Lega
   Chequea versiones de todos los proyectos abiertos en Hiero
 _______________________________________________________________
 
@@ -335,7 +335,34 @@ class ProyectosAbertosDialog(QMainWindow):
             self.close()  # Cerrar la ventana si no hay proyectos abiertos
             return
 
-        # Filtrar proyectos que tienen una versión más alta disponible
+        # Paso 1: Crear un diccionario de todos los proyectos abiertos agrupados por nombre base
+        proyectos_abiertos_por_base = {}
+
+        for proyecto in proyectos:
+            ruta_disco = proyecto.path()
+            nombre_base = obtener_nombre_base_proyecto(ruta_disco)
+
+            if nombre_base:
+                if nombre_base not in proyectos_abiertos_por_base:
+                    proyectos_abiertos_por_base[nombre_base] = []
+
+                version_num = -1
+                version_str = extraer_version(ruta_disco)
+                if version_str != "No detectada" and version_str != "Error":
+                    match = re.search(r"v?(\d+)", version_str)
+                    if match:
+                        version_num = int(match.group(1))
+
+                proyectos_abiertos_por_base[nombre_base].append(
+                    {
+                        "proyecto": proyecto,
+                        "ruta": ruta_disco,
+                        "version_num": version_num,
+                        "version_str": version_str,
+                    }
+                )
+
+        # Paso 2: Filtrar proyectos que tienen una versión más alta disponible que NO esté ya abierta
         proyectos_con_version_alta = []
 
         for proyecto in proyectos:
@@ -344,6 +371,10 @@ class ProyectosAbertosDialog(QMainWindow):
 
             # Obtener ruta del disco
             ruta_disco = proyecto.path()
+            nombre_base = obtener_nombre_base_proyecto(ruta_disco)
+
+            if not nombre_base:
+                continue
 
             # Extraer versión de la ruta en disco (para comparación)
             version_actual = extraer_version(ruta_disco)
@@ -375,11 +406,23 @@ class ProyectosAbertosDialog(QMainWindow):
             except Exception as e:
                 debug_print(f"Error al comparar versiones: {str(e)}")
 
-            # Solo incluir proyectos con versión más alta disponible
+            # Verificar si la versión más alta ya está abierta
+            version_alta_ya_abierta = False
+            if nombre_base in proyectos_abiertos_por_base and version_alta_num > 0:
+                for proyecto_abierto in proyectos_abiertos_por_base[nombre_base]:
+                    if proyecto_abierto["version_num"] == version_alta_num:
+                        version_alta_ya_abierta = True
+                        debug_print(
+                            f"La versión más alta v{version_alta_num} del proyecto {nombre_base} ya está abierta"
+                        )
+                        break
+
+            # Solo incluir proyectos con versión más alta disponible QUE NO ESTÉ YA ABIERTA
             if (
                 version_actual_num > 0
                 and version_alta_num > 0
                 and version_actual_num < version_alta_num
+                and not version_alta_ya_abierta
             ):
                 proyectos_con_version_alta.append(
                     {
@@ -390,13 +433,13 @@ class ProyectosAbertosDialog(QMainWindow):
                     }
                 )
                 debug_print(
-                    f"Proyecto {nombre_interfaz} - Versión actual: {version_actual}, Versión más alta: {version_alta}"
+                    f"Proyecto {nombre_interfaz} - Versión actual: v{version_actual_num}, Versión más alta disponible (no abierta): v{version_alta_num}"
                 )
 
-        # Si no hay proyectos con versiones más altas, cerrar la ventana
+        # Si no hay proyectos con versiones más altas que no estén ya abiertas, cerrar la ventana
         if not proyectos_con_version_alta:
             debug_print(
-                "No hay proyectos con versiones más altas disponibles. Cerrando ventana."
+                "No hay proyectos con versiones más altas que no estén ya abiertas. Cerrando ventana."
             )
             self.close()  # Cerrar la ventana si no hay proyectos con versiones más altas
             return
@@ -608,6 +651,22 @@ def actualizar_intervalo_temporizador(nuevo_intervalo):
         )
 
 
+def obtener_nombre_base_proyecto(ruta):
+    """Obtiene el nombre base del proyecto sin versión ni extensión"""
+    if not ruta:
+        return None
+
+    nombre_archivo = os.path.basename(ruta)
+    # Extraer la parte base del nombre (antes de la versión)
+    base_match = re.match(r"(.+?)(?:_|-)?v?\d+\.hrox$", nombre_archivo)
+    if not base_match:
+        base_match = re.match(r"(.+?)\.hrox$", nombre_archivo)
+        if not base_match:
+            return None
+
+    return base_match.group(1)
+
+
 def main():
     """Función principal que muestra el diálogo con los proyectos abiertos SOLO si hay versiones más altas"""
     # Iniciar o reiniciar el temporizador
@@ -619,12 +678,45 @@ def main():
         debug_print("No hay proyectos abiertos. No se mostrará la ventana.")
         return
 
-    # Verificar si hay proyectos con versiones más altas disponibles ANTES de abrir cualquier ventana
+    # Paso 1: Crear un diccionario de todos los proyectos abiertos agrupados por nombre base
+    proyectos_abiertos_por_base = {}
+
+    for proyecto in proyectos:
+        ruta_disco = proyecto.path()
+        nombre_base = obtener_nombre_base_proyecto(ruta_disco)
+
+        if nombre_base:
+            if nombre_base not in proyectos_abiertos_por_base:
+                proyectos_abiertos_por_base[nombre_base] = []
+
+            version_num = -1
+            version_str = extraer_version(ruta_disco)
+            if version_str != "No detectada" and version_str != "Error":
+                match = re.search(r"v?(\d+)", version_str)
+                if match:
+                    version_num = int(match.group(1))
+
+            proyectos_abiertos_por_base[nombre_base].append(
+                {
+                    "proyecto": proyecto,
+                    "ruta": ruta_disco,
+                    "version_num": version_num,
+                    "version_str": version_str,
+                }
+            )
+
+    # Paso 2: Verificar si hay proyectos con versiones más altas disponibles
+    # pero que NO estén ya abiertos
     proyectos_con_version_alta = []
 
     for proyecto in proyectos:
         nombre_interfaz = proyecto.name()
         ruta_disco = proyecto.path()
+        nombre_base = obtener_nombre_base_proyecto(ruta_disco)
+
+        if not nombre_base:
+            continue
+
         version_actual = extraer_version(ruta_disco)
         ruta_version_alta = encontrar_version_mas_alta(ruta_disco)
 
@@ -652,11 +744,23 @@ def main():
         except Exception as e:
             debug_print(f"Error al comparar versiones: {str(e)}")
 
-        # Solo incluir proyectos con versión más alta disponible
+        # Verificar si la versión más alta ya está abierta
+        version_alta_ya_abierta = False
+        if nombre_base in proyectos_abiertos_por_base and version_alta_num > 0:
+            for proyecto_abierto in proyectos_abiertos_por_base[nombre_base]:
+                if proyecto_abierto["version_num"] == version_alta_num:
+                    version_alta_ya_abierta = True
+                    debug_print(
+                        f"La versión más alta v{version_alta_num} del proyecto {nombre_base} ya está abierta"
+                    )
+                    break
+
+        # Solo incluir proyectos con versión más alta disponible QUE NO ESTÉ YA ABIERTA
         if (
             version_actual_num > 0
             and version_alta_num > 0
             and version_actual_num < version_alta_num
+            and not version_alta_ya_abierta
         ):
             proyectos_con_version_alta.append(
                 {
@@ -666,11 +770,14 @@ def main():
                     "ruta_alta": ruta_version_alta,
                 }
             )
+            debug_print(
+                f"Proyecto {nombre_interfaz} - Versión actual: v{version_actual_num}, Versión más alta disponible (no abierta): v{version_alta_num}"
+            )
 
-    # Si no hay proyectos con versiones más altas, no abrir la ventana
+    # Si no hay proyectos con versiones más altas que no estén ya abiertas, no abrir la ventana
     if not proyectos_con_version_alta:
         debug_print(
-            "No hay proyectos con versiones más altas disponibles. No se mostrará la ventana."
+            "No hay proyectos con versiones más altas que no estén ya abiertas. No se mostrará la ventana."
         )
         return
 
