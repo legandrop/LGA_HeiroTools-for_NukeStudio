@@ -1,7 +1,7 @@
 """
 _____________________________________________________________
 
-  LGA_NKS_Flow_Push v3.52 - Lega Pugliese
+  LGA_NKS_Flow_Push v3.53 - Lega Pugliese
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -48,14 +48,14 @@ status_translation = {
     "Rev_Sup": "rev_su",
     "Rev_Lega": "revleg",
     "Rev_Dir": "rev_di",
-    "Approved": "pubsh",
+    "Approved": "check",
     "Rev_Sup_D": "rev_su",
     "Rev_Dir_D": "rev_di",
     "Rev_Hold": "revhld",
 }
 
 # Variable global para activar o desactivar los prints // En esta version el Debug se imprime al final del script
-DEBUG = True
+DEBUG = False
 debug_messages = []
 
 
