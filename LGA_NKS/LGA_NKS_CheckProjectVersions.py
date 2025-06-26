@@ -1,7 +1,7 @@
 """
 _______________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.61 - 2025 - Lega
+  LGA_NKS_CheckProjectVersions v1.70 - 2025 - Lega
   Chequea versiones de todos los proyectos abiertos en Hiero
 _______________________________________________________________
 
@@ -25,6 +25,7 @@ from PySide2.QtWidgets import (
     QWidget,
     QApplication,
     QHBoxLayout,
+    QAbstractItemView,
 )
 from PySide2.QtCore import Qt, QTimer
 from PySide2.QtGui import QFont, QColor
@@ -177,6 +178,9 @@ class ProyectosAbertosDialog(QMainWindow):
         # Establecer un nombre de objeto único para esta ventana
         self.setObjectName("LGA_ProyectosAbertosDialog")
 
+        # Variable para almacenar los datos de proyectos actuales
+        self.proyectos_data = []
+
         # Configurar banderas de ventana para permitir minimizar, maximizar y cerrar
         self.setWindowFlags(
             Qt.Window
@@ -224,25 +228,34 @@ class ProyectosAbertosDialog(QMainWindow):
         self.tabla_proyectos.setColumnWidth(0, 200)  # Nombre del proyecto
         self.tabla_proyectos.setColumnWidth(1, 350)  # Ruta en disco
 
+        # Configurar selección de filas
+        self.tabla_proyectos.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tabla_proyectos.setSelectionMode(QAbstractItemView.SingleSelection)
+
         layout.addWidget(self.tabla_proyectos)
 
         # Botones inferiores en layout horizontal
         botones_layout = QHBoxLayout()
 
-        # Botón para actualizar
-        boton_actualizar = QPushButton("Volver a chequear")
-        boton_actualizar.clicked.connect(self.actualizar_proyectos)
-        botones_layout.addWidget(boton_actualizar)
+        # Botón para abrir nueva versión
+        boton_abrir_nueva = QPushButton("Abrir nueva versión")
+        boton_abrir_nueva.clicked.connect(self.abrir_nueva_version)
+        botones_layout.addWidget(boton_abrir_nueva)
 
-        # Botón para cerrar
-        boton_cerrar = QPushButton("Cerrar")
-        boton_cerrar.clicked.connect(self.close)
-        botones_layout.addWidget(boton_cerrar)
+        # Botón para abrir nueva versión y cerrar actual
+        boton_abrir_y_cerrar = QPushButton("Abrir nueva versión y cerrar actual")
+        boton_abrir_y_cerrar.clicked.connect(self.abrir_nueva_version_y_cerrar_actual)
+        botones_layout.addWidget(boton_abrir_y_cerrar)
 
         # Nuevo botón para deshabilitar el temporizador
         self.boton_deshabilitar = QPushButton("Deshabilitar")
         self.boton_deshabilitar.clicked.connect(self.deshabilitar_temporizador_ui)
         botones_layout.addWidget(self.boton_deshabilitar)
+
+        # Botón para solo cerrar la ventana
+        boton_cerrar = QPushButton("Cerrar")
+        boton_cerrar.clicked.connect(self.close)
+        botones_layout.addWidget(boton_cerrar)
 
         layout.addLayout(botones_layout)
 
@@ -290,6 +303,9 @@ class ProyectosAbertosDialog(QMainWindow):
         self.tabla_proyectos.clearContents()
         self.tabla_proyectos.setRowCount(0)
 
+        # Almacenar los datos de proyectos para uso posterior
+        self.proyectos_data = proyectos_con_version_alta
+
         # Actualizar etiqueta de temporizador
         self.label_timer.setText(
             f"Actualizando cada {INTERVALO_TEMPORIZADOR} minutos. Última: {obtener_timestamp()}"
@@ -311,6 +327,10 @@ class ProyectosAbertosDialog(QMainWindow):
             self.tabla_proyectos.setItem(i, 2, item_ruta_alta)
 
             debug_print(f"Añadido a tabla: {proyecto_data['nombre']}")
+
+        # Seleccionar la primera fila por defecto si hay datos
+        if len(proyectos_con_version_alta) > 0:
+            self.tabla_proyectos.selectRow(0)
 
     def cargar_proyectos(self):
         """Carga la información de los proyectos abiertos en la tabla"""
@@ -388,6 +408,109 @@ class ProyectosAbertosDialog(QMainWindow):
 
         # Cargar datos de proyectos con versión más alta
         self.actualizar_proyectos_con_datos(proyectos_con_version_alta)
+
+    def abrir_nueva_version(self):
+        """Abre la versión más alta encontrada del proyecto seleccionado"""
+        # Obtener la fila seleccionada
+        fila_seleccionada = self.tabla_proyectos.currentRow()
+
+        if fila_seleccionada < 0:
+            print("Por favor, selecciona un proyecto de la tabla.")
+            return
+
+        if fila_seleccionada >= len(self.proyectos_data):
+            print("Error: fila seleccionada fuera de rango.")
+            return
+
+        # Obtener los datos del proyecto seleccionado
+        proyecto_data = self.proyectos_data[fila_seleccionada]
+        ruta_nueva_version = proyecto_data["ruta_alta"]
+
+        # Verificar que la ruta de la nueva versión existe
+        if not os.path.exists(ruta_nueva_version):
+            print(f"Error: No se puede encontrar el archivo {ruta_nueva_version}")
+            return
+
+        try:
+            # Abrir el proyecto de la nueva versión en Hiero
+            debug_print(f"Abriendo nueva versión: {ruta_nueva_version}")
+            nuevo_proyecto = hiero.core.openProject(ruta_nueva_version)
+
+            if nuevo_proyecto:
+                print(
+                    f"Proyecto abierto exitosamente: {os.path.basename(ruta_nueva_version)}"
+                )
+                debug_print(f"Nuevo proyecto cargado: {nuevo_proyecto.name()}")
+            else:
+                print(f"Error al abrir el proyecto: {ruta_nueva_version}")
+
+        except Exception as e:
+            print(f"Error al abrir la nueva versión: {str(e)}")
+            debug_print(f"Excepción al abrir proyecto: {str(e)}")
+
+    def abrir_nueva_version_y_cerrar_actual(self):
+        """Cierra el proyecto actual y abre la versión más alta encontrada del proyecto seleccionado"""
+        # Obtener la fila seleccionada
+        fila_seleccionada = self.tabla_proyectos.currentRow()
+
+        if fila_seleccionada < 0:
+            print("Por favor, selecciona un proyecto de la tabla.")
+            return
+
+        if fila_seleccionada >= len(self.proyectos_data):
+            print("Error: fila seleccionada fuera de rango.")
+            return
+
+        # Obtener los datos del proyecto seleccionado
+        proyecto_data = self.proyectos_data[fila_seleccionada]
+        proyecto_actual = proyecto_data["proyecto"]
+        ruta_nueva_version = proyecto_data["ruta_alta"]
+
+        # Verificar que la ruta de la nueva versión existe
+        if not os.path.exists(ruta_nueva_version):
+            print(f"Error: No se puede encontrar el archivo {ruta_nueva_version}")
+            return
+
+        try:
+            # Paso 1: Cerrar el proyecto actual
+            debug_print(f"Cerrando proyecto actual: {proyecto_actual.name()}")
+            print(f"Cerrando proyecto: {proyecto_actual.name()}")
+
+            # Cerrar el proyecto usando el método close()
+            proyecto_actual.close()
+
+            # Paso 2: Abrir el proyecto de la nueva versión
+            debug_print(f"Abriendo nueva versión: {ruta_nueva_version}")
+            print(f"Abriendo nueva versión: {os.path.basename(ruta_nueva_version)}")
+
+            nuevo_proyecto = hiero.core.openProject(ruta_nueva_version)
+
+            if nuevo_proyecto:
+                print(
+                    f"Proyecto actualizado exitosamente a: {os.path.basename(ruta_nueva_version)}"
+                )
+                debug_print(f"Nuevo proyecto cargado: {nuevo_proyecto.name()}")
+
+                # Cerrar la ventana después de la operación exitosa
+                self.close()
+            else:
+                print(f"Error al abrir el proyecto: {ruta_nueva_version}")
+                # Si no se pudo abrir la nueva versión, intentar reabrir la original
+                try:
+                    print("Intentando reabrir el proyecto original...")
+                    hiero.core.openProject(proyecto_data["ruta_actual"])
+                except Exception as restore_e:
+                    print(f"Error al restaurar proyecto original: {str(restore_e)}")
+
+        except Exception as e:
+            print(f"Error durante el proceso de cambio de versión: {str(e)}")
+            debug_print(f"Excepción al cambiar versión: {str(e)}")
+            # Intentar reabrir el proyecto original si algo salió mal
+            try:
+                print("Intentando reabrir el proyecto original debido al error...")
+                hiero.core.openProject(proyecto_data["ruta_actual"])
+            except Exception as restore_e:
+                print(f"Error al restaurar proyecto original: {str(restore_e)}")
 
     def deshabilitar_temporizador_ui(self):
         """Deshabilita el temporizador y actualiza el label."""
