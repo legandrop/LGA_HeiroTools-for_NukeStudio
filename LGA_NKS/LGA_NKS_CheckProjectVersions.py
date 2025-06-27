@@ -1,7 +1,7 @@
 """
 _______________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.80 - 2025 - Lega
+  LGA_NKS_CheckProjectVersions v1.81 - 2025 - Lega
   Chequea versiones de todos los proyectos abiertos en Hiero
 _______________________________________________________________
 
@@ -238,7 +238,7 @@ class ProyectosAbertosDialog(QMainWindow):
         botones_layout = QHBoxLayout()
 
         # Botón para abrir nueva versión y cerrar actual
-        boton_abrir_y_cerrar = QPushButton("Abrir nueva versión y cerrar actual")
+        boton_abrir_y_cerrar = QPushButton("Cerrar versión actual y abrir la nueva")
         boton_abrir_y_cerrar.clicked.connect(self.abrir_nueva_version_y_cerrar_actual)
         botones_layout.addWidget(boton_abrir_y_cerrar)
 
