@@ -1,6 +1,6 @@
 """
 ____________________________________________________________________________
-  LGA_NKS_Flow_Pull v3.1 - Lega Pugliese
+  LGA_NKS_Flow_Pull v3.2 - Lega Pugliese
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
@@ -47,6 +47,7 @@ def delete_tags_from_clip(clip):
 
 # Variable global para activar o desactivar los prints
 DEBUG = False
+XYPlorer_Tags = False
 
 
 def debug_print(*message):
@@ -429,9 +430,6 @@ class HieroOperations:
         )  # Anadir la lista de colores al final del metodo
         table.resizeColumnsToContents()
 
-    def add_color_to_background_list(self, color):
-        self.row_background_colors.append(color)
-
     def luminance(self, color):
         """Calcula la luminancia de un color para determinar si es claro u oscuro."""
         red = color.red()
@@ -571,8 +569,9 @@ class HieroOperations:
                                     ("Estado desconocido", "#000000", None),
                                 )
                             )
-                            # Aplicar el tag correspondiente en XYplorer
-                            tag_shot_folder(shot_base_path, xyplorer_tag)
+                            # Aplicar el tag correspondiente en XYplorer solo si XYPlorer_Tags es True
+                            if XYPlorer_Tags:
+                                tag_shot_folder(shot_base_path, xyplorer_tag)
                             current_color_hex = self.get_current_clip_color(clip)
                             current_status = self.get_status_name_by_color(
                                 current_color_hex
@@ -642,10 +641,13 @@ class HieroOperations:
                                         clip
                                     )
                                     # Extraer el nuevo numero de version del clip actualizado
-                                    new_version_str = highest_version.name().split(
-                                        "_v"
-                                    )[-1]
-                                    new_version_number = int(new_version_str)
+                                    if highest_version:
+                                        new_version_str = highest_version.name().split(
+                                            "_v"
+                                        )[-1]
+                                        new_version_number = int(new_version_str)
+                                    else:
+                                        new_version_number = version_number
                                     # Volver a comparar con la version de SG
                                     if sg_version_number > new_version_number:
                                         self.add_custom_tag_to_clip(

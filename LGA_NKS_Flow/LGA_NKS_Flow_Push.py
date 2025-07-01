@@ -1,7 +1,7 @@
 """
 _____________________________________________________________
 
-  LGA_NKS_Flow_Push v3.53 - Lega Pugliese
+  LGA_NKS_Flow_Push v3.60 - Lega Pugliese
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -23,6 +23,12 @@ import tempfile
 from PySide2.QtCore import QRunnable, Slot, QThreadPool, Signal, QObject, Qt
 import datetime
 import subprocess  # Importar subprocess para abrir archivos
+import sys
+from pathlib import Path
+
+# Importar el módulo de configuración segura
+sys.path.append(str(Path(__file__).parent))
+from SecureConfig_Reader import get_flow_credentials
 
 # from PySide2.QtCore import QWaitCondition, QMutex
 from PySide2.QtWidgets import (
@@ -609,12 +615,10 @@ def delete_review_pic_cache():
 
 
 class ShotGridManager:
-    def __init__(self, url, script_name, api_key, sudo_login):
+    def __init__(self, url, login, password):
         debug_print("Inicializando conexion a ShotGrid")
         try:
-            self.sg = shotgun_api3.Shotgun(
-                url, script_name=script_name, api_key=api_key, sudo_as_login=sudo_login
-            )
+            self.sg = shotgun_api3.Shotgun(url, login=login, password=password)
             debug_print("Conexion a ShotGrid inicializada exitosamente")
         except Exception as e:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
@@ -1192,19 +1196,16 @@ def handle_results(info, sg_version_number, version_number):
 def Push_Task_Status(button_name, base_name, update_callback=None):
     global msg_manager
 
-    # Obtener las credenciales del script desde las variables de entorno
-    sg_url = os.getenv("SHOTGRID_URL")
-    sg_script_name = os.getenv("SHOTGRID_SCRIPT_NAME")
-    sg_api_key = os.getenv("SHOTGRID_API_KEY")
-    sg_login = os.getenv("SHOTGRID_LOGIN")  # Para sudo_as_login
+    # Obtener las credenciales desde la configuración encriptada
+    sg_url, sg_login, sg_password = get_flow_credentials()
 
-    if not sg_url or not sg_script_name or not sg_api_key or not sg_login:
+    if not sg_url or not sg_login or not sg_password:
         debug_print(
-            "Las variables de entorno SHOTGRID_URL, SHOTGRID_SCRIPT_NAME, SHOTGRID_API_KEY y SHOTGRID_LOGIN deben estar configuradas."
+            "No se pudieron obtener las credenciales de Flow desde la configuración encriptada."
         )
-        return False  # Retornar False si faltan variables de entorno
+        return False  # Retornar False si faltan credenciales
 
-    sg_manager = ShotGridManager(sg_url, sg_script_name, sg_api_key, sg_login)
+    sg_manager = ShotGridManager(sg_url, sg_login, sg_password)
 
     # Primero solicitar el mensaje al usuario para ciertos estados
     message = None
