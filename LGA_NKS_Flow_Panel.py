@@ -125,6 +125,12 @@ class ColorChangeWidget(QWidget):
                 "action": "color",
             },
             {
+                "name": "Delivery Ok",
+                "color": QColor(82, 194, 51),
+                "style": "#52C233",
+                "action": "color",
+            },
+            {
                 "name": "Rev_Sup_D",
                 "color": QColor(82, 61, 128),
                 "style": "#523d80",
