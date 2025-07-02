@@ -1,7 +1,7 @@
 """
 _________________________________________________________________________
 
-  LGA_NKS_OpenInNukeX v1.20 - Lega
+  LGA_NKS_OpenInNukeX v1.30 - Lega
   Abre el script asociado al clip seleccionado en NukeX
   Verifica si hay una version mas reciente y pregunta si desea abrirla
   Obtiene la ruta de NukeX desde la configuracion de LGA_OpenInNukeX
@@ -17,7 +17,7 @@ import subprocess
 import socket
 from PySide2 import QtWidgets, QtCore
 
-DEBUG = False
+DEBUG = True
 
 
 def debug_print(*message):
@@ -47,24 +47,74 @@ def show_timed_message(title, message, duration):
     msgBox.exec_()
 
 
-def show_version_dialog(current_version, latest_version, current_path, latest_path):
-    msgBox = QtWidgets.QMessageBox()
-    msgBox.setWindowTitle("Verificacion de Version")
-    msgBox.setText(
-        f"<div style='text-align: center;'>"
-        f"<span style='color: #ff9900;'><b>¡Atencion!</b></span><br><br>"
-        f"La version que intentas abrir no es la mas reciente:<br><br>"
-        f"Version actual: <span style='color: #ff9900;'>{current_version}</span><br>"
-        f"Ultima version: <span style='color: #00ff00;'>{latest_version}</span><br><br>"
-        f"¿Deseas abrir la ultima version en su lugar?</div>"
-    )
-    msgBox.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-    msgBox.setDefaultButton(QtWidgets.QMessageBox.Yes)
-    msgBox.button(QtWidgets.QMessageBox.Yes).setText("Abrir ultima version")
-    msgBox.button(QtWidgets.QMessageBox.No).setText("Abrir version actual")
+class CustomVersionDialog(QtWidgets.QDialog):
+    def __init__(self, current_version, latest_version, parent=None):
+        super().__init__(parent)
+        self.result_value = (
+            None  # None = cerrado con X/ESC, True = actual, False = ultima
+        )
 
-    response = msgBox.exec_()
-    return response == QtWidgets.QMessageBox.Yes
+        self.setWindowTitle("Verificacion de Version")
+        self.setModal(True)
+
+        # Layout principal
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Mensaje HTML
+        message_label = QtWidgets.QLabel()
+        message_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        message_label.setText(
+            f"<div style='text-align: center;'>"
+            f"<span style='color: #ff9900;'><b>¡Atencion!</b></span><br><br>"
+            f"La version que intentas abrir no es la mas reciente:<br><br>"
+            f"Version actual: <span style='color: #ff9900;'>{current_version}</span><br>"
+            f"Ultima version: <span style='color: #00ff00;'>{latest_version}</span><br><br>"
+            f"¿Deseas abrir la ultima version en su lugar?</div>"
+        )
+        layout.addWidget(message_label)
+
+        # Botones
+        button_layout = QtWidgets.QHBoxLayout()
+
+        self.yes_button = QtWidgets.QPushButton("Abrir version actual")
+        self.no_button = QtWidgets.QPushButton("Abrir ultima version")
+
+        self.no_button.clicked.connect(self.accept_current)
+        self.yes_button.clicked.connect(self.accept_latest)
+
+        button_layout.addWidget(self.yes_button)
+        button_layout.addWidget(self.no_button)
+        layout.addLayout(button_layout)
+
+        # Hacer que el boton "Abrir ultima version" sea el por defecto
+        self.no_button.setDefault(True)
+
+    def accept_current(self):
+        debug_print("Usuario eligio 'Abrir version actual'")
+        self.result_value = True
+        self.accept()
+
+    def accept_latest(self):
+        debug_print("Usuario eligio 'Abrir ultima version'")
+        self.result_value = False
+        self.accept()
+
+    def closeEvent(self, event):
+        debug_print("Usuario cerro el dialogo con X o ESC, abortando")
+        self.result_value = None
+        event.accept()
+
+    def get_result(self):
+        return self.result_value
+
+
+def show_version_dialog(current_version, latest_version, current_path, latest_path):
+    debug_print("Ejecutando show_version_dialog con dialogo personalizado")
+    dialog = CustomVersionDialog(current_version, latest_version)
+    dialog.exec_()
+    result = dialog.get_result()
+    debug_print(f"Resultado del dialogo personalizado: {result}")
+    return result
 
 
 def get_version_from_filename(filename):
@@ -322,12 +372,20 @@ def main():
 
                     if latest_version and latest_version > current_version:
                         debug_print("Se encontro una version mas reciente")
-                        if show_version_dialog(
+                        user_choice = show_version_dialog(
                             f"v{current_version:02d}",
                             f"v{latest_version:02d}",
                             script_full_path,
                             latest_path,
-                        ):
+                        )
+
+                        # Si el usuario cerro el dialogo sin elegir, abortar
+                        if user_choice is None:
+                            debug_print(
+                                "Usuario cerro el dialogo sin elegir, abortando operacion"
+                            )
+                            return
+                        elif user_choice:
                             debug_print("Usuario eligio abrir la version mas reciente")
                             script_full_path = latest_path
 
