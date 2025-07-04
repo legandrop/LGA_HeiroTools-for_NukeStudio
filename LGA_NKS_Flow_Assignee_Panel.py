@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.0 - 2025 - Lega Pugliese
+  LGA_NKS_Flow_Assignee_Panel v1.1 | Lega Pugliese
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 ____________________________________________________________________________________
@@ -37,6 +37,12 @@ class AssigneePanel(QWidget):
 
         # Definir los botones y sus colores/estilos
         self.buttons = [
+            {
+                "name": "Show in Flow",
+                "color": QColor(0, 0, 0),
+                "style": "#1f1f1f",
+                "callback": self.show_in_flow_for_selected_clip,
+            },
             {
                 "name": "Get Assignees",
                 "color": QColor(46, 119, 212),
@@ -320,6 +326,35 @@ class AssigneePanel(QWidget):
             spec.loader.exec_module(module)
             # Llamar a la función principal pasando el base_name y el nombre del usuario
             module.assign_assignee_to_task(base_name, user_name)
+        except Exception as e:
+            QMessageBox.warning(self, "Error al ejecutar", str(e))
+
+    def show_in_flow_for_selected_clip(self):
+        """Llama al script Show in Flow para abrir la task comp en Chrome"""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Flow", "LGA_NKS_Flow_ShowInFlow.py"
+        )
+        if not os.path.exists(script_path):
+            QMessageBox.warning(
+                self,
+                "Script no encontrado",
+                f"No se encontró el script en la ruta: {script_path}",
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Flow_ShowInFlow", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    "No se pudo cargar el módulo LGA_NKS_Flow_ShowInFlow.py"
+                )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Llamar a la función principal
+            module.show_in_flow_from_selected_clip()
         except Exception as e:
             QMessageBox.warning(self, "Error al ejecutar", str(e))
 
