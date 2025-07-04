@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.3 | Lega Pugliese
+  LGA_NKS_Flow_Assignee_Panel v1.4 | Lega Pugliese
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 ____________________________________________________________________________________
@@ -47,26 +47,23 @@ class AssigneePanel(QWidget):
 
         # Definir los botones fijos y sus colores/estilos
         self.fixed_buttons = [
-            {
-                "name": "Show in Flow",
-                "color": QColor(0, 0, 0),
-                "style": "#1f1f1f",
-                "callback": self.show_in_flow_for_selected_clip,
-                "shortcut": "Ctrl+Shift+E",
-                "tooltip": "Ctrl+Shift+E",
-            },
-            {
-                "name": "Get Assignees",
-                "color": QColor(46, 119, 212),
-                "style": "#202233",
-                "callback": self.get_assignees_for_selected_clip,
-            },
-            {
-                "name": "Clear Assignees",
-                "color": QColor(36, 76, 25),
-                "style": "#202233",
-                "callback": self.clear_assignees_for_selected_clip,
-            },
+            (
+                "Reveal in Flow",
+                self.show_in_flow_for_selected_clip,
+                "#1f1f1f",
+                "Shift+F",
+                "Shift+F",
+            ),
+            (
+                "Get Assignees",
+                self.get_assignees_for_selected_clip,
+                "#202233",
+            ),
+            (
+                "Clear Assignees",
+                self.clear_assignees_for_selected_clip,
+                "#202233",
+            ),
         ]
 
         # Crear la lista completa de botones (fijos + usuarios)
@@ -134,12 +131,11 @@ class AssigneePanel(QWidget):
             # Crear un callback usando una funcion auxiliar para evitar problemas con lambda
             callback = self.create_user_callback(user_name)
 
-            user_button = {
-                "name": user_name,
-                "color": QColor(user_color),
-                "style": user_color,
-                "callback": callback,
-            }
+            user_button = (
+                user_name,
+                callback,
+                user_color,
+            )
             user_buttons.append(user_button)
 
         debug_print(f"Botones de usuario creados: {len(user_buttons)}")
@@ -163,16 +159,16 @@ class AssigneePanel(QWidget):
                 widget.deleteLater()
 
         for index, button_info in enumerate(self.buttons):
-            name = button_info["name"]
-            style = button_info["style"]
-            callback = button_info["callback"]
-            shortcut = button_info.get("shortcut", None)
-            tooltip = button_info.get("tooltip", None)
+            name = button_info[0]
+            handler = button_info[1]
+            style = button_info[2]
+            shortcut = button_info[3] if len(button_info) > 3 else None
+            tooltip = button_info[4] if len(button_info) > 4 else None
 
             button = QPushButton(name)
             # Aplicar solo el color de fondo, sin negrita ni color de texto blanco
             button.setStyleSheet(f"background-color: {style}")
-            button.clicked.connect(callback)
+            button.clicked.connect(handler)
 
             # Agregar shortcut y tooltip si existen
             if shortcut:
