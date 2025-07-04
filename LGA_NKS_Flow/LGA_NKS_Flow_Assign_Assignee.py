@@ -11,7 +11,7 @@ import shotgun_api3
 from PySide2.QtCore import QRunnable, Slot, QThreadPool, Signal, QObject
 from PySide2.QtWidgets import QApplication, QMessageBox
 
-DEBUG = False
+DEBUG = True
 debug_messages = []
 
 
