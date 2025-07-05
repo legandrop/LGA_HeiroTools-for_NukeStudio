@@ -17,7 +17,7 @@ import hiero.core
 import hiero.ui
 from PySide2.QtCore import QTimer
 
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(*message):
