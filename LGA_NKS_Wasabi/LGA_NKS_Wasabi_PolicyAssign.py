@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.41 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.5 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -326,6 +326,59 @@ def get_existing_policy_document(iam_client, policy_arn):
         return None
 
 
+def manage_policy_versions(iam_client, policy_arn):
+    """
+    Gestiona las versiones de una policy, eliminando la mas antigua si hay 5 versiones.
+
+    Args:
+        iam_client: Cliente IAM de boto3
+        policy_arn (str): ARN de la policy
+
+    Returns:
+        bool: True si se pudo gestionar correctamente, False en caso contrario
+    """
+    try:
+        # Listar todas las versiones de la policy
+        versions_response = iam_client.list_policy_versions(PolicyArn=policy_arn)
+        versions = versions_response.get("Versions", [])
+
+        debug_print(f"Policy tiene {len(versions)} versiones")
+
+        # Si hay 5 versiones, necesitamos eliminar la mas antigua (que no sea la default)
+        if len(versions) >= 5:
+            # Filtrar versiones que no son la default
+            non_default_versions = [
+                v for v in versions if not v.get("IsDefaultVersion", False)
+            ]
+
+            if non_default_versions:
+                # Ordenar por fecha de creacion (mas antigua primero)
+                non_default_versions.sort(key=lambda x: x.get("CreateDate"))
+                oldest_version = non_default_versions[0]
+
+                debug_print(
+                    f"Eliminando version mas antigua: {oldest_version['VersionId']}"
+                )
+
+                # Eliminar la version mas antigua
+                iam_client.delete_policy_version(
+                    PolicyArn=policy_arn, VersionId=oldest_version["VersionId"]
+                )
+
+                debug_print(
+                    f"Version {oldest_version['VersionId']} eliminada correctamente"
+                )
+            else:
+                debug_print("No hay versiones no-default para eliminar")
+                return False
+
+        return True
+
+    except Exception as e:
+        debug_print(f"Error gestionando versiones de policy: {e}")
+        return False
+
+
 def merge_policy_statements(existing_policy, new_bucket, new_folder, new_subfolder):
     """
     Combina una policy existente con nuevos permisos sin duplicar.
@@ -510,6 +563,11 @@ def create_and_manage_policy(username, paths_info):
     policy_updated = False
     if policy_arn:
         debug_print(f"Actualizando policy '{policy_name}'...")
+
+        # Gestionar versiones antes de crear una nueva
+        if not manage_policy_versions(iam, policy_arn):
+            debug_print("Warning: No se pudieron gestionar las versiones de la policy")
+
         try:
             iam.create_policy_version(
                 PolicyArn=policy_arn,
@@ -521,9 +579,27 @@ def create_and_manage_policy(username, paths_info):
         except Exception as e:
             debug_print(f"Error actualizando policy: {e}")
             if "LimitExceeded" in str(e):
-                raise Exception(
-                    f"Error: La policy '{policy_name}' ha alcanzado el límite de 5 versiones. Debe eliminar versiones antiguas antes de crear una nueva."
-                )
+                # Intentar gestionar versiones una vez mas como fallback
+                debug_print("Intentando gestionar versiones como fallback...")
+                if manage_policy_versions(iam, policy_arn):
+                    try:
+                        iam.create_policy_version(
+                            PolicyArn=policy_arn,
+                            PolicyDocument=json.dumps(final_policy),
+                            SetAsDefault=True,
+                        )
+                        debug_print(
+                            f"Policy '{policy_name}' actualizada en segundo intento."
+                        )
+                        policy_updated = True
+                    except Exception as e2:
+                        raise Exception(
+                            f"Error actualizando policy después de gestionar versiones: {e2}"
+                        )
+                else:
+                    raise Exception(
+                        f"Error: No se pudieron gestionar las versiones de la policy '{policy_name}'. {e}"
+                    )
             else:
                 raise Exception(f"Error actualizando policy: {e}")
     else:
