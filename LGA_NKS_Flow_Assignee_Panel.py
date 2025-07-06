@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.41 | Lega Pugliese
+  LGA_NKS_Flow_Assignee_Panel v1.42 | Lega Pugliese
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 ____________________________________________________________________________________
@@ -21,7 +21,31 @@ from PySide2.QtWidgets import (
     QSizePolicy,
 )
 from PySide2.QtCore import Qt
-from PySide2.QtGui import QColor
+from PySide2.QtGui import QColor, QKeySequence
+
+
+# Clase de botón personalizada que maneja el Shift+Click
+class CustomButton(QPushButton):
+    def __init__(self, text):
+        super(CustomButton, self).__init__(text)
+        self._custom_click_handler = None
+        self._shift_click_handler = None
+
+    def setCustomClickHandler(self, handler):
+        self._custom_click_handler = handler
+
+    def setShiftClickHandler(self, handler):
+        self._shift_click_handler = handler
+
+    def mousePressEvent(self, event):
+        if self._custom_click_handler and self._shift_click_handler:
+            modifiers = event.modifiers()
+            if modifiers & Qt.ShiftModifier:
+                self._shift_click_handler()
+            else:
+                self._custom_click_handler()
+        else:
+            super(CustomButton, self).mousePressEvent(event)
 
 
 # Variable global para activar o desactivar los prints
@@ -131,29 +155,41 @@ class AssigneePanel(QWidget):
         for i, user in enumerate(self.users):
             user_name = user.get("name", "Unknown")
             user_color = user.get("color", "#666666")
-            debug_print(f"Usuario {i}: name='{user_name}', color='{user_color}'")
+            wasabi_user = user.get("wasabi_user", "Unknown")
+            debug_print(
+                f"Usuario {i}: name='{user_name}', color='{user_color}', wasabi_user='{wasabi_user}'"
+            )
 
-            # Crear un callback usando una funcion auxiliar para evitar problemas con lambda
-            callback = self.create_user_callback(user_name)
+            # Crear callbacks usando una funcion auxiliar para evitar problemas con lambda
+            normal_callback, shift_callback = self.create_user_callback(
+                user_name, wasabi_user
+            )
 
             user_button = (
                 user_name,
-                callback,
+                normal_callback,
                 user_color,
+                shift_callback,  # Agregar el callback de Shift+Click
             )
             user_buttons.append(user_button)
 
         debug_print(f"Botones de usuario creados: {len(user_buttons)}")
         return user_buttons
 
-    def create_user_callback(self, user_name):
-        """Crea un callback especifico para un usuario"""
+    def create_user_callback(self, user_name, wasabi_user):
+        """Crea callbacks especificos para un usuario (normal y Shift+Click)"""
 
-        def callback():
+        def normal_callback():
             debug_print(f"Boton presionado para usuario: {user_name}")
             self.assign_assignee_for_selected_clip(user_name)
 
-        return callback
+        def shift_callback():
+            debug_print(
+                f"Shift+Click presionado para usuario: {user_name} (Wasabi: {wasabi_user})"
+            )
+            self.create_wasabi_policy_for_user(wasabi_user)
+
+        return normal_callback, shift_callback
 
     def create_buttons(self):
         # Limpiar el layout actual antes de crear nuevos botones
@@ -167,19 +203,32 @@ class AssigneePanel(QWidget):
             name = button_info[0]
             handler = button_info[1]
             style = button_info[2]
-            shortcut = button_info[3] if len(button_info) > 3 else None
-            tooltip = button_info[4] if len(button_info) > 4 else None
 
-            button = QPushButton(name)
+            # Determinar si es un boton de usuario (tiene shift_handler) o un boton fijo
+            is_user_button = len(button_info) == 4 and callable(button_info[3])
+
+            if is_user_button:
+                # Boton de usuario: (name, handler, style, shift_handler)
+                shift_handler = button_info[3]
+                button = CustomButton(name)
+                button.setCustomClickHandler(handler)
+                button.setShiftClickHandler(shift_handler)
+            else:
+                # Boton fijo: (name, handler, style, [shortcut], [tooltip])
+                shortcut = button_info[3] if len(button_info) > 3 else None
+                tooltip = button_info[4] if len(button_info) > 4 else None
+
+                button = QPushButton(name)
+                button.clicked.connect(handler)
+
+                # Agregar shortcut y tooltip si existen
+                if shortcut:
+                    button.setShortcut(QKeySequence(shortcut))
+                if tooltip:
+                    button.setToolTip(tooltip)
+
             # Aplicar solo el color de fondo, sin negrita ni color de texto blanco
             button.setStyleSheet(f"background-color: {style}")
-            button.clicked.connect(handler)
-
-            # Agregar shortcut y tooltip si existen
-            if shortcut:
-                button.setShortcut(shortcut)
-            if tooltip:
-                button.setToolTip(tooltip)
 
             row = index // self.num_columns
             column = index % self.num_columns
@@ -482,6 +531,42 @@ class AssigneePanel(QWidget):
             # Llamar a la función principal
             module.main()
         except Exception as e:
+            QMessageBox.warning(self, "Error al ejecutar", str(e))
+
+    def create_wasabi_policy_for_user(self, wasabi_user):
+        """Llama al script de Wasabi Policy Assign para crear/actualizar políticas IAM para un usuario específico"""
+        debug_print(
+            f"=== create_wasabi_policy_for_user llamado con wasabi_user: {wasabi_user} ==="
+        )
+        script_path = os.path.join(
+            os.path.dirname(__file__),
+            "LGA_NKS_Wasabi",
+            "LGA_NKS_Wasabi_PolicyAssign.py",
+        )
+        if not os.path.exists(script_path):
+            QMessageBox.warning(
+                self,
+                "Script no encontrado",
+                f"No se encontró el script en la ruta: {script_path}",
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Wasabi_PolicyAssign", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    "No se pudo cargar el módulo LGA_NKS_Wasabi_PolicyAssign.py"
+                )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Llamar a la función principal pasando el usuario de Wasabi
+            debug_print(f"Llamando module.main con usuario: {wasabi_user}")
+            module.main(wasabi_user)
+        except Exception as e:
+            debug_print(f"Error ejecutando script de Wasabi: {e}")
             QMessageBox.warning(self, "Error al ejecutar", str(e))
 
 

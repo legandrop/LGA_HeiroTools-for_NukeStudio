@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.1 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.2 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -21,7 +21,6 @@ import boto3
 from boto3 import Session
 
 # Configuracion
-USERNAME = "TestPoli"  # Variable para cambiar el nombre del usuario
 DEBUG = True
 
 
@@ -355,11 +354,20 @@ def create_and_manage_policy(username, paths_info):
             debug_print("La policy ya estaba asignada al usuario.")
 
 
-def main():
+def main(username=None):
     """
     Función principal del script.
+
+    Args:
+        username (str): Nombre del usuario de Wasabi. Si no se proporciona, usa "TestPoli" por defecto.
     """
-    debug_print("=== Iniciando LGA_NKS_Wasabi_PolicyAssign ===")
+    # Usar TestPoli por defecto si no se proporciona usuario
+    if username is None:
+        username = "TestPoli"
+
+    debug_print(
+        f"=== Iniciando LGA_NKS_Wasabi_PolicyAssign para usuario: {username} ==="
+    )
 
     # Verificar variables de entorno
     if not os.getenv("WASABI_ADMIN_KEY") or not os.getenv("WASABI_ADMIN_SECRET"):
@@ -395,7 +403,7 @@ def main():
         return
 
     # Crear y gestionar la policy
-    create_and_manage_policy(USERNAME, paths_info)
+    create_and_manage_policy(username, paths_info)
     debug_print("=== Script completado ===")
 
 

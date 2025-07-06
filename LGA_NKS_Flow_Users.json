@@ -1,31 +1,43 @@
 {
     "_comment": "Configuracion de usuarios para el panel LGA_NKS_Flow_Assignee_Panel",
-    "_instructions": "Para agregar un nuevo usuario: 1) Agregar un objeto con 'name' y 'color' al array 'users', 2) Reiniciar Hiero o recargar el panel",
+    "_instructions": "Para agregar un nuevo usuario: 1) Agregar un objeto con 'name', 'color' y 'wasabi_user' al array 'users', 2) Reiniciar Hiero o recargar el panel",
     "_color_format": "Los colores deben estar en formato hexadecimal (ejemplo: #69135e)",
+    "_wasabi_user_format": "El campo 'wasabi_user' debe contener el nombre de usuario exacto en Wasabi",
     "users": [
         {
             "name": "Lega Pugliese",
-            "color": "#69135e"
+            "color": "#69135e",
+            "wasabi_user": "lega"
         },
         {
             "name": "Sebas Romano", 
-            "color": "#a3557e"
+            "color": "#a3557e",
+            "wasabi_user": "Sebastian_Romano"
         },
         {
             "name": "Patricio Barreiro",
-            "color": "#19335D"
+            "color": "#19335D",
+            "wasabi_user": "Pato_Barreiro"
         },
         {
             "name": "Mariel Falco",
-            "color": "#665621"
+            "color": "#665621",
+            "wasabi_user": "mariel"
         },
         {
             "name": "Ignacio Jamilis",
-            "color": "#481111"
+            "color": "#481111",
+            "wasabi_user": "Nacho-Jamilis"
         },
         {
             "name": "Matias Moretti",
-            "color": "#291148"
+            "color": "#291148",
+            "wasabi_user": "Mati_Moretti"
+        },
+        {
+            "name": "TestPoli",
+            "color": "#6C00F9",
+            "wasabi_user": "TestPoli"
         }
     ]
 }
