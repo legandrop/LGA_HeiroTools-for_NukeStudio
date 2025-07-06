@@ -15,9 +15,10 @@ El panel LGA_NKS_Flow_Assignee_Panel carga dinámicamente la lista de usuarios d
 - Cada usuario tiene nombre, color y usuario de Wasabi configurables
 - El sistema crea automáticamente el archivo de configuración si no existe
 
-### 3. Funcionalidad Dual de Botones de Usuario
+### 3. Funcionalidad Triple de Botones de Usuario
 - **Click normal**: Asigna el usuario a la task comp en Flow Production Tracking
 - **Shift+Click**: Crea/actualiza políticas IAM de Wasabi para el usuario seleccionado
+- **Ctrl+Shift+Click**: Abre ventana de gestión de shots asignados en policy de Wasabi
 
 ## Archivo de Configuración: LGA_NKS_Flow_Users.json
 
@@ -81,18 +82,33 @@ El panel LGA_NKS_Flow_Assignee_Panel carga dinámicamente la lista de usuarios d
 - **wasabi_user**: Nombre exacto del usuario en Wasabi (case-sensitive)
 
 ## Integración con Wasabi
-Al hacer Shift+Click en un botón de usuario, el panel llama al script de Wasabi:
+
+### Asignación de Políticas (Shift+Click)
+Al hacer Shift+Click en un botón de usuario, el panel llama al script de asignación:
 - **Función**: `create_wasabi_policy_for_user(wasabi_user)` 
 - **Script llamado**: `Python/Startup/LGA_NKS_Wasabi/LGA_NKS_Wasabi_PolicyAssign.py`
 - **Parámetro**: El `wasabi_user` configurado en el JSON para ese usuario
-- **Interfaz**: El script de Wasabi maneja toda la interfaz (ventana de estado, hilos, etc.)
+- **Interfaz**: El script maneja toda la interfaz (ventana de estado, hilos, etc.)
+
+### Gestión de Shots (Ctrl+Shift+Click)
+Al hacer Ctrl+Shift+Click en un botón de usuario, el panel llama al script de gestión:
+- **Función**: `unassign_wasabi_policy_for_user(wasabi_user)`
+- **Script llamado**: `Python/Startup/LGA_NKS_Wasabi/LGA_NKS_Wasabi_PolicyUnassign.py`
+- **Funcionalidad**: Muestra ventana con shots asignados y permite eliminarlos individualmente
+- **Interfaz**: Ventana scrolleable con botones de shots y botón "✕" para eliminar
 
 ## Funciones Principales
 
 ### `create_wasabi_policy_for_user(wasabi_user)`
-- Llama al script de políticas de Wasabi para usuario específico
+- Llama al script de asignación de políticas de Wasabi para usuario específico
 - Pasa el parámetro `wasabi_user` al script
 - El script se encarga de mostrar ventana de estado y procesamiento
+- Ubicación: `Python/Startup/LGA_NKS_Flow_Assignee_Panel.py`
+
+### `unassign_wasabi_policy_for_user(wasabi_user)`
+- Llama al script de gestión de shots de Wasabi para usuario específico
+- Abre ventana con lista de shots asignados en la policy del usuario
+- Permite eliminar shots individuales con interfaz visual
 - Ubicación: `Python/Startup/LGA_NKS_Flow_Assignee_Panel.py`
 
 ### `reload_config()`
@@ -103,15 +119,15 @@ Al hacer Shift+Click en un botón de usuario, el panel llama al script de Wasabi
 
 ### Botones Fijos
 1. **Reveal in Flow** - `Shift+F`
-2. **Policy** - Crea política para usuario por defecto (TestPoli)
-3. **Get Assignees**
-4. **Clear Assignees**
+2. **Get Assignees**
+3. **Clear Assignees**
 
 ### Botones Dinámicos (Usuarios)
 - Se generan automáticamente basándose en el archivo de configuración
 - Cada usuario tiene su propio botón con color personalizado
 - **Click normal**: Asigna el usuario a la task comp en Flow Production Tracking
 - **Shift+Click**: Crea/actualiza políticas IAM de Wasabi para el usuario
+- **Ctrl+Shift+Click**: Abre ventana de gestión de shots asignados en policy de Wasabi
 
 ## Notas Técnicas
 - El archivo de configuración se busca en la misma carpeta que el script del panel
@@ -119,5 +135,5 @@ Al hacer Shift+Click en un botón de usuario, el panel llama al script de Wasabi
 - Los errores se muestran en la consola de debug (activar DEBUG = True en el script)
 - El sistema es compatible con caracteres Unicode (nombres con acentos, etc.)
 - La funcionalidad de Wasabi requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
-- Los botones de usuario utilizan `CustomButton` para manejar Shift+Click
-- La ventana de estado es modal y se cierra automáticamente al completar la operación 
+- Los botones de usuario utilizan `CustomButton` para manejar Shift+Click y Ctrl+Shift+Click
+- Las ventanas de Wasabi son no-modales y se cierran manualmente con botón Close 

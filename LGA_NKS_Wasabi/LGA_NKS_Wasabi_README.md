@@ -5,7 +5,10 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 ## Scripts Principales
 
 ### `LGA_NKS_Wasabi_PolicyAssign.py`
-**Script principal** que se ejecuta desde Hiero para crear/actualizar políticas IAM automáticamente.
+**Script de asignación** que se ejecuta desde Hiero para crear/actualizar políticas IAM automáticamente.
+
+### `LGA_NKS_Wasabi_PolicyUnassign.py`
+**Script de gestión** que lee policies existentes y permite eliminar shots específicos de forma visual.
 
 **Funcionalidad:**
 - Obtiene rutas de clips seleccionados en el timeline de Hiero
@@ -20,14 +23,33 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 - Nombre de política: `{username}_policy`
 - Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
 
+**Funcionalidad:**
+- Lee la policy existente del usuario especificado
+- Extrae automáticamente los nombres de shots desde los recursos S3
+- Muestra una ventana con lista scrolleable de shots asignados
+- Permite eliminar shots individuales con botón "✕" 
+- Actualiza la policy en tiempo real eliminando permisos específicos
+- Gestiona automáticamente las versiones de policies (límite de 5)
+
+**Configuración:**
+- Recibe el usuario como parámetro en `main(username=None)`
+- Por defecto usa "TestPoli" si no se especifica usuario
+- Lee política: `{username}_policy`
+- Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
+
 **Uso desde Panel:**
+1. Hacer **Ctrl+Shift+Click** en el botón del usuario deseado en el panel LGA_NKS_Flow_Assignee_Panel
+2. Se abrirá una ventana mostrando todos los shots asignados al usuario
+3. Hacer click en "✕" junto a cualquier shot para eliminarlo de la policy
+4. La policy se actualiza automáticamente sin necesidad de reiniciar
+
+**Uso desde PolicyAssign:**
 1. Seleccionar clips en el timeline de Hiero
 2. Hacer **Shift+Click** en el botón del usuario deseado en el panel LGA_NKS_Flow_Assignee_Panel
 3. Se abrirá una ventana de estado mostrando el progreso
 4. El script procesará automáticamente las rutas y creará/actualizará los permisos
 
 **Uso directo:**
-- Botón "Policy": Crea política para usuario por defecto (TestPoli)
 - `module.main(username)`: Llamada programática con usuario específico
 
 **Ejemplo de procesamiento:**
