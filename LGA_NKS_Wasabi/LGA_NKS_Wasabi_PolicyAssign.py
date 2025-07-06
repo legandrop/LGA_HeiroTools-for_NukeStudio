@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.4 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.41 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -44,7 +44,7 @@ class WasabiStatusWindow(QDialog):
         super(WasabiStatusWindow, self).__init__(parent)
         self.setWindowTitle("Wasabi Policy Status")
         self.setModal(False)  # Cambiar a no modal para evitar problemas
-        self.setFixedSize(500, 250)
+        self.setMinimumWidth(500)
 
         # Evitar que la ventana se cierre automáticamente
         self.setAttribute(Qt.WA_DeleteOnClose, False)
@@ -62,8 +62,7 @@ class WasabiStatusWindow(QDialog):
         initial_message = (
             f"<div style='text-align: left;'>"
             f"<span style='color: #CCCCCC; '>Habilitando rutas en la policy del usuario </span>"
-            f"<span style='color: {user_color}; '>{user_name}</span><br>"
-            f"<span style='color: #CCCCCC; '>Procesando clips seleccionados...</span>"
+            f"<span style='color: #CCCCCC; background-color: {user_color}; '>{user_name}</span>"
             f"</div>"
         )
 
@@ -80,6 +79,7 @@ class WasabiStatusWindow(QDialog):
         self.paths_label.setAlignment(Qt.AlignLeft)
         self.paths_label.setWordWrap(True)
         self.paths_label.setTextFormat(Qt.RichText)
+        self.paths_label.setStyleSheet("padding: 10px;")
         layout.addWidget(self.paths_label)
 
         # Etiqueta para mensajes de resultado
@@ -110,6 +110,14 @@ class WasabiStatusWindow(QDialog):
 
         paths_html += "</div>"
         self.paths_label.setText(paths_html)
+
+    def show_processing_message(self):
+        """Muestra el mensaje de procesamiento"""
+        processing_html = (
+            f"<span style='color: #CCCCCC; '>Procesando clips seleccionados...</span>"
+        )
+        self.result_label.setText(processing_html)
+        self.result_label.setStyleSheet("padding: 10px;")
 
     def show_success(self, message):
         """Muestra mensaje de éxito en verde"""
@@ -611,26 +619,23 @@ def main(username=None):
     # Crear y mostrar ventana de estado
     _status_window = WasabiStatusWindow(user_name, user_color)
     _status_window.show()
+    _status_window.show_processing_message()  # Mostrar mensaje de procesamiento
 
     # Crear worker para procesamiento en hilo separado
     worker = WasabiWorker(username, _status_window)
 
     # Conectar señales
-    def handle_paths_ready(paths_info):
-        _status_window.update_paths(paths_info)
-
-    def handle_finished(success, message):
-        if success:
-            _status_window.show_success(message)
-        else:
-            _status_window.show_error(message)
-
-    def handle_error(error_msg):
-        _status_window.show_error(error_msg)
-
-    worker.signals.paths_ready.connect(handle_paths_ready)
-    worker.signals.finished.connect(handle_finished)
-    worker.signals.error.connect(handle_error)
+    worker.signals.paths_ready.connect(
+        lambda paths_info, window=_status_window: window.update_paths(paths_info)
+    )
+    worker.signals.finished.connect(
+        lambda success, message, window=_status_window: (
+            window.show_success(message) if success else window.show_error(message)
+        )
+    )
+    worker.signals.error.connect(
+        lambda error_msg, window=_status_window: window.show_error(error_msg)
+    )
 
     # Ejecutar en hilo separado
     QThreadPool.globalInstance().start(worker)
