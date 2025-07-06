@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign v0.5 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyUnassign v0.51 | Lega Pugliese
   Muestra y gestiona shots asignados en políticas IAM de Wasabi
 ______________________________________________________________________
 
@@ -124,6 +124,15 @@ class WasabiShotsWindow(QDialog):
 
         # Diccionario para mantener referencia a los widgets de shots
         self.shot_widgets = {}
+        # Lista para mantener la referencia de los shots actualmente mostrados
+        self.current_shots_list = []
+
+    def resizeEvent(self, event):
+        """Maneja el evento de redimensionamiento de la ventana."""
+        super(WasabiShotsWindow, self).resizeEvent(event)
+        # Solo recalcular y mostrar si ya tenemos shots cargados
+        if self.current_shots_list:
+            self.show_shots(self.current_shots_list, update_window_size=False)
 
     def show_processing_message(self):
         """Muestra el mensaje de procesamiento"""
@@ -139,8 +148,9 @@ class WasabiShotsWindow(QDialog):
         self.result_label.setText(removing_html)
         self.result_label.setStyleSheet("padding: 10px;")
 
-    def show_shots(self, shots_list):
+    def show_shots(self, shots_list, update_window_size=True):
         """Muestra la lista de shots con botones para eliminar"""
+        self.current_shots_list = shots_list  # Guardar la lista para redimensionamiento
         if not shots_list:
             self.result_label.setText(
                 "<span style='color: #CCCCCC; '>No se encontraron shots asignados en la policy.</span>"
@@ -228,9 +238,10 @@ class WasabiShotsWindow(QDialog):
             f"Filas necesarias: {rows_needed}, altura calculada: {content_height}, altura final: {new_height}"
         )
 
-        # Ajustar altura de la ventana
-        current_width = self.width()
-        self.resize(current_width, new_height)
+        # Ajustar altura de la ventana solo si se solicita
+        if update_window_size:
+            current_width = self.width()
+            self.resize(current_width, new_height)
 
         self.close_button.setEnabled(True)
 
