@@ -15,14 +15,20 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 - Asigna la política al usuario especificado
 
 **Configuración:**
-- `USERNAME = "TestPoli"` - Variable para cambiar el usuario objetivo
-- Nombre de política: `{USERNAME}_policy`
+- Recibe el usuario como parámetro en `main(username=None)`
+- Por defecto usa "TestPoli" si no se especifica usuario
+- Nombre de política: `{username}_policy`
 - Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
 
-**Uso:**
+**Uso desde Panel:**
 1. Seleccionar clips en el timeline de Hiero
-2. Ejecutar el script desde el panel de Flow
-3. El script procesará automáticamente las rutas y creará/actualizará los permisos
+2. Hacer **Shift+Click** en el botón del usuario deseado en el panel LGA_NKS_Flow_Assignee_Panel
+3. Se abrirá una ventana de estado mostrando el progreso
+4. El script procesará automáticamente las rutas y creará/actualizará los permisos
+
+**Uso directo:**
+- Botón "Policy": Crea política para usuario por defecto (TestPoli)
+- `module.main(username)`: Llamada programática con usuario específico
 
 **Ejemplo de procesamiento:**
 ```
@@ -49,6 +55,38 @@ python verify_policy_assign.py
 - Permisos básicos de S3 (ListAllMyBuckets, GetBucketLocation)
 - Permisos específicos de bucket y carpetas
 - Asignación correcta al usuario
+
+## Integración con Panel de Assignees
+
+### Ventana de Estado y Procesamiento en Hilos
+Cuando se ejecuta desde el panel (Shift+Click), el script muestra automáticamente una ventana de estado:
+- **Mensaje inicial**: "Habilitando rutas en la policy del usuario [NOMBRE]" (colores múltiples)
+- **Rutas procesadas**: Muestra las rutas reales de buckets que se están habilitando (ej: `vfx-etdm/105/ETDM_5027_0200_Chroma_Camioneta`)
+- **Éxito**: Mensaje verde confirmando asignación exitosa
+- **Error**: Mensaje rojo con detalles del error (ej: límite de 5 versiones de policy)
+- **Botón Close**: Permite cerrar la ventana manualmente después de completar la operación
+- **Procesamiento**: Se ejecuta en hilo separado (`WasabiWorker`) para no bloquear la interfaz de Hiero
+
+### Configuración de Usuarios
+Los usuarios se cargan desde `Python/Startup/LGA_NKS_Flow_Users.json`:
+```json
+{
+    "users": [
+        {
+            "name": "Lega Pugliese",
+            "color": "#69135e",
+            "wasabi_user": "lega"
+        }
+    ]
+}
+```
+
+**Clases implementadas en este script:**
+- `WasabiStatusWindow` - Ventana de estado con formato HTML y botón Close
+- `WasabiWorker` - Procesamiento en hilo separado (QRunnable)
+- `WasabiWorkerSignals` - Señales para comunicación entre hilos
+- `get_user_info_from_config()` - Obtiene nombre y color del usuario desde JSON
+- `main(username)` - Función principal que maneja toda la interfaz y procesamiento
 
 ## Dependencias
 

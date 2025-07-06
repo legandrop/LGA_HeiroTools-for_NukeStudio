@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.2 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.4 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -12,6 +12,15 @@ import sys
 import json
 import hiero.core
 import hiero.ui
+from PySide2.QtWidgets import (
+    QApplication,
+    QDialog,
+    QVBoxLayout,
+    QLabel,
+    QPushButton,
+)
+from PySide2.QtCore import Qt, QRunnable, Slot, QThreadPool, Signal, QObject
+from PySide2.QtGui import QFont
 
 # Agregar la ruta actual al sys.path para que Python encuentre las dependencias locales
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +36,172 @@ DEBUG = True
 def debug_print(*message):
     if DEBUG:
         print(*message)
+
+
+# Clase de ventana de estado para mostrar progreso de políticas de Wasabi
+class WasabiStatusWindow(QDialog):
+    def __init__(self, user_name, user_color, parent=None):
+        super(WasabiStatusWindow, self).__init__(parent)
+        self.setWindowTitle("Wasabi Policy Status")
+        self.setModal(False)  # Cambiar a no modal para evitar problemas
+        self.setFixedSize(500, 250)
+
+        # Evitar que la ventana se cierre automáticamente
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+
+        # Layout principal
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Etiqueta de estado inicial con formato HTML para múltiples colores
+        self.status_label = QLabel()
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setTextFormat(Qt.RichText)  # Habilitar formato HTML
+
+        # Mensaje inicial - se actualizará con las rutas reales
+        initial_message = (
+            f"<div style='text-align: left;'>"
+            f"<span style='color: #CCCCCC; '>Habilitando rutas en la policy del usuario </span>"
+            f"<span style='color: {user_color}; '>{user_name}</span><br>"
+            f"<span style='color: #CCCCCC; '>Procesando clips seleccionados...</span>"
+            f"</div>"
+        )
+
+        font = QFont()
+        font.setPointSize(10)
+        self.status_label.setFont(font)
+        self.status_label.setText(initial_message)
+        self.status_label.setStyleSheet("padding: 10px;")
+
+        layout.addWidget(self.status_label)
+
+        # Etiqueta para mostrar las rutas que se están procesando
+        self.paths_label = QLabel("")
+        self.paths_label.setAlignment(Qt.AlignLeft)
+        self.paths_label.setWordWrap(True)
+        self.paths_label.setTextFormat(Qt.RichText)
+        layout.addWidget(self.paths_label)
+
+        # Etiqueta para mensajes de resultado
+        self.result_label = QLabel("")
+        self.result_label.setAlignment(Qt.AlignCenter)
+        self.result_label.setWordWrap(True)
+        self.result_label.setTextFormat(Qt.RichText)
+        layout.addWidget(self.result_label)
+
+        # Espaciador
+        layout.addStretch()
+
+        # Botón de Close
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.close)
+        self.close_button.setEnabled(
+            False
+        )  # Deshabilitado hasta que termine el procesamiento
+        layout.addWidget(self.close_button)
+
+    def update_paths(self, paths_info):
+        """Actualiza la ventana con las rutas reales que se están procesando"""
+        paths_html = "<div style='text-align: left;'>"
+
+        for bucket_name, folder_path, subfolder_path in paths_info:
+            bucket_path = f"{bucket_name}/{folder_path}/{subfolder_path}"
+            paths_html += f"<span style='color: #6AB5CA; '>{bucket_path}</span><br>"
+
+        paths_html += "</div>"
+        self.paths_label.setText(paths_html)
+
+    def show_success(self, message):
+        """Muestra mensaje de éxito en verde"""
+        success_html = f"<span style='color: #00ff00; '>{message}</span>"
+        self.result_label.setText(success_html)
+        self.result_label.setStyleSheet("padding: 10px;")
+        self.close_button.setEnabled(True)  # Habilitar botón de Close
+
+    def show_error(self, message):
+        """Muestra mensaje de error en rojo"""
+        error_html = f"<span style='color: #C05050; '>{message}</span>"
+        self.result_label.setText(error_html)
+        self.result_label.setStyleSheet("padding: 10px;")
+        self.close_button.setEnabled(True)  # Habilitar botón de Close
+
+    def closeEvent(self, event):
+        """
+        Manejar el evento de cierre para evitar que se cierre automáticamente.
+        Solo se cierra cuando el usuario hace clic en el botón Close o cuando ya terminó el procesamiento.
+        """
+        if not self.close_button.isEnabled():
+            # Si el botón Close está deshabilitado, significa que aún está procesando
+            # No permitir cerrar la ventana
+            event.ignore()
+        else:
+            # Si el botón está habilitado, permitir cerrar
+            event.accept()
+
+
+# Clases para procesamiento en hilos
+class WasabiWorkerSignals(QObject):
+    paths_ready = Signal(list)  # Para enviar las rutas procesadas
+    finished = Signal(bool, str)  # success, message
+    error = Signal(str)
+
+
+class WasabiWorker(QRunnable):
+    def __init__(self, wasabi_user, status_window):
+        super(WasabiWorker, self).__init__()
+        self.wasabi_user = wasabi_user
+        self.status_window = status_window
+        self.signals = WasabiWorkerSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            debug_print(
+                f"=== Iniciando procesamiento para usuario: {self.wasabi_user} ==="
+            )
+
+            # Verificar variables de entorno
+            if not os.getenv("WASABI_ADMIN_KEY") or not os.getenv(
+                "WASABI_ADMIN_SECRET"
+            ):
+                self.signals.error.emit(
+                    "ERROR: Las variables de entorno WASABI_ADMIN_KEY y WASABI_ADMIN_SECRET deben estar configuradas."
+                )
+                return
+
+            # Obtener rutas de clips seleccionados en Hiero
+            file_paths = get_selected_clips_paths()
+            if not file_paths:
+                self.signals.error.emit(
+                    "No se encontraron rutas de archivos para procesar."
+                )
+                return
+
+            # Parsear todas las rutas
+            paths_info = []
+            for file_path in file_paths:
+                parsed = parse_path_for_policy(file_path)
+                if parsed:
+                    paths_info.append(parsed)
+
+            if not paths_info:
+                self.signals.error.emit("No se pudieron parsear las rutas.")
+                return
+
+            # Enviar las rutas para actualizar la ventana
+            self.signals.paths_ready.emit(paths_info)
+
+            # Crear y gestionar la policy
+            create_and_manage_policy(self.wasabi_user, paths_info)
+
+            # Si llegamos aquí, fue exitoso
+            self.signals.finished.emit(
+                True, f"Policy asignada exitosamente para {self.wasabi_user}"
+            )
+
+        except Exception as e:
+            debug_print(f"Error en WasabiWorker: {e}")
+            self.signals.error.emit(f"Error: {str(e)}")
 
 
 def parse_path_for_policy(file_path):
@@ -256,10 +431,13 @@ def create_and_manage_policy(username, paths_info):
     Args:
         username (str): Nombre del usuario
         paths_info (list): Lista de tuplas (bucket, folder, subfolder)
+
+    Raises:
+        Exception: Si hay cualquier error durante el proceso
     """
     if not paths_info:
         debug_print("No hay información de rutas para procesar")
-        return
+        raise Exception("No hay información de rutas para procesar")
 
     policy_name = f"{username}_policy"
 
@@ -287,6 +465,7 @@ def create_and_manage_policy(username, paths_info):
             debug_print(f"La policy '{policy_name}' no existe.")
         else:
             debug_print(f"Error verificando policy: {e}")
+            raise Exception(f"Error verificando policy: {e}")
 
     # Procesar cada ruta
     final_policy = None
@@ -320,6 +499,7 @@ def create_and_manage_policy(username, paths_info):
             )
 
     # Crear o actualizar la policy
+    policy_updated = False
     if policy_arn:
         debug_print(f"Actualizando policy '{policy_name}'...")
         try:
@@ -329,8 +509,15 @@ def create_and_manage_policy(username, paths_info):
                 SetAsDefault=True,
             )
             debug_print(f"Policy '{policy_name}' actualizada.")
+            policy_updated = True
         except Exception as e:
             debug_print(f"Error actualizando policy: {e}")
+            if "LimitExceeded" in str(e):
+                raise Exception(
+                    f"Error: La policy '{policy_name}' ha alcanzado el límite de 5 versiones. Debe eliminar versiones antiguas antes de crear una nueva."
+                )
+            else:
+                raise Exception(f"Error actualizando policy: {e}")
     else:
         debug_print(f"Creando policy '{policy_name}'...")
         try:
@@ -339,19 +526,61 @@ def create_and_manage_policy(username, paths_info):
             )
             policy_arn = response["Policy"]["Arn"]
             debug_print(f"Policy '{policy_name}' creada.")
+            policy_updated = True
         except Exception as e:
             debug_print(f"Error creando policy: {e}")
-            policy_arn = potential_arn
+            raise Exception(f"Error creando policy: {e}")
 
-    # Asignar policy al usuario
-    debug_print(f"Asignando policy '{policy_name}' al usuario '{username}'...")
+    # Solo asignar policy al usuario si se actualizó/creó correctamente
+    if policy_updated and policy_arn:
+        debug_print(f"Asignando policy '{policy_name}' al usuario '{username}'...")
+        try:
+            iam.attach_user_policy(UserName=username, PolicyArn=policy_arn)
+            debug_print(f"Policy '{policy_name}' asignada a '{username}'.")
+        except Exception as e:
+            debug_print(f"Error asignando policy: {e}")
+            if "EntityAlreadyExists" in str(e):
+                debug_print("La policy ya estaba asignada al usuario.")
+            else:
+                raise Exception(f"Error asignando policy al usuario: {e}")
+
+
+def get_user_info_from_config(wasabi_user):
+    """
+    Obtiene información del usuario desde el archivo de configuración.
+
+    Args:
+        wasabi_user (str): Nombre del usuario de Wasabi
+
+    Returns:
+        tuple: (user_name, user_color) o (wasabi_user, "#666666") si no se encuentra
+    """
     try:
-        iam.attach_user_policy(UserName=username, PolicyArn=policy_arn)
-        debug_print(f"Policy '{policy_name}' asignada a '{username}'.")
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "LGA_NKS_Flow_Users.json"
+        )
+
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                users = config.get("users", [])
+
+                for user in users:
+                    if user.get("wasabi_user") == wasabi_user:
+                        return user.get("name", wasabi_user), user.get(
+                            "color", "#666666"
+                        )
+
+        # Si no se encuentra, usar valores por defecto
+        return wasabi_user, "#666666"
+
     except Exception as e:
-        debug_print(f"Error asignando policy: {e}")
-        if "EntityAlreadyExists" in str(e):
-            debug_print("La policy ya estaba asignada al usuario.")
+        debug_print(f"Error leyendo configuración de usuarios: {e}")
+        return wasabi_user, "#666666"
+
+
+# Variable global para mantener referencia a la ventana
+_status_window = None
 
 
 def main(username=None):
@@ -361,6 +590,8 @@ def main(username=None):
     Args:
         username (str): Nombre del usuario de Wasabi. Si no se proporciona, usa "TestPoli" por defecto.
     """
+    global _status_window
+
     # Usar TestPoli por defecto si no se proporciona usuario
     if username is None:
         username = "TestPoli"
@@ -369,42 +600,42 @@ def main(username=None):
         f"=== Iniciando LGA_NKS_Wasabi_PolicyAssign para usuario: {username} ==="
     )
 
-    # Verificar variables de entorno
-    if not os.getenv("WASABI_ADMIN_KEY") or not os.getenv("WASABI_ADMIN_SECRET"):
-        debug_print(
-            "ERROR: Las variables de entorno WASABI_ADMIN_KEY y WASABI_ADMIN_SECRET deben estar configuradas."
-        )
-        return
+    # Obtener información del usuario para la ventana
+    user_name, user_color = get_user_info_from_config(username)
 
-    # Obtener rutas de clips seleccionados en Hiero
-    file_paths = get_selected_clips_paths()
+    # Crear aplicación Qt si no existe
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
 
-    # TESTING: Descomentar para usar rutas hardcodeadas (solo para debugging)
-    # test_paths = [
-    #     r"T:\VFX-ETDM\103\ETDM_3003_0100_DeAging_Cocina\_input\ETDM_3003_0110_DeAging_Cocina_aPlate_v01",
-    #     r"T:\VFX-ETDM\101\ETDM_1000_0010_DeAging_Atropella\_input\ETDM_1000_0010_DeAging_Atropella_aPlate_v01",
-    # ]
-    # debug_print("=== MODO TESTING: Usando rutas hardcodeadas ===")
-    # file_paths = test_paths
+    # Crear y mostrar ventana de estado
+    _status_window = WasabiStatusWindow(user_name, user_color)
+    _status_window.show()
 
-    if not file_paths:
-        debug_print("No se encontraron rutas de archivos para procesar.")
-        return
+    # Crear worker para procesamiento en hilo separado
+    worker = WasabiWorker(username, _status_window)
 
-    # Parsear todas las rutas
-    paths_info = []
-    for file_path in file_paths:
-        parsed = parse_path_for_policy(file_path)
-        if parsed:
-            paths_info.append(parsed)
+    # Conectar señales
+    def handle_paths_ready(paths_info):
+        _status_window.update_paths(paths_info)
 
-    if not paths_info:
-        debug_print("No se pudieron parsear las rutas.")
-        return
+    def handle_finished(success, message):
+        if success:
+            _status_window.show_success(message)
+        else:
+            _status_window.show_error(message)
 
-    # Crear y gestionar la policy
-    create_and_manage_policy(username, paths_info)
-    debug_print("=== Script completado ===")
+    def handle_error(error_msg):
+        _status_window.show_error(error_msg)
+
+    worker.signals.paths_ready.connect(handle_paths_ready)
+    worker.signals.finished.connect(handle_finished)
+    worker.signals.error.connect(handle_error)
+
+    # Ejecutar en hilo separado
+    QThreadPool.globalInstance().start(worker)
+
+    debug_print("=== Worker iniciado en hilo separado ===")
 
 
 if __name__ == "__main__":
