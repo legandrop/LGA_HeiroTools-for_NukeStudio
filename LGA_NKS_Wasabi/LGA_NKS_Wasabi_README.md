@@ -7,15 +7,14 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 ### `LGA_NKS_Wasabi_PolicyAssign.py`
 **Script de asignación** que se ejecuta desde Hiero para crear/actualizar políticas IAM automáticamente.
 
-### `LGA_NKS_Wasabi_PolicyUnassign.py`
-**Script de gestión** que lee policies existentes y permite eliminar shots específicos de forma visual.
-
 **Funcionalidad:**
 - Obtiene rutas de clips seleccionados en el timeline de Hiero
 - Parsea las rutas para extraer bucket, carpeta y subcarpeta
+- **Valida y repara policies corruptas** antes de modificarlas
 - Detecta si la política ya existe y la actualiza sin duplicar permisos
 - Crea nueva política si no existe
 - Asigna la política al usuario especificado
+- Maneja casos donde la policy existente tiene statements inválidos
 
 **Configuración:**
 - Recibe el usuario como parámetro en `main(username=None)`
@@ -23,19 +22,31 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 - Nombre de política: `{username}_policy`
 - Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
 
+**Funciones principales:**
+- `merge_policy_statements()`: Combina policies existentes con nuevos permisos
+- `create_and_manage_policy()`: Gestiona la creación/actualización de policies
+
+### `LGA_NKS_Wasabi_PolicyUnassign.py`
+**Script de gestión** que lee policies existentes y permite eliminar shots específicos de forma visual.
+
 **Funcionalidad:**
 - Lee la policy existente del usuario especificado
+- **Valida y repara policies corruptas** antes y después de modificarlas
 - Extrae automáticamente los nombres de shots desde los recursos S3
 - Muestra una ventana con lista scrolleable de shots asignados
 - Permite eliminar shots individuales con botón "✕" 
 - Actualiza la policy en tiempo real eliminando permisos específicos
 - Gestiona automáticamente las versiones de policies (límite de 5)
+- **Previene la creación de policies inválidas** al eliminar todos los shots
 
 **Configuración:**
 - Recibe el usuario como parámetro en `main(username=None)`
 - Por defecto usa "TestPoli" si no se especifica usuario
 - Lee política: `{username}_policy`
 - Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
+
+**Funciones principales:**
+- `remove_shot_from_policy()`: Elimina un shot específico de la policy
 
 **Uso desde Panel:**
 1. Hacer **Ctrl+Shift+Click** en el botón del usuario deseado en el panel LGA_NKS_Flow_Assignee_Panel
@@ -109,6 +120,24 @@ Los usuarios se cargan desde `Python/Startup/LGA_NKS_Flow_Users.json`:
 - `WasabiWorkerSignals` - Señales para comunicación entre hilos
 - `get_user_info_from_config()` - Obtiene nombre y color del usuario desde JSON
 - `main(username)` - Función principal que maneja toda la interfaz y procesamiento
+
+### `wasabi_policy_utils.py`
+**Módulo de utilidades** con funciones auxiliares para la gestión de políticas IAM.
+
+**Funciones principales:**
+- `validate_and_repair_policy()`: Valida y repara policies corruptas o inválidas
+- `create_minimal_policy()`: Crea una policy mínima válida con permisos básicos
+- `get_existing_policy_document()`: Obtiene el documento de policy existente
+- `manage_policy_versions()`: Gestiona las versiones de policies (límite de 5)
+- `read_user_policy_shots()`: Lee y extrae shots de una policy existente
+- `remove_shot_from_policy()`: Elimina un shot específico de la policy
+
+**Validación y Reparación:**
+- Detecta statements inválidos o corruptos
+- Elimina statements de `s3:*` sin recursos válidos
+- Limpia prefixes vacíos en statements de `s3:ListBucket`
+- Asegura que siempre existan permisos básicos (`s3:ListAllMyBuckets`)
+- Convierte policies corruptas en policies mínimas válidas cuando es necesario
 
 ## Dependencias
 

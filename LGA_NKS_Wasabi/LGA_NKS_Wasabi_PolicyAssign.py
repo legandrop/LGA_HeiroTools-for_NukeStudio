@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.5 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.9 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -392,6 +392,13 @@ def merge_policy_statements(existing_policy, new_bucket, new_folder, new_subfold
     Returns:
         dict: Policy combinada
     """
+    # Importar las funciones de validación desde wasabi_policy_utils
+    from wasabi_policy_utils import validate_and_repair_policy
+
+    # Validar y reparar la policy existente antes de modificarla
+    debug_print("Validando policy existente antes de combinar...")
+    existing_policy = validate_and_repair_policy(existing_policy)
+
     # Crear la nueva entrada que queremos agregar
     new_prefix = f"{new_folder}/"
     new_full_prefix = f"{new_folder}/{new_subfolder}/*"
@@ -408,10 +415,11 @@ def merge_policy_statements(existing_policy, new_bucket, new_folder, new_subfold
             and statement.get("Resource") == f"arn:aws:s3:::{new_bucket}"
         ):
             list_bucket_statement = statement
-        elif statement.get("Action") == "s3:*" and isinstance(
-            statement.get("Resource"), list
-        ):
-            s3_action_statement = statement
+        elif statement.get("Action") == "s3:*":
+            # Verificar si tiene recursos válidos
+            resources = statement.get("Resource", [])
+            if isinstance(resources, list) and len(resources) > 0:
+                s3_action_statement = statement
 
     # Actualizar el statement de ListBucket
     if list_bucket_statement:
@@ -426,6 +434,18 @@ def merge_policy_statements(existing_policy, new_bucket, new_folder, new_subfold
             current_prefixes.append(new_full_prefix)
         list_bucket_statement["Condition"]["StringLike"]["s3:prefix"] = current_prefixes
         debug_print(f"Agregados prefijos: {new_prefix}, {new_full_prefix}")
+    else:
+        # Si no existe el statement de ListBucket, crearlo
+        new_list_bucket_statement = {
+            "Effect": "Allow",
+            "Action": "s3:ListBucket",
+            "Resource": f"arn:aws:s3:::{new_bucket}",
+            "Condition": {
+                "StringLike": {"s3:prefix": ["", new_prefix, new_full_prefix]}
+            },
+        }
+        existing_policy["Statement"].append(new_list_bucket_statement)
+        debug_print(f"Creado nuevo statement ListBucket para bucket {new_bucket}")
 
     # Actualizar el statement de s3:*
     if s3_action_statement:
@@ -435,6 +455,17 @@ def merge_policy_statements(existing_policy, new_bucket, new_folder, new_subfold
         if new_resource_wildcard not in current_resources:
             current_resources.append(new_resource_wildcard)
         debug_print(f"Agregados recursos: {new_resource_base}, {new_resource_wildcard}")
+    else:
+        # Si no existe el statement de s3:*, crearlo
+        new_s3_statement = {
+            "Effect": "Allow",
+            "Action": "s3:*",
+            "Resource": [new_resource_base, new_resource_wildcard],
+        }
+        existing_policy["Statement"].append(new_s3_statement)
+        debug_print(
+            f"Creado nuevo statement s3:* con recursos: {new_resource_base}, {new_resource_wildcard}"
+        )
 
     return existing_policy
 
@@ -537,11 +568,17 @@ def create_and_manage_policy(username, paths_info):
         if final_policy is None:
             if policy_arn:
                 # Obtener policy existente
-                final_policy = get_existing_policy_document(iam, policy_arn)
-                if final_policy:
+                existing_policy = get_existing_policy_document(iam, policy_arn)
+                if existing_policy:
+                    # Validar y reparar la policy existente
+                    from wasabi_policy_utils import validate_and_repair_policy
+
+                    debug_print("Validando policy existente obtenida...")
+                    existing_policy = validate_and_repair_policy(existing_policy)
+
                     # Combinar con nueva información
                     final_policy = merge_policy_statements(
-                        final_policy, bucket_name, folder_path, subfolder_path
+                        existing_policy, bucket_name, folder_path, subfolder_path
                     )
                 else:
                     # Si no se puede obtener, crear nueva

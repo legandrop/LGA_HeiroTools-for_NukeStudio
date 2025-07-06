@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  Wasabi Policy Utils v0.5 | Lega Pugliese
+  Wasabi Policy Utils v0.9 | Lega Pugliese
   Funciones auxiliares para gestión de políticas IAM de Wasabi
 ______________________________________________________________________
 
@@ -17,6 +17,151 @@ def debug_print(*message):
     DEBUG = True
     if DEBUG:
         print(*message)
+
+
+def validate_and_repair_policy(policy_document):
+    """
+    Valida y repara una policy document que puede estar corrupta.
+
+    Args:
+        policy_document (dict): Documento de policy a validar
+
+    Returns:
+        dict: Policy reparada y válida
+    """
+    try:
+        if not policy_document or not isinstance(policy_document, dict):
+            debug_print("Policy document inválido o vacío")
+            return create_minimal_policy()
+
+        statements = policy_document.get("Statement", [])
+        if not statements:
+            debug_print("Policy sin statements, creando policy mínima")
+            return create_minimal_policy()
+
+        # Validar y reparar cada statement
+        valid_statements = []
+
+        for statement in statements:
+            if not isinstance(statement, dict):
+                continue
+
+            action = statement.get("Action")
+
+            # Statement básico de permisos generales - siempre válido
+            if isinstance(action, list) and "s3:ListAllMyBuckets" in action:
+                valid_statements.append(statement)
+                continue
+
+            # Statement de ListBucket
+            if action == "s3:ListBucket":
+                resource = statement.get("Resource")
+                if resource and resource.startswith("arn:aws:s3:::"):
+                    # Validar que tenga condition válida
+                    condition = statement.get("Condition", {})
+                    string_like = condition.get("StringLike", {})
+                    prefixes = string_like.get("s3:prefix", [])
+
+                    if prefixes:
+                        # Limpiar prefixes vacíos o inválidos
+                        clean_prefixes = [
+                            p for p in prefixes if p is not None and p != ""
+                        ]
+                        if not clean_prefixes:
+                            clean_prefixes = [""]  # Al menos el prefix vacío
+
+                        statement["Condition"]["StringLike"][
+                            "s3:prefix"
+                        ] = clean_prefixes
+                        valid_statements.append(statement)
+                        debug_print(
+                            f"Statement ListBucket reparado con prefixes: {clean_prefixes}"
+                        )
+                continue
+
+            # Statement de s3:* - el más problemático
+            if action == "s3:*":
+                resources = statement.get("Resource", [])
+
+                # Si no hay recursos o es una lista vacía, omitir este statement
+                if not resources or (
+                    isinstance(resources, list) and len(resources) == 0
+                ):
+                    debug_print("Statement s3:* sin recursos válidos, omitiendo")
+                    continue
+
+                # Si hay recursos válidos, mantener el statement
+                if isinstance(resources, list):
+                    clean_resources = [
+                        r for r in resources if r and r.startswith("arn:aws:s3:::")
+                    ]
+                    if clean_resources:
+                        statement["Resource"] = clean_resources
+                        valid_statements.append(statement)
+                        debug_print(
+                            f"Statement s3:* reparado con recursos: {len(clean_resources)}"
+                        )
+                    else:
+                        debug_print(
+                            "Statement s3:* sin recursos válidos después de limpiar, omitiendo"
+                        )
+                elif isinstance(resources, str) and resources.startswith(
+                    "arn:aws:s3:::"
+                ):
+                    valid_statements.append(statement)
+                    debug_print("Statement s3:* con recurso único válido")
+                continue
+
+        # Asegurar que siempre tengamos al menos los statements básicos
+        if not valid_statements:
+            debug_print("No se encontraron statements válidos, creando policy mínima")
+            return create_minimal_policy()
+
+        # Verificar que tengamos el statement básico de permisos
+        has_basic_permissions = False
+        for statement in valid_statements:
+            action = statement.get("Action")
+            if isinstance(action, list) and "s3:ListAllMyBuckets" in action:
+                has_basic_permissions = True
+                break
+
+        if not has_basic_permissions:
+            # Agregar statement básico
+            basic_statement = {
+                "Effect": "Allow",
+                "Action": ["s3:ListAllMyBuckets", "s3:GetBucketLocation"],
+                "Resource": "*",
+            }
+            valid_statements.insert(0, basic_statement)
+            debug_print("Agregado statement básico de permisos")
+
+        repaired_policy = {"Version": "2012-10-17", "Statement": valid_statements}
+
+        debug_print(f"Policy reparada con {len(valid_statements)} statements válidos")
+        return repaired_policy
+
+    except Exception as e:
+        debug_print(f"Error validando/reparando policy: {e}")
+        return create_minimal_policy()
+
+
+def create_minimal_policy():
+    """
+    Crea una policy mínima válida con solo permisos básicos.
+
+    Returns:
+        dict: Policy mínima válida
+    """
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListAllMyBuckets", "s3:GetBucketLocation"],
+                "Resource": "*",
+            }
+        ],
+    }
 
 
 def get_existing_policy_document(iam_client, policy_arn):
@@ -209,6 +354,10 @@ def remove_shot_from_policy(username, shot_name):
                 )
                 return False
 
+            # Validar y reparar la policy existente antes de modificarla
+            debug_print("Validando policy existente antes de modificar...")
+            policy_document = validate_and_repair_policy(policy_document)
+
             # Crear nueva policy sin el shot especificado
             modified = False
             new_policy = policy_document.copy()
@@ -252,6 +401,10 @@ def remove_shot_from_policy(username, shot_name):
                     f"No se encontraron referencias al shot {shot_name} en la policy"
                 )
                 return False
+
+            # Validar y reparar la policy después de las modificaciones
+            debug_print("Validando policy después de modificaciones...")
+            new_policy = validate_and_repair_policy(new_policy)
 
             # Gestionar versiones antes de crear una nueva
             if not manage_policy_versions(iam, policy_arn):
