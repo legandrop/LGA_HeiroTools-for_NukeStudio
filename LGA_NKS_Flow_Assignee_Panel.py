@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.4 | Lega Pugliese
+  LGA_NKS_Flow_Assignee_Panel v1.41 | Lega Pugliese
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 ____________________________________________________________________________________
@@ -53,6 +53,11 @@ class AssigneePanel(QWidget):
                 "#1f1f1f",
                 "Shift+F",
                 "Shift+F",
+            ),
+            (
+                "Policy",
+                self.create_wasabi_policy_for_selected_clip,
+                "#334422",
             ),
             (
                 "Get Assignees",
@@ -445,6 +450,37 @@ class AssigneePanel(QWidget):
             spec.loader.exec_module(module)
             # Llamar a la función principal
             module.show_in_flow_from_selected_clip()
+        except Exception as e:
+            QMessageBox.warning(self, "Error al ejecutar", str(e))
+
+    def create_wasabi_policy_for_selected_clip(self):
+        """Llama al script de Wasabi Policy Assign para crear/actualizar políticas IAM"""
+        script_path = os.path.join(
+            os.path.dirname(__file__),
+            "LGA_NKS_Wasabi",
+            "LGA_NKS_Wasabi_PolicyAssign.py",
+        )
+        if not os.path.exists(script_path):
+            QMessageBox.warning(
+                self,
+                "Script no encontrado",
+                f"No se encontró el script en la ruta: {script_path}",
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Wasabi_PolicyAssign", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    "No se pudo cargar el módulo LGA_NKS_Wasabi_PolicyAssign.py"
+                )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Llamar a la función principal
+            module.main()
         except Exception as e:
             QMessageBox.warning(self, "Error al ejecutar", str(e))
 
