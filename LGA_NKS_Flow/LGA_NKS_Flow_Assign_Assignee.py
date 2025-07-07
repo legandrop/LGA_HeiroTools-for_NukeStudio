@@ -1,15 +1,22 @@
 """
 ________________________________________________________________
 
-  LGA_NKS_Flow_Assign_Assignee v1.0 - 2025 - Lega Pugliese
+  LGA_NKS_Flow_Assign_Assignee v1.1 - 2025 - Lega Pugliese
   Asigna un usuario a una tarea en ShotGrid (Flow) a partir del base_name y nombre de usuario
 ________________________________________________________________
 """
 
 import os
+import sys
 import shotgun_api3
 from PySide2.QtCore import QRunnable, Slot, QThreadPool, Signal, QObject
 from PySide2.QtWidgets import QApplication, QMessageBox
+
+# Agregar la ruta actual al sys.path para importar SecureConfig_Reader
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+
+from SecureConfig_Reader import get_flow_credentials
 
 DEBUG = False
 debug_messages = []
@@ -27,12 +34,10 @@ def print_debug_messages():
 
 
 class ShotGridManager:
-    def __init__(self, url, script_name, api_key, sudo_login):
+    def __init__(self, url, login, password):
         debug_print("Inicializando conexion a ShotGrid para asignar usuario")
         try:
-            self.sg = shotgun_api3.Shotgun(
-                url, script_name=script_name, api_key=api_key, sudo_as_login=sudo_login
-            )
+            self.sg = shotgun_api3.Shotgun(url, login=login, password=password)
             debug_print("Conexion a ShotGrid inicializada exitosamente")
         except Exception as e:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
@@ -202,17 +207,16 @@ class AssignAssigneeWorker(QRunnable):
             self.signals.debug_output.emit()
 
 
-def get_env_credentials():
-    sg_url = os.getenv("SHOTGRID_URL")
-    sg_script_name = os.getenv("SHOTGRID_SCRIPT_NAME")
-    sg_api_key = os.getenv("SHOTGRID_API_KEY")
-    sg_login = os.getenv("SHOTGRID_LOGIN")
-    if not sg_url or not sg_script_name or not sg_api_key or not sg_login:
+def get_flow_credentials_secure():
+    sg_url, sg_login, sg_password = get_flow_credentials()
+    if not sg_url or not sg_login or not sg_password:
         debug_print(
-            "Las variables de entorno SHOTGRID_URL, SHOTGRID_SCRIPT_NAME, SHOTGRID_API_KEY y SHOTGRID_LOGIN deben estar configuradas."
+            "No se pudieron obtener las credenciales de Flow desde SecureConfig."
         )
-        return None, None, None, None
-    return sg_url, sg_script_name, sg_api_key, sg_login
+        return None, None, None
+
+    # Para Flow, usamos login directo en lugar de API key
+    return sg_url, sg_login, sg_password
 
 
 def show_result_dialog(success, shot_name, message, user_name=None):
@@ -234,17 +238,18 @@ def show_result_dialog(success, shot_name, message, user_name=None):
 
 
 def assign_assignee_to_task(base_name, user_name):
-    sg_url, sg_script_name, sg_api_key, sg_login = get_env_credentials()
-    if not all([sg_url, sg_script_name, sg_api_key, sg_login]):
+    sg_url, sg_login, sg_password = get_flow_credentials_secure()
+    if not all([sg_url, sg_login, sg_password]):
         show_result_dialog(
             False,
             "-",
-            "Faltan credenciales de ShotGrid en variables de entorno.",
+            "No se pudieron obtener las credenciales de Flow desde SecureConfig.",
             user_name,
         )
         print_debug_messages()
         return
-    sg_manager = ShotGridManager(sg_url, sg_script_name, sg_api_key, sg_login)
+    # Para login directo, usar login y password
+    sg_manager = ShotGridManager(sg_url, sg_login, sg_password)
     worker = AssignAssigneeWorker(sg_manager, base_name, user_name)
 
     def on_finished(success, shot_name, message):

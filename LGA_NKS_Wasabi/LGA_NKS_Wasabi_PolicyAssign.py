@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.9 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.95 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -26,8 +26,13 @@ from PySide2.QtGui import QFont
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
+# Agregar la ruta para importar SecureConfig_Reader
+parent_dir = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(parent_dir, "LGA_NKS_Flow"))
+
 import boto3
 from boto3 import Session
+from SecureConfig_Reader import get_s3_credentials
 
 # Configuracion
 DEBUG = True
@@ -168,12 +173,11 @@ class WasabiWorker(QRunnable):
                 f"=== Iniciando procesamiento para usuario: {self.wasabi_user} ==="
             )
 
-            # Verificar variables de entorno
-            if not os.getenv("WASABI_ADMIN_KEY") or not os.getenv(
-                "WASABI_ADMIN_SECRET"
-            ):
+            # Verificar credenciales de Wasabi desde SecureConfig
+            access_key, secret_key, endpoint, region = get_s3_credentials()
+            if not access_key or not secret_key:
                 self.signals.error.emit(
-                    "ERROR: Las variables de entorno WASABI_ADMIN_KEY y WASABI_ADMIN_SECRET deben estar configuradas."
+                    "ERROR: No se pudieron obtener las credenciales de Wasabi desde SecureConfig."
                 )
                 return
 
@@ -533,14 +537,21 @@ def create_and_manage_policy(username, paths_info):
 
     policy_name = f"{username}_policy"
 
+    # Obtener credenciales de Wasabi desde SecureConfig
+    access_key, secret_key, endpoint, region = get_s3_credentials()
+    if not access_key or not secret_key:
+        raise Exception(
+            "No se pudieron obtener las credenciales de Wasabi desde SecureConfig"
+        )
+
     # Crear sesion de boto3
     session = Session()
     iam = session.client(
         "iam",
-        aws_access_key_id=os.getenv("WASABI_ADMIN_KEY"),
-        aws_secret_access_key=os.getenv("WASABI_ADMIN_SECRET"),
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
         endpoint_url="https://iam.wasabisys.com",
-        region_name="us-east-1",
+        region_name=region or "us-east-1",
     )
 
     # Verificar si la policy existe

@@ -20,7 +20,7 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 - Recibe el usuario como parámetro en `main(username=None)`
 - Por defecto usa "TestPoli" si no se especifica usuario
 - Nombre de política: `{username}_policy`
-- Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
+- Utiliza credenciales seguras desde PipeSync (SecureConfig_Reader)
 
 **Funciones principales:**
 - `merge_policy_statements()`: Combina policies existentes con nuevos permisos
@@ -43,7 +43,7 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 - Recibe el usuario como parámetro en `main(username=None)`
 - Por defecto usa "TestPoli" si no se especifica usuario
 - Lee política: `{username}_policy`
-- Requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
+- Utiliza credenciales seguras desde PipeSync (SecureConfig_Reader)
 
 **Funciones principales:**
 - `remove_shot_from_policy()`: Elimina un shot específico de la policy
@@ -146,12 +146,14 @@ El módulo incluye todas las dependencias de boto3 en subcarpetas locales:
 - `botocore/` - Core de boto3
 - `dateutil/`, `jmespath/`, `urllib3/`, `s3transfer/`, `six.py` - Dependencias auxiliares
 
-## Configuración de Variables de Entorno
+## Configuración de Credenciales
 
-```powershell
-$env:WASABI_ADMIN_KEY = "tu_clave_de_acceso"
-$env:WASABI_ADMIN_SECRET = "tu_clave_secreta"
-```
+Las credenciales de Wasabi se obtienen automáticamente desde la configuración segura de PipeSync usando `SecureConfig_Reader.py`. Ya no es necesario configurar variables de entorno.
+
+Las credenciales se leen desde:
+- **Windows**: `%APPDATA%\LGA\PipeSync\config.secure`
+- **macOS**: `~/Library/Application Support/LGA/PipeSync/config.secure`
+- **Linux**: `~/.config/LGA/PipeSync/config.secure`
 
 ## Endpoints Utilizados
 

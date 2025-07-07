@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign v0.51 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyUnassign v0.60 | Lega Pugliese
   Muestra y gestiona shots asignados en políticas IAM de Wasabi
 ______________________________________________________________________
 
@@ -32,8 +32,13 @@ from PySide2.QtGui import QFont
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
+# Agregar la ruta para importar SecureConfig_Reader
+parent_dir = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(parent_dir, "LGA_NKS_Flow"))
+
 import boto3
 from boto3 import Session
+from SecureConfig_Reader import get_s3_credentials
 
 # Importar funciones auxiliares
 from wasabi_policy_utils import (
@@ -347,12 +352,11 @@ class WasabiWorker(QRunnable):
                 f"=== Iniciando lectura de policy para usuario: {self.wasabi_user} ==="
             )
 
-            # Verificar variables de entorno
-            if not os.getenv("WASABI_ADMIN_KEY") or not os.getenv(
-                "WASABI_ADMIN_SECRET"
-            ):
+            # Verificar credenciales de Wasabi desde SecureConfig
+            access_key, secret_key, endpoint, region = get_s3_credentials()
+            if not access_key or not secret_key:
                 self.signals.error.emit(
-                    "ERROR: Las variables de entorno WASABI_ADMIN_KEY y WASABI_ADMIN_SECRET deben estar configuradas."
+                    "ERROR: No se pudieron obtener las credenciales de Wasabi desde SecureConfig."
                 )
                 return
 
@@ -393,12 +397,12 @@ class WasabiRemoveShotWorker(QRunnable):
                 f"=== Eliminando shot {self.shot_name} del usuario {self.wasabi_user} ==="
             )
 
-            # Verificar variables de entorno
-            if not os.getenv("WASABI_ADMIN_KEY") or not os.getenv(
-                "WASABI_ADMIN_SECRET"
-            ):
+            # Verificar credenciales de Wasabi desde SecureConfig
+            access_key, secret_key, endpoint, region = get_s3_credentials()
+            if not access_key or not secret_key:
                 self.signals.error.emit(
-                    self.shot_name, "Variables de entorno no configuradas"
+                    self.shot_name,
+                    "No se pudieron obtener credenciales de Wasabi desde SecureConfig",
                 )
                 return
 

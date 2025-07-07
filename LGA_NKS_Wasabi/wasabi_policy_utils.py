@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  Wasabi Policy Utils v0.9 | Lega Pugliese
+  Wasabi Policy Utils v0.95 | Lega Pugliese
   Funciones auxiliares para gestión de políticas IAM de Wasabi
 ______________________________________________________________________
 
@@ -9,7 +9,14 @@ ______________________________________________________________________
 
 import os
 import json
+import sys
 from boto3 import Session
+
+# Agregar la ruta para importar SecureConfig_Reader
+parent_dir = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(parent_dir, "LGA_NKS_Flow"))
+
+from SecureConfig_Reader import get_s3_credentials
 
 
 def debug_print(*message):
@@ -260,14 +267,22 @@ def read_user_policy_shots(username):
     try:
         policy_name = f"{username}_policy"
 
+        # Obtener credenciales de Wasabi desde SecureConfig
+        access_key, secret_key, endpoint, region = get_s3_credentials()
+        if not access_key or not secret_key:
+            debug_print(
+                "No se pudieron obtener las credenciales de Wasabi desde SecureConfig"
+            )
+            return []
+
         # Crear sesion de boto3
         session = Session()
         iam = session.client(
             "iam",
-            aws_access_key_id=os.getenv("WASABI_ADMIN_KEY"),
-            aws_secret_access_key=os.getenv("WASABI_ADMIN_SECRET"),
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
             endpoint_url="https://iam.wasabisys.com",
-            region_name="us-east-1",
+            region_name=region or "us-east-1",
         )
 
         # Verificar si la policy existe
@@ -332,14 +347,22 @@ def remove_shot_from_policy(username, shot_name):
     try:
         policy_name = f"{username}_policy"
 
+        # Obtener credenciales de Wasabi desde SecureConfig
+        access_key, secret_key, endpoint, region = get_s3_credentials()
+        if not access_key or not secret_key:
+            debug_print(
+                "No se pudieron obtener las credenciales de Wasabi desde SecureConfig"
+            )
+            return False
+
         # Crear sesion de boto3
         session = Session()
         iam = session.client(
             "iam",
-            aws_access_key_id=os.getenv("WASABI_ADMIN_KEY"),
-            aws_secret_access_key=os.getenv("WASABI_ADMIN_SECRET"),
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
             endpoint_url="https://iam.wasabisys.com",
-            region_name="us-east-1",
+            region_name=region or "us-east-1",
         )
 
         # Verificar si la policy existe

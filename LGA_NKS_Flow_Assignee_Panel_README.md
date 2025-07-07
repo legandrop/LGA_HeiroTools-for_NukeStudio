@@ -134,6 +134,6 @@ Al hacer Ctrl+Shift+Click en un botón de usuario, el panel llama al script de g
 - Si el archivo no existe, se crea automáticamente con la configuración por defecto
 - Los errores se muestran en la consola de debug (activar DEBUG = True en el script)
 - El sistema es compatible con caracteres Unicode (nombres con acentos, etc.)
-- La funcionalidad de Wasabi requiere variables de entorno: `WASABI_ADMIN_KEY` y `WASABI_ADMIN_SECRET`
+- Las funcionalidades de Flow y Wasabi utilizan credenciales seguras desde PipeSync (SecureConfig_Reader)
 - Los botones de usuario utilizan `CustomButton` para manejar Shift+Click y Ctrl+Shift+Click
 - Las ventanas de Wasabi son no-modales y se cierran manualmente con botón Close 

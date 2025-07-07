@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.43 | Lega Pugliese
+  LGA_NKS_Flow_Assignee_Panel v1.50 | Lega Pugliese
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 ____________________________________________________________________________________
