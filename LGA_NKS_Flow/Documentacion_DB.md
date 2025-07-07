@@ -55,6 +55,7 @@ Almacena información sobre las tomas (shots) asociadas a cada proyecto.
 | shot_name | TEXT | NOT NULL | Nombre del shot |
 | sequence | TEXT | | Secuencia a la que pertenece el shot |
 | shot_status | TEXT | | Estado actual del shot |
+| sg_version | TEXT | | Campo custom de versión desde ShotGrid |
 | thumbnail_url | TEXT | | URL de la miniatura en ShotGrid/Flow |
 | local_thumbnail_path | TEXT | | Ruta local de la miniatura |
 | created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Fecha y hora de creación del registro |
@@ -161,9 +162,9 @@ Almacena información sobre las versiones de archivos asociadas a cada tarea.
 
 ### 7. Tabla `version_notes` (Notas de Versiones)
 
-Almacena notas detalladas asociadas a cada versión.
+Almacena notas detalladas asociadas a cada versión, incluyendo attachments descargados automáticamente.
 
-**Importante**: Esta tabla ahora es el único lugar donde se almacenan comentarios y notas de versiones. El campo `comments` de la tabla `versions` ya no se utiliza para evitar duplicación de datos.
+**Importante**: Esta tabla es el único lugar donde se almacenan comentarios y notas de versiones. El campo `comments` de la tabla `versions` ya no se utiliza para evitar duplicación de datos.
 
 | Columna | Tipo | Restricciones | Descripción |
 |---------|------|---------------|-------------|
@@ -176,6 +177,8 @@ Almacena notas detalladas asociadas a cada versión.
 | from_playlist | BOOLEAN | DEFAULT 0 | Indica si la nota proviene de una playlist |
 | playlist_name | TEXT | | Nombre de la playlist (si aplica) |
 | note_links | TEXT | | Campo note_links de Flow en formato JSON |
+| attachment_info | TEXT | | Información de attachments en formato JSON con URLs de descarga |
+| local_attachment_paths | TEXT | | Rutas locales de attachments descargados (separadas por punto y coma) |
 | created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Fecha y hora de creación del registro |
 
 **Claves Foráneas:**
@@ -183,6 +186,23 @@ Almacena notas detalladas asociadas a cada versión.
 
 **Índices:**
 - `idx_version_notes_version_id`: NOT UNIQUE (version_id)
+
+**Gestión de Attachments:**
+- Los attachments se descargan automáticamente durante la sincronización con Flow
+- Se almacenan en la carpeta de caché de notas, cuya ubicación varía según el sistema operativo:
+  - **Windows:** `[carpeta_ejecutable]/cache/notes/`
+  - **macOS:** `~/Library/Caches/LGA/PipeSync/notes/`
+- La información original de ShotGrid se guarda en `attachment_info` (JSON)
+- Las rutas locales se almacenan en `local_attachment_paths` separadas por punto y coma
+- Los archivos se nombran con el patrón: `{shot_name}_{task_name}_v{version_number}_{frame_number}[_{counter}].{extension}`
+  - `shot_name`: Nombre del shot asociado
+  - `task_name`: Tipo de tarea (ej. Compositing, Animation)
+  - `version_number`: Número de la versión relacionada con la nota
+  - `frame_number`: Número de frame extraído del nombre original del archivo
+  - `counter`: Número ascendente si ya existe otro archivo con el mismo nombre base
+  - `extension`: Extensión original del archivo
+- Ejemplo de nombres generados: `SH010_Compositing_v3_16.png`, `SH010_Compositing_v3_16_2.png`
+- **Implementación**: Función `download_attachments_for_note()` en `py_scr/get_Flow_info.py`
 
 ### 8. Tabla `wasabi_auto_download_shots` (Shots para descarga automática)
 
@@ -428,7 +448,7 @@ python py_scr/list_tables.py
 
 ### 7. `get_Flow_info.py`
 
-**Propósito**: Obtener información de ShotGrid/Flow y guardarla en la base de datos SQLite.
+**Propósito**: Obtener información de ShotGrid/Flow y guardarla en la base de datos SQLite, incluyendo descarga automática de attachments.
 
 **Uso**: 
 ```bash
@@ -441,8 +461,18 @@ python py_scr/get_Flow_info.py
 - `get_assigned_tasks(sg, user_id)`: Obtiene todas las tareas asignadas al usuario, filtrando por estado del proyecto.
 - `extract_version_info(version_code, task_type)`: Extrae información de versión del código.
 - `get_all_versions_for_task(sg, task_id, shot_id)`: Obtiene todas las versiones asociadas a una tarea.
-- `save_task_to_db(task, sg, db_manager)`: Guarda la información de la tarea en la base de datos, incluyendo todas sus versiones.
+- `save_task_to_db(task, sg, db_manager)`: Guarda la información de la tarea en la base de datos, incluyendo todas sus versiones y descarga de attachments.
+- `download_attachments_for_note(sg, note_id, attachment_info_json, db_manager)`: Descarga automáticamente los attachments de una nota y actualiza las rutas locales en la base de datos.
 - `main()`: Función principal que coordina todo el proceso de sincronización.
+
+**Gestión de Attachments**:
+- Los attachments se descargan automáticamente durante el proceso de sincronización
+- Se crean en la carpeta de caché de notas, cuya ubicación varía según el sistema operativo:
+  - **Windows:** `[carpeta_ejecutable]/cache/notes/`
+  - **macOS:** `~/Library/Caches/LGA/PipeSync/notes/`
+- Se obtienen las URLs reales de descarga desde ShotGrid
+- Se actualizan las rutas locales en la tabla `version_notes`
+- Se registra el progreso de descarga en los logs
 
 **Uso en la aplicación**: Este script se ejecuta cuando el usuario solicita sincronizar datos desde ShotGrid/Flow a la base de datos local. Registra el progreso de la sincronización en la tabla `sync_status` y guarda toda la información relevante en las tablas correspondientes.
 
@@ -616,6 +646,21 @@ SELECT * FROM version_notes WHERE version_id = ? ORDER BY created_on DESC;
 SELECT * FROM version_notes WHERE version_id = ? AND from_playlist = 1 ORDER BY created_on DESC;
 ```
 
+### Obtener todas las notas con attachments
+```sql
+SELECT * FROM version_notes 
+WHERE attachment_info IS NOT NULL AND attachment_info != '' 
+ORDER BY created_on DESC;
+```
+
+### Obtener notas con attachments para una versión específica
+```sql
+SELECT id, content, created_by, created_on, attachment_info, local_attachment_paths
+FROM version_notes 
+WHERE version_id = ? AND attachment_info IS NOT NULL AND attachment_info != ''
+ORDER BY created_on DESC;
+```
+
 ### Verificar si un shot está marcado para descarga automática
 ```sql
 SELECT EXISTS(SELECT 1 FROM wasabi_auto_download_shots WHERE shot_id = ? AND is_enabled = 1) as is_auto_download;
@@ -634,7 +679,7 @@ ORDER BY p.project_name, s.shot_name;
 ```sql
 SELECT v.id, v.version_number, v.status, v.description, v.created_by, v.created_on,
        n.content as note_content, n.created_by as note_author, n.created_on as note_date,
-       n.from_playlist, n.playlist_name
+       n.from_playlist, n.playlist_name, n.attachment_info, n.local_attachment_paths
 FROM versions v 
 LEFT JOIN version_notes n ON v.id = n.version_id
 WHERE v.id = ?
