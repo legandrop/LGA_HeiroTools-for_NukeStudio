@@ -1,7 +1,7 @@
 """
 ________________________________________________________________
 
-  LGA_NKS_Flow_Assign_Assignee v1.2 | Lega Pugliese
+  LGA_NKS_Flow_Assign_Assignee v1.21 | Lega Pugliese
   Asigna un usuario a una tarea en ShotGrid (Flow) a partir del base_name y nombre de usuario
 ________________________________________________________________
 """
@@ -18,6 +18,7 @@ from PySide2.QtWidgets import (
     QVBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
 )
 from PySide2.QtGui import QFont
 
@@ -81,6 +82,10 @@ class FlowStatusWindow(QDialog):
         self.setWindowTitle("Flow | Assign User")
         self.setModal(False)  # Cambiar a no modal para evitar problemas
         self.setMinimumWidth(500)
+        self.setMinimumHeight(150)  # Establecer una altura minima
+        self.setSizePolicy(
+            QSizePolicy.Preferred, QSizePolicy.Fixed
+        )  # Permitir que se ajuste horizontalmente, pero fija verticalmente
 
         # Evitar que la ventana se cierre automáticamente
         self.setAttribute(Qt.WA_DeleteOnClose, False)
@@ -182,6 +187,10 @@ class FlowStatusWindow(QDialog):
         """Ajusta el tamaño de la ventana basándose en el contenido"""
         self.adjustSize()
         self.updateGeometry()
+        # Restar 20px de la altura para hacer la ventana mas compacta
+        current_height = self.height()
+        new_height = max(0, current_height + 5)
+        self.setFixedHeight(new_height)
 
     def closeEvent(self, event):
         """
