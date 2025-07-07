@@ -1,6 +1,6 @@
 """
 ____________________________________________________________________________
-  LGA_NKS_Flow_Pull v3.2 - Lega Pugliese
+  LGA_NKS_Flow_Pull v3.21 | Lega Pugliese
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
@@ -52,7 +52,7 @@ XYPlorer_Tags = False
 
 def debug_print(*message):
     if DEBUG:
-        print(message)
+        print(*message)
 
 
 def extract_version_number(version_str):
@@ -350,7 +350,11 @@ class HieroOperations:
             active_version = bin_item.activeVersion()
             if active_version:
                 current_color = bin_item.color()
+                debug_print(
+                    f"Color actual del clip {item.name()}: {current_color.name()}"
+                )
                 return current_color.name()  # Retorna el color en formato hexadecimal
+        debug_print(f"No se pudo obtener el color del clip {item.name()}")
         return None
 
     def add_row_to_table(
@@ -417,6 +421,14 @@ class HieroOperations:
         table.setItem(row_count, 3, sg_status_item)
         table.setItem(row_count, 4, prev_status_item)
         table.setItem(row_count, 5, new_status_item)
+
+        debug_print(
+            f"add_row_to_table - prev_status: {prev_status}, prev_color: {prev_color}"
+        )  # Nuevo mensaje de depuración
+        debug_print(
+            f"add_row_to_table - new_status: {new_status}, new_color: {new_color}"
+        )  # Nuevo mensaje de depuración
+
         # Configuracion de colores que se agregan a la lista para la linea de seleccion
         row_colors = ["#8a8a8a"] * 6  # Color por defecto para todas las columnas
         if sg_version_num > version_num:  # Si la version SG es mayor que la version NKS
@@ -446,7 +458,10 @@ class HieroOperations:
         current_color_hex = self.get_current_clip_color(item)
         current_status = self.get_status_name_by_color(current_color_hex)
         # No cambiar el color si las condiciones especificas se cumplen
-        if current_color_hex == new_color_hex:
+        if current_color_hex and current_color_hex.lower() == new_color_hex.lower():
+            debug_print(
+                f"Color actual ({current_color_hex}) y nuevo color ({new_color_hex}) son iguales para {item.name()}. No se realiza cambio."
+            )
             return ""
         if current_status == "v_00" and (
             task_status == "Not Ready To Start" or task_status == "Ready To Start"
@@ -467,14 +482,18 @@ class HieroOperations:
 
     def get_status_name_by_color(self, color_hex):
         """Devuelve el nombre del estado basado en el color."""
+        debug_print(f"Buscando estado para color: {color_hex}")
         # Verificar primero en el diccionario de Hiero
         for status, color in self.hiero_status_dict.items():
             if color == color_hex:
+                debug_print(f"Encontrado en hiero_status_dict: {status}")
                 return status
         # Si no se encuentra en Hiero, buscar en el diccionario de ShotGrid
         for status, (name, color, tag) in self.sg_manager.task_status_dict.items():
-            if color == color_hex:
+            if color.lower() == color_hex.lower():
+                debug_print(f"Encontrado en task_status_dict: {name}")
                 return name
+        debug_print(f"Estado desconocido para color: {color_hex}")
         return "Unknown"
 
     def add_custom_tag_to_clip(
