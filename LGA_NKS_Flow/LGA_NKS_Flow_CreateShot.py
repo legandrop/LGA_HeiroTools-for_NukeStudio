@@ -17,9 +17,13 @@ from PySide2.QtWidgets import (
     QMessageBox,
     QDialog,
     QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
+    QTextEdit,
+    QCheckBox,
+    QFrame,
 )
 from PySide2.QtGui import QFont
 
@@ -33,7 +37,7 @@ sys.path.append(str(Path(__file__).parent))
 from SecureConfig_Reader import get_flow_credentials
 
 
-DEBUG = False
+DEBUG = True
 debug_messages = []
 
 
@@ -41,12 +45,178 @@ def debug_print(message):
     """Imprime un mensaje de debug si la variable DEBUG es True."""
     if DEBUG:
         debug_messages.append(str(message))
+        print(f"[DEBUG] {message}")  # Imprimir inmediatamente tambien
 
 
 def print_debug_messages():
     if DEBUG and debug_messages:
         print("\n".join(debug_messages))
         debug_messages.clear()
+
+
+# Clase de ventana de configuracion para shots
+class ShotConfigDialog(QDialog):
+    def __init__(self, clips_info, parent=None):
+        super(ShotConfigDialog, self).__init__(parent)
+        self.setWindowTitle("Flow | Shot Configuration")
+        self.setModal(True)
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(400)
+
+        self.clips_info = clips_info
+        self.shot_config = None
+
+        # Layout principal
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Titulo
+        title_label = QLabel("Configuracion para crear shots")
+        title_font = QFont()
+        title_font.setPointSize(12)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("color: #CCCCCC; padding: 10px;")
+        layout.addWidget(title_label)
+
+        # Informacion de clips
+        clips_label = QLabel(f"Se van a procesar {len(self.clips_info)} clips:")
+        clips_label.setStyleSheet("color: #CCCCCC; padding: 5px;")
+        layout.addWidget(clips_label)
+
+        # Lista de clips
+        for clip_info in self.clips_info:
+            clip_frame = QFrame()
+            clip_frame.setStyleSheet(
+                "border: 1px solid #444444; border-radius: 3px; margin: 2px; padding: 5px;"
+            )
+            clip_layout = QVBoxLayout(clip_frame)
+
+            project_shot_label = QLabel(
+                f"<span style='color: #6AB5CA;'>{clip_info['project_name']}</span> / <span style='color: #B56AB5;'>{clip_info['shot_code']}</span>"
+            )
+            project_shot_label.setTextFormat(Qt.RichText)
+            clip_layout.addWidget(project_shot_label)
+
+            layout.addWidget(clip_frame)
+
+        # Separador
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("color: #444444;")
+        layout.addWidget(separator)
+
+        # Campo de descripcion del shot
+        desc_label = QLabel("Shot Description:")
+        desc_label.setStyleSheet(
+            "color: #CCCCCC; font-weight: bold; padding-top: 10px;"
+        )
+        layout.addWidget(desc_label)
+
+        self.description_text = QTextEdit()
+        self.description_text.setMaximumHeight(80)  # 3 lineas aproximadamente
+        self.description_text.setPlainText("Descripcion test")
+        self.description_text.setStyleSheet(
+            """
+            QTextEdit {
+                background-color: #2B2B2B;
+                border: 1px solid #555555;
+                color: #CCCCCC;
+                padding: 5px;
+                border-radius: 3px;
+            }
+        """
+        )
+        layout.addWidget(self.description_text)
+
+        # Checkboxes
+        self.copy_to_comp_cb = QCheckBox("Copy shot description to Comp Description")
+        self.copy_to_comp_cb.setChecked(True)  # Activado por defecto
+        self.copy_to_comp_cb.setStyleSheet("color: #CCCCCC; padding: 5px;")
+        layout.addWidget(self.copy_to_comp_cb)
+
+        self.shot_ready_cb = QCheckBox("Shot status Ready to start")
+        self.shot_ready_cb.setChecked(True)  # Activado por defecto
+        self.shot_ready_cb.setStyleSheet("color: #CCCCCC; padding: 5px;")
+        layout.addWidget(self.shot_ready_cb)
+
+        self.task_ready_cb = QCheckBox("Task Comp status Ready to start")
+        self.task_ready_cb.setChecked(True)  # Activado por defecto
+        self.task_ready_cb.setStyleSheet("color: #CCCCCC; padding: 5px;")
+        layout.addWidget(self.task_ready_cb)
+
+        # Espaciador
+        layout.addStretch()
+
+        # Botones
+        button_layout = QHBoxLayout()
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        self.cancel_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #555555;
+                border: 1px solid #666666;
+                color: #CCCCCC;
+                padding: 8px 15px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #666666;
+            }
+        """
+        )
+        button_layout.addWidget(self.cancel_button)
+
+        button_layout.addStretch()
+
+        self.create_button = QPushButton("Create Shots")
+        self.create_button.clicked.connect(self.accept_config)
+        self.create_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #0078D4;
+                border: 1px solid #106EBE;
+                color: white;
+                padding: 8px 15px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #106EBE;
+            }
+        """
+        )
+        button_layout.addWidget(self.create_button)
+
+        layout.addLayout(button_layout)
+
+        # Estilo general del dialogo
+        self.setStyleSheet(
+            """
+            QDialog {
+                background-color: #2B2B2B;
+                border: 1px solid #555555;
+            }
+        """
+        )
+
+    def accept_config(self):
+        """Acepta la configuracion y guarda los valores"""
+        self.shot_config = {
+            "description": self.description_text.toPlainText(),
+            "copy_to_comp": self.copy_to_comp_cb.isChecked(),
+            "shot_ready": self.shot_ready_cb.isChecked(),
+            "task_ready": self.task_ready_cb.isChecked(),
+        }
+        self.accept()
+
+    def get_config(self):
+        """Retorna la configuracion seleccionada"""
+        return self.shot_config
 
 
 # Clase de ventana de estado para mostrar progreso de creacion de shot en Flow
@@ -194,7 +364,7 @@ class ShotGridManager:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
             self.sg = None
 
-    def find_shot_and_tasks(self, project_name, shot_code):
+    def find_shot_and_tasks(self, project_name, shot_code, shot_config):
         """Encuentra el shot en ShotGrid y sus tareas asociadas. Si no existe, lo crea."""
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
@@ -209,43 +379,109 @@ class ShotGridManager:
                 ["project", "is", {"type": "Project", "id": project_id}],
                 ["code", "is", shot_code],
             ]
-            fields = ["id", "code", "description"]
+            fields = ["id", "code", "description", "sg_status_list"]
             shots = self.sg.find("Shot", filters, fields)
             if shots:
                 shot_id = shots[0]["id"]
-                tasks = self.find_tasks_for_shot(shot_id)
+                # Actualizar shot existente si es necesario
+                self.update_shot_status_if_needed(shot_id, shot_config)
+                tasks = self.find_tasks_for_shot(shot_id, shot_config)
                 return shots[0], tasks
             else:
                 debug_print("No se encontro el shot. Creando shot...")
-                created_shot = self.create_shot(project_id, shot_code)
+                created_shot = self.create_shot(project_id, shot_code, shot_config)
                 if created_shot:
-                    tasks = self.find_tasks_for_shot(created_shot["id"])
+                    tasks = self.find_tasks_for_shot(created_shot["id"], shot_config)
                     return created_shot, tasks
                 return None, None
         else:
             debug_print("No se encontro el proyecto en ShotGrid.")
         return None, None
 
-    def find_tasks_for_shot(self, shot_id):
+    def find_tasks_for_shot(self, shot_id, shot_config):
         """Encuentra las tareas asociadas a un shot."""
         if not self.sg:
             return []
-        filters = [["entity", "is", {"type": "Shot", "id": shot_id}]]
-        fields = ["id", "content", "sg_status_list"]
-        return self.sg.find("Task", filters, fields)
 
-    def create_shot(self, project_id, shot_code):
-        """Crea un shot en ShotGrid con los parametros predefinidos."""
+        try:
+            filters = [["entity", "is", {"type": "Shot", "id": shot_id}]]
+            fields = ["id", "content", "sg_status_list", "sg_description"]
+            tasks = self.sg.find("Task", filters, fields)
+            debug_print(f"Encontradas {len(tasks)} tareas para el shot")
+
+            # Actualizar tareas si es necesario (de forma inmediata y simple)
+            for task in tasks:
+                debug_print(f"Procesando tarea: {task['content']}")
+                try:
+                    if task["content"].lower() == "comp" and shot_config["task_ready"]:
+                        debug_print("Actualizando status de tarea Comp a ready...")
+                        self.sg.update("Task", task["id"], {"sg_status_list": "ready"})
+                        debug_print("Task status actualizado exitosamente")
+
+                    if (
+                        task["content"].lower() == "comp"
+                        and shot_config["copy_to_comp"]
+                    ):
+                        debug_print("Copiando descripcion a tarea Comp...")
+                        self.sg.update(
+                            "Task",
+                            task["id"],
+                            {"sg_description": shot_config["description"]},
+                        )
+                        debug_print("Task description actualizada exitosamente")
+                except Exception as e:
+                    debug_print(f"Error actualizando tarea {task['content']}: {e}")
+
+            return tasks
+        except Exception as e:
+            debug_print(f"Error en find_tasks_for_shot: {e}")
+            return []
+
+    def update_shot_status_if_needed(self, shot_id, shot_config):
+        """Actualiza el estado del shot si es necesario."""
+        if not self.sg:
+            debug_print("Conexion a ShotGrid no esta inicializada")
+            return
+        if shot_config["shot_ready"]:
+            try:
+                self.sg.update("Shot", shot_id, {"sg_status_list": "ready"})
+                debug_print("Shot status actualizado a 'ready'")
+            except Exception as e:
+                debug_print(f"Error actualizando shot status: {e}")
+
+    def update_task_status(self, task_id, status):
+        """Actualiza el estado de una tarea."""
+        if not self.sg:
+            debug_print("Conexion a ShotGrid no esta inicializada")
+            return
+        try:
+            self.sg.update("Task", task_id, {"sg_status_list": status})
+            debug_print(f"Task status actualizado a '{status}'")
+        except Exception as e:
+            debug_print(f"Error actualizando task status: {e}")
+
+    def update_task_description(self, task_id, description):
+        """Actualiza la descripcion de una tarea."""
+        if not self.sg:
+            debug_print("Conexion a ShotGrid no esta inicializada")
+            return
+        try:
+            self.sg.update("Task", task_id, {"sg_description": description})
+            debug_print(f"Task description actualizada")
+        except Exception as e:
+            debug_print(f"Error actualizando task description: {e}")
+
+    def create_shot(self, project_id, shot_code, shot_config):
+        """Crea un shot en ShotGrid con los parametros configurados."""
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
             return None
 
         # Parametros predefinidos
         sequence_name = "103"
-        description = "Descripcion test"
         task_template_name = "Template_comp"
 
-        debug_print(f"Creando shot '{shot_code}' con parametros predefinidos...")
+        debug_print(f"Creando shot '{shot_code}' con configuracion personalizada...")
 
         # Buscar secuencia
         sequence_filters = [
@@ -275,14 +511,18 @@ class ShotGridManager:
             f"Task Template encontrado: {task_templates[0]['code']} (ID: {task_template_id})"
         )
 
-        # Crear el shot
+        # Crear el shot con la configuracion
         shot_data = {
             "project": {"type": "Project", "id": project_id},
             "code": shot_code,
-            "description": description,
+            "description": shot_config["description"],
             "sg_sequence": {"type": "Sequence", "id": sequence_id},
             "task_template": {"type": "TaskTemplate", "id": task_template_id},
         }
+
+        # Agregar status si esta configurado
+        if shot_config["shot_ready"]:
+            shot_data["sg_status_list"] = "ready"
 
         try:
             new_shot = self.sg.create("Shot", shot_data)
@@ -341,7 +581,7 @@ class HieroOperations:
             debug_print("No se encontro una secuencia activa en Hiero.")
             return []
 
-    def process_selected_clips(self):
+    def process_selected_clips(self, shot_config):
         """Procesa los clips seleccionados en el timeline de Hiero."""
         clips_info = self.get_selected_clips_info()
         if not clips_info:
@@ -350,7 +590,7 @@ class HieroOperations:
         results = []
         for clip_info in clips_info:
             shot, tasks = self.sg_manager.find_shot_and_tasks(
-                clip_info["project_name"], clip_info["shot_code"]
+                clip_info["project_name"], clip_info["shot_code"], shot_config
             )
             if shot:
                 debug_print(f"Clip seleccionado: {clip_info['base_name']}")
@@ -394,9 +634,10 @@ class WorkerSignals(QObject):
 
 
 class CreateShotWorker(QRunnable):
-    def __init__(self, status_window):
+    def __init__(self, status_window, shot_config):
         super(CreateShotWorker, self).__init__()
         self.status_window = status_window
+        self.shot_config = shot_config
         self.signals = WorkerSignals()
 
     @Slot()
@@ -450,7 +691,7 @@ class CreateShotWorker(QRunnable):
 
                 # Procesar shot
                 shot, tasks = sg_manager.find_shot_and_tasks(
-                    clip_info["project_name"], clip_info["shot_code"]
+                    clip_info["project_name"], clip_info["shot_code"], self.shot_config
                 )
 
                 if shot:
@@ -477,6 +718,10 @@ class CreateShotWorker(QRunnable):
             debug_print(f"Error en CreateShotWorker: {e}")
             self.signals.error.emit(f"Error: {str(e)}")
 
+        finally:
+            # Imprimir todos los mensajes de debug al final
+            print_debug_messages()
+
 
 # Variable global para mantener referencia a la ventana
 _status_window = None
@@ -495,13 +740,32 @@ def create_shots_from_selected_clips():
     if app is None:
         app = QApplication([])
 
+    # Primero obtener informacion de clips para mostrar en el dialogo de configuracion
+    hiero_ops_temp = HieroOperations(None)
+    clips_info = hiero_ops_temp.get_selected_clips_info()
+
+    if not clips_info:
+        QMessageBox.warning(
+            None, "Error", "No se encontraron clips seleccionados en Hiero."
+        )
+        return
+
+    # Mostrar dialogo de configuracion
+    config_dialog = ShotConfigDialog(clips_info)
+    if config_dialog.exec_() != QDialog.Accepted:
+        return  # Usuario cancelo
+
+    shot_config = config_dialog.get_config()
+    if not shot_config:
+        return
+
     # Crear y mostrar ventana de estado
     _status_window = FlowStatusWindow("crear shot")
     _status_window.show()
     _status_window.show_processing_message()  # Mostrar mensaje de procesamiento
 
     # Crear worker para procesamiento en hilo separado
-    worker = CreateShotWorker(_status_window)
+    worker = CreateShotWorker(_status_window, shot_config)
 
     # Conectar señales
     worker.signals.shot_info_ready.connect(
