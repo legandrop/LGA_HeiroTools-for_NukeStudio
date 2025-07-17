@@ -24,6 +24,7 @@ from PySide2.QtWidgets import (
     QTextEdit,
     QCheckBox,
     QFrame,
+    QLineEdit,
 )
 from PySide2.QtGui import QFont
 
@@ -54,9 +55,25 @@ def print_debug_messages():
         debug_messages.clear()
 
 
+def get_active_sequence_name():
+    """Obtiene el nombre de la secuencia activa en Hiero"""
+    try:
+        seq = hiero.ui.activeSequence()
+        if seq:
+            sequence_name = seq.name()
+            debug_print(f"Secuencia activa encontrada: {sequence_name}")
+            return sequence_name
+        else:
+            debug_print("No se encontro una secuencia activa")
+            return "103"  # Fallback al valor por defecto
+    except Exception as e:
+        debug_print(f"Error obteniendo nombre de secuencia: {e}")
+        return "103"  # Fallback al valor por defecto
+
+
 # Clase de ventana de configuracion para shots
 class ShotConfigDialog(QDialog):
-    def __init__(self, clips_info, parent=None):
+    def __init__(self, clips_info, sequence_name=None, parent=None):
         super(ShotConfigDialog, self).__init__(parent)
         self.setWindowTitle("Flow | Shot Configuration")
         self.setModal(True)
@@ -64,6 +81,7 @@ class ShotConfigDialog(QDialog):
         self.setMinimumHeight(400)
 
         self.clips_info = clips_info
+        self.sequence_name = sequence_name or "103"
         self.shot_config = None
 
         # Layout principal
@@ -117,7 +135,7 @@ class ShotConfigDialog(QDialog):
 
         self.description_text = QTextEdit()
         self.description_text.setMaximumHeight(80)  # 3 lineas aproximadamente
-        self.description_text.setPlainText("Descripcion test")
+        self.description_text.setPlainText("")
         self.description_text.setStyleSheet(
             """
             QTextEdit {
@@ -130,6 +148,27 @@ class ShotConfigDialog(QDialog):
         """
         )
         layout.addWidget(self.description_text)
+
+        # Campo de secuencia
+        seq_label = QLabel("Sequence:")
+        seq_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 10px;")
+        layout.addWidget(seq_label)
+
+        self.sequence_line_edit = QLineEdit()
+        self.sequence_line_edit.setText(self.sequence_name)
+        self.sequence_line_edit.setStyleSheet(
+            """
+            QLineEdit {
+                background-color: #2B2B2B;
+                border: 1px solid #555555;
+                color: #CCCCCC;
+                padding: 5px;
+                border-radius: 3px;
+                height: 20px;
+            }
+        """
+        )
+        layout.addWidget(self.sequence_line_edit)
 
         # Checkboxes
         self.copy_to_comp_cb = QCheckBox("Copy shot description to Comp Description")
@@ -208,6 +247,7 @@ class ShotConfigDialog(QDialog):
         """Acepta la configuracion y guarda los valores"""
         self.shot_config = {
             "description": self.description_text.toPlainText(),
+            "sequence_name": self.sequence_line_edit.text().strip(),
             "copy_to_comp": self.copy_to_comp_cb.isChecked(),
             "shot_ready": self.shot_ready_cb.isChecked(),
             "task_ready": self.task_ready_cb.isChecked(),
@@ -478,7 +518,7 @@ class ShotGridManager:
             return None
 
         # Parametros predefinidos
-        sequence_name = "103"
+        sequence_name = shot_config.get("sequence_name", "103")
         task_template_name = "Template_comp"
 
         debug_print(f"Creando shot '{shot_code}' con configuracion personalizada...")
@@ -758,8 +798,11 @@ def create_shots_from_selected_clips():
         )
         return
 
+    # Obtener nombre de la secuencia activa
+    sequence_name = get_active_sequence_name()
+
     # Mostrar dialogo de configuracion
-    config_dialog = ShotConfigDialog(clips_info)
+    config_dialog = ShotConfigDialog(clips_info, sequence_name)
     if config_dialog.exec_() != QDialog.Accepted:
         return  # Usuario cancelo
 
