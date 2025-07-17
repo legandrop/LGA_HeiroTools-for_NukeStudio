@@ -21,7 +21,7 @@ from SecureConfig_Reader import get_s3_credentials
 
 def debug_print(*message):
     """Función de debug - debe coincidir con la del script principal"""
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         print(*message)
 
@@ -70,12 +70,11 @@ def validate_and_repair_policy(policy_document):
                     prefixes = string_like.get("s3:prefix", [])
 
                     if prefixes:
-                        # Limpiar prefixes vacíos o inválidos
-                        clean_prefixes = [
-                            p for p in prefixes if p is not None and p != ""
-                        ]
-                        if not clean_prefixes:
-                            clean_prefixes = [""]  # Al menos el prefix vacío
+                        # Limpiar prefixes solo de valores None, manteniendo el prefijo vacio ""
+                        clean_prefixes = [p for p in prefixes if p is not None]
+                        # Asegurar que siempre este el prefijo vacio para listar bucket raiz
+                        if "" not in clean_prefixes:
+                            clean_prefixes.insert(0, "")
 
                         statement["Condition"]["StringLike"][
                             "s3:prefix"
@@ -402,6 +401,9 @@ def remove_shot_from_policy(username, shot_name):
                             debug_print(f"Removiendo prefijo: {prefix}")
 
                     if new_prefixes != prefixes:
+                        # Asegurar que siempre este el prefijo vacio para listar bucket raiz
+                        if "" not in new_prefixes:
+                            new_prefixes.insert(0, "")
                         statement["Condition"]["StringLike"]["s3:prefix"] = new_prefixes
 
                 elif statement.get("Action") == "s3:*":

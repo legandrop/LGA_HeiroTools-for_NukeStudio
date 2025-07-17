@@ -1,7 +1,7 @@
 """
 ______________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.95 | Lega Pugliese
+  LGA_NKS_Wasabi_PolicyAssign v0.96 | Lega Pugliese
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ______________________________________________________________________
 
@@ -35,7 +35,7 @@ from boto3 import Session
 from SecureConfig_Reader import get_s3_credentials
 
 # Configuracion
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(*message):
@@ -432,12 +432,15 @@ def merge_policy_statements(existing_policy, new_bucket, new_folder, new_subfold
             .get("StringLike", {})
             .get("s3:prefix", [])
         )
+        # Asegurar que siempre este el prefijo vacio para listar bucket raiz
+        if "" not in current_prefixes:
+            current_prefixes.append("")
         if new_prefix not in current_prefixes:
             current_prefixes.append(new_prefix)
         if new_full_prefix not in current_prefixes:
             current_prefixes.append(new_full_prefix)
         list_bucket_statement["Condition"]["StringLike"]["s3:prefix"] = current_prefixes
-        debug_print(f"Agregados prefijos: {new_prefix}, {new_full_prefix}")
+        debug_print(f"Agregados prefijos: '', {new_prefix}, {new_full_prefix}")
     else:
         # Si no existe el statement de ListBucket, crearlo
         new_list_bucket_statement = {

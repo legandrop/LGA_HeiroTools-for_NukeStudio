@@ -49,7 +49,7 @@ from wasabi_policy_utils import (
 )
 
 # Configuracion
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(*message):

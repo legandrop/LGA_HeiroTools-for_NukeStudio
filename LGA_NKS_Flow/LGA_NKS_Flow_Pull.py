@@ -46,7 +46,7 @@ def delete_tags_from_clip(clip):
 
 
 # Variable global para activar o desactivar los prints
-DEBUG = True
+DEBUG = False
 XYPlorer_Tags = False
 
 

@@ -20,7 +20,7 @@ from boto3 import Session
 
 # Configuracion
 USERNAME = "TestPoli"  # Debe coincidir con el del script principal
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(*message):
@@ -120,10 +120,14 @@ def verify_policy_content(expected_buckets_and_paths):
                     .get("StringLike", {})
                     .get("s3:prefix", [])
                 )
+                expected_empty_prefix = ""
                 expected_prefix = f"{folder_path}/"
                 expected_full_prefix = f"{folder_path}/{subfolder_path}/*"
 
                 debug_print(f"  ListBucket statement: ✓")
+                debug_print(
+                    f"  Prefijo vacío '': {'✓' if expected_empty_prefix in prefixes else '✗'}"
+                )
                 debug_print(
                     f"  Prefijo '{expected_prefix}': {'✓' if expected_prefix in prefixes else '✗'}"
                 )
