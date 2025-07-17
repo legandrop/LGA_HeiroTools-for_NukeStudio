@@ -668,7 +668,43 @@ class ShotGridManager:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
             self.sg = None
 
-    def find_shot_and_tasks(self, project_name, shot_code, shot_config):
+    def upload_thumbnail(self, entity_type, entity_id, thumbnail_path):
+        """Sube un thumbnail a una entidad en ShotGrid."""
+        if not self.sg:
+            debug_print("Conexion a ShotGrid no esta inicializada")
+            return False
+
+        if not thumbnail_path:
+            debug_print("No se proporciono ruta de thumbnail")
+            return False
+
+        if not os.path.exists(thumbnail_path):
+            debug_print(
+                f"ERROR: No se encontro el archivo de thumbnail: {thumbnail_path}"
+            )
+            return False
+
+        debug_print(f"Verificando archivo antes de subir: {thumbnail_path}")
+        debug_print(f"Archivo existe: {os.path.exists(thumbnail_path)}")
+        debug_print(
+            f"Tamaño del archivo: {os.path.getsize(thumbnail_path) if os.path.exists(thumbnail_path) else 'N/A'}"
+        )
+
+        try:
+            debug_print(f"Iniciando subida de thumbnail: {thumbnail_path}")
+            result = self.sg.upload_thumbnail(entity_type, entity_id, thumbnail_path)
+            debug_print(f"Thumbnail subido exitosamente: {result}")
+            return True
+        except Exception as e:
+            debug_print(f"ERROR al subir thumbnail: {e}")
+            import traceback
+
+            debug_print(f"Traceback completo: {traceback.format_exc()}")
+            return False
+
+    def find_shot_and_tasks(
+        self, project_name, shot_code, shot_config, thumbnail_path=None
+    ):
         """Encuentra el shot en ShotGrid y sus tareas asociadas. Si no existe, lo crea."""
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
@@ -689,11 +725,19 @@ class ShotGridManager:
                 shot_id = shots[0]["id"]
                 # Actualizar shot existente si es necesario
                 self.update_shot_status_if_needed(shot_id, shot_config)
+
+                # NO subir thumbnail a shots existentes para evitar crashes
+                debug_print(
+                    f"Shot existente encontrado: {shot_code}, saltando subida de thumbnail"
+                )
+
                 tasks = self.find_tasks_for_shot(shot_id, shot_config)
                 return shots[0], tasks
             else:
                 debug_print("No se encontro el shot. Creando shot...")
-                created_shot = self.create_shot(project_id, shot_code, shot_config)
+                created_shot = self.create_shot(
+                    project_id, shot_code, shot_config, thumbnail_path
+                )
                 if created_shot:
                     tasks = self.find_tasks_for_shot(created_shot["id"], shot_config)
                     return created_shot, tasks
@@ -775,7 +819,7 @@ class ShotGridManager:
         except Exception as e:
             debug_print(f"Error actualizando task description: {e}")
 
-    def create_shot(self, project_id, shot_code, shot_config):
+    def create_shot(self, project_id, shot_code, shot_config, thumbnail_path=None):
         """Crea un shot en ShotGrid con los parametros configurados."""
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
@@ -833,6 +877,20 @@ class ShotGridManager:
             debug_print(
                 f"Shot creado exitosamente: {new_shot['code']} (ID: {new_shot['id']})"
             )
+
+            # Subir thumbnail si se proporciono
+            if thumbnail_path:
+                debug_print(f"Subiendo thumbnail para shot: {shot_code}")
+                upload_success = self.upload_thumbnail(
+                    "Shot", new_shot["id"], thumbnail_path
+                )
+                if upload_success:
+                    debug_print(
+                        f"✅ Thumbnail subido exitosamente para shot: {shot_code}"
+                    )
+                else:
+                    debug_print(f"❌ Error subiendo thumbnail para shot: {shot_code}")
+
             return new_shot
         except Exception as e:
             debug_print(f"ERROR al crear el shot: {e}")
@@ -885,7 +943,7 @@ class HieroOperations:
             debug_print("No se encontro una secuencia activa en Hiero.")
             return []
 
-    def process_selected_clips(self, shot_config):
+    def process_selected_clips(self, shot_config, thumbnail_path=None):
         """Procesa los clips seleccionados en el timeline de Hiero."""
         clips_info = self.get_selected_clips_info()
         if not clips_info:
@@ -894,7 +952,10 @@ class HieroOperations:
         results = []
         for clip_info in clips_info:
             shot, tasks = self.sg_manager.find_shot_and_tasks(
-                clip_info["project_name"], clip_info["shot_code"], shot_config
+                clip_info["project_name"],
+                clip_info["shot_code"],
+                shot_config,
+                thumbnail_path,
             )
             if shot:
                 debug_print(f"Clip seleccionado: {clip_info['base_name']}")
@@ -938,10 +999,11 @@ class WorkerSignals(QObject):
 
 
 class CreateShotWorker(QRunnable):
-    def __init__(self, status_window, shot_config):
+    def __init__(self, status_window, shot_config, thumbnail_path=None):
         super(CreateShotWorker, self).__init__()
         self.status_window = status_window
         self.shot_config = shot_config
+        self.thumbnail_path = thumbnail_path
         self.signals = WorkerSignals()
 
     @Slot()
@@ -995,7 +1057,10 @@ class CreateShotWorker(QRunnable):
 
                 # Procesar shot
                 shot, tasks = sg_manager.find_shot_and_tasks(
-                    clip_info["project_name"], clip_info["shot_code"], self.shot_config
+                    clip_info["project_name"],
+                    clip_info["shot_code"],
+                    self.shot_config,
+                    self.thumbnail_path,
                 )
 
                 if shot:
@@ -1035,8 +1100,18 @@ def get_flow_credentials_secure():
     return sg_url, sg_login, sg_password
 
 
-# Variable global para mantener referencia a la ventana
+# Variables globales para mantener referencias
 _status_window = None
+
+
+def cleanup_thumbnail_file(thumbnail_path):
+    """Limpia el archivo temporal del thumbnail."""
+    if thumbnail_path and os.path.exists(thumbnail_path):
+        try:
+            os.remove(thumbnail_path)
+            debug_print(f"✅ Archivo temporal eliminado: {thumbnail_path}")
+        except Exception as e:
+            debug_print(f"❌ Error eliminando archivo temporal: {e}")
 
 
 def create_shots_from_selected_clips():
@@ -1084,8 +1159,10 @@ def create_shots_from_selected_clips():
         config_dialog.cleanup_thumbnail()
         return
 
-    # Limpiar thumbnail después de obtener la configuración
-    config_dialog.cleanup_thumbnail()
+        # Obtener la ruta del thumbnail antes de limpiar
+    thumbnail_path = config_dialog.thumbnail_path
+
+    # NO limpiar thumbnail hasta después del worker
 
     # Crear y mostrar ventana de estado
     _status_window = FlowStatusWindow("crear shot")
@@ -1093,7 +1170,7 @@ def create_shots_from_selected_clips():
     _status_window.show_processing_message()  # Mostrar mensaje de procesamiento
 
     # Crear worker para procesamiento en hilo separado
-    worker = CreateShotWorker(_status_window, shot_config)
+    worker = CreateShotWorker(_status_window, shot_config, thumbnail_path)
 
     # Conectar señales
     worker.signals.shot_info_ready.connect(
@@ -1105,10 +1182,16 @@ def create_shots_from_selected_clips():
         lambda message, window=_status_window: window.show_step_message(message)
     )
     worker.signals.finished.connect(
-        lambda success, message, window=_status_window: window.show_success(message)
+        lambda success, message, window=_status_window: (
+            window.show_success(message) if window else None,
+            cleanup_thumbnail_file(thumbnail_path),
+        )
     )
     worker.signals.error.connect(
-        lambda error_msg, window=_status_window: window.show_error(error_msg)
+        lambda error_msg, window=_status_window: (
+            window.show_error(error_msg) if window else None,
+            cleanup_thumbnail_file(thumbnail_path),
+        )
     )
 
     # Ejecutar en hilo separado
