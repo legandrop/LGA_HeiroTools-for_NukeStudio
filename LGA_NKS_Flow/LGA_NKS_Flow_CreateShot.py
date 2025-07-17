@@ -38,8 +38,8 @@ import shotgun_api3
 sys.path.append(str(Path(__file__).parent))
 from SecureConfig_Reader import get_flow_credentials
 
-
-DEBUG = True
+# IMPORTANTE!!!! NO ACTIVAR DEBUG PORQUE CRASHEA HIERO!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+DEBUG = False
 debug_messages = []
 
 
