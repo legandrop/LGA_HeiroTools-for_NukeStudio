@@ -647,7 +647,7 @@ class CreateShotWorker(QRunnable):
 
             # Obtener credenciales de Flow DENTRO del worker
             self.signals.step_update.emit("Obteniendo credenciales...")
-            sg_url, sg_login, sg_password = get_flow_credentials()
+            sg_url, sg_login, sg_password = get_flow_credentials_secure()
             if not all([sg_url, sg_login, sg_password]):
                 self.signals.error.emit(
                     "No se pudieron obtener las credenciales de Flow desde SecureConfig."
@@ -718,9 +718,17 @@ class CreateShotWorker(QRunnable):
             debug_print(f"Error en CreateShotWorker: {e}")
             self.signals.error.emit(f"Error: {str(e)}")
 
-        finally:
-            # Imprimir todos los mensajes de debug al final
-            print_debug_messages()
+
+def get_flow_credentials_secure():
+    sg_url, sg_login, sg_password = get_flow_credentials()
+    if not sg_url or not sg_login or not sg_password:
+        debug_print(
+            "No se pudieron obtener las credenciales de Flow desde SecureConfig."
+        )
+        return None, None, None
+
+    # Para Flow, usamos login directo en lugar de API key
+    return sg_url, sg_login, sg_password
 
 
 # Variable global para mantener referencia a la ventana
