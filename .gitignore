@@ -10,3 +10,4 @@ z_*.py
 .DS_Store
 Thumbs.db
 ReviewPic_Cache/
+ShotThumbs_Cache/
