@@ -79,13 +79,6 @@ class AssigneePanel(QWidget):
         # Definir los botones fijos y sus colores/estilos
         self.fixed_buttons = [
             (
-                "Reveal in Flow",
-                self.show_in_flow_for_selected_clip,
-                "#1f1f1f",
-                "Shift+F",
-                "Shift+F",
-            ),
-            (
                 "Get Assignees",
                 self.get_assignees_for_selected_clip,
                 "#202233",
@@ -486,35 +479,6 @@ class AssigneePanel(QWidget):
             module.assign_assignee_to_task(base_name, user_name)
         except Exception as e:
             debug_print(f"Error ejecutando script: {e}")
-            QMessageBox.warning(self, "Error al ejecutar", str(e))
-
-    def show_in_flow_for_selected_clip(self):
-        """Llama al script Show in Flow para abrir la task comp en Chrome"""
-        script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Flow", "LGA_NKS_Flow_ShowInFlow.py"
-        )
-        if not os.path.exists(script_path):
-            QMessageBox.warning(
-                self,
-                "Script no encontrado",
-                f"No se encontró el script en la ruta: {script_path}",
-            )
-            return
-        try:
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_Flow_ShowInFlow", script_path
-            )
-            if spec is None or spec.loader is None:
-                raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_Flow_ShowInFlow.py"
-                )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            # Llamar a la función principal
-            module.show_in_flow_from_selected_clip()
-        except Exception as e:
             QMessageBox.warning(self, "Error al ejecutar", str(e))
 
     def create_wasabi_policy_for_user(self, wasabi_user):
