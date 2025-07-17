@@ -64,11 +64,11 @@ def get_active_sequence_name():
             debug_print(f"Secuencia activa encontrada: {sequence_name}")
             return sequence_name
         else:
-            debug_print("No se encontro una secuencia activa")
-            return "103"  # Fallback al valor por defecto
+            debug_print("ERROR: No se encontro una secuencia activa")
+            return None
     except Exception as e:
-        debug_print(f"Error obteniendo nombre de secuencia: {e}")
-        return "103"  # Fallback al valor por defecto
+        debug_print(f"ERROR obteniendo nombre de secuencia: {e}")
+        return None
 
 
 # Clase de ventana de configuracion para shots
@@ -81,7 +81,7 @@ class ShotConfigDialog(QDialog):
         self.setMinimumHeight(400)
 
         self.clips_info = clips_info
-        self.sequence_name = sequence_name or "103"
+        self.sequence_name = sequence_name
         self.shot_config = None
 
         # Layout principal
@@ -518,7 +518,7 @@ class ShotGridManager:
             return None
 
         # Parametros predefinidos
-        sequence_name = shot_config.get("sequence_name", "103")
+        sequence_name = shot_config.get("sequence_name")
         task_template_name = "Template_comp"
 
         debug_print(f"Creando shot '{shot_code}' con configuracion personalizada...")
@@ -800,6 +800,13 @@ def create_shots_from_selected_clips():
 
     # Obtener nombre de la secuencia activa
     sequence_name = get_active_sequence_name()
+    if not sequence_name:
+        QMessageBox.warning(
+            None,
+            "Error",
+            "No se pudo obtener el nombre de la secuencia activa en Hiero.",
+        )
+        return
 
     # Mostrar dialogo de configuracion
     config_dialog = ShotConfigDialog(clips_info, sequence_name)
