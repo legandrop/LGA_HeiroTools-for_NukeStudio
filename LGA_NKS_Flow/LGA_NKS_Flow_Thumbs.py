@@ -129,6 +129,41 @@ def get_shot_name_from_selected_clip():
     return sequence_name
 
 
+def force_viewer_refresh():
+    """
+    Fuerza el refresh del viewer usando los métodos disponibles en Hiero.
+    """
+    try:
+        viewer = hiero.ui.currentViewer()
+        if viewer:
+            # Método 1: flushCache del viewer específico
+            viewer.flushCache()
+            debug_print("viewer.flushCache() aplicado")
+
+            # Método 2: flush de todos los viewers
+            hiero.ui.flushAllViewersCache()
+            debug_print("hiero.ui.flushAllViewersCache() aplicado")
+
+            # Método 3: procesar eventos pendientes de Qt
+            from PySide2.QtWidgets import QApplication
+
+            QApplication.processEvents()
+            debug_print("QApplication.processEvents() ejecutado")
+
+            # Método 4: forzar una actualización moviendo el tiempo y regresando
+            current_time = viewer.time()
+            if current_time > 0:
+                viewer.setTime(current_time - 1)
+                QApplication.processEvents()
+                viewer.setTime(current_time)
+                debug_print("Actualización forzada moviendo tiempo")
+
+        return True
+    except Exception as e:
+        debug_print(f"Error en force_viewer_refresh: {e}")
+        return False
+
+
 def manage_burnin_track():
     """
     Busca el track llamado BurnIn y lo deshabilita si está habilitado.
@@ -150,12 +185,13 @@ def manage_burnin_track():
                     f"Estado original: {'Habilitado' if was_enabled else 'Deshabilitado'}"
                 )
 
-                # Si está habilitado, deshabilitarlo usando el método toggle
+                # Si está habilitado, deshabilitarlo
                 if was_enabled:
                     track.setEnabled(False)
                     debug_print("Track BurnIn deshabilitado para la captura.")
-                    # Forzar actualización del viewer
-                    hiero.ui.currentViewer().update()
+
+                    # Forzar múltiples actualizaciones del viewer
+                    force_viewer_refresh()
                 else:
                     debug_print("Track BurnIn ya estaba deshabilitado.")
 
@@ -171,7 +207,7 @@ def manage_burnin_track():
 
 def restore_burnin_track(track_found, was_enabled):
     """
-    Restaura el track BurnIn a su estado original usando el método toggle.
+    Restaura el track BurnIn a su estado original usando múltiples métodos de refresh.
     """
     if not track_found:
         debug_print("No hay track BurnIn que restaurar.")
@@ -191,8 +227,9 @@ def restore_burnin_track(track_found, was_enabled):
                     debug_print(
                         f"Track 'BurnIn' restaurado a habilitado en índice {index}"
                     )
-                    # Forzar actualización del viewer
-                    hiero.ui.currentViewer().update()
+
+                    # Forzar múltiples actualizaciones del viewer
+                    force_viewer_refresh()
                 else:
                     debug_print(
                         f"Track 'BurnIn' mantenido deshabilitado en índice {index}"
