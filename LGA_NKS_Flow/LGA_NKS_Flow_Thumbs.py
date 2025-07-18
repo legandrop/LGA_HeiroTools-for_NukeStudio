@@ -1,10 +1,10 @@
 """
 ______________________________________________________
 
-  LGA_NKS_Flow_Thumbs v0.3 - Lega
+  LGA_NKS_Flow_Thumbs v0.6 - Lega
   Crea un snapshot del viewer actual con zoom to fill y lo guarda en N:/(proyecto)/Thumbs
   organizando por nombre de proyecto extraido del archivo
-  Maneja el track BurnIn temporalmente para la captura - SIN RESTAURAR
+  Maneja el track BurnIn temporalmente para la captura y lo restaura al final
 ______________________________________________________
 
 """
@@ -17,7 +17,7 @@ import time
 from PySide2.QtWidgets import QApplication
 from PySide2.QtCore import QRect, QTimer
 
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(*message):
@@ -162,8 +162,7 @@ def force_viewer_refresh_conservative():
 def disable_burnin_track_simple():
     """
     Busca el track llamado BurnIn y lo deshabilita de forma simple.
-    NO lo restaura después.
-    Retorna True si se encontró y deshabilitó el track.
+    Retorna (track_found, was_enabled) para poder restaurarlo después.
     """
     debug_print("🔍 Buscando track BurnIn para deshabilitar...")
 
@@ -171,7 +170,7 @@ def disable_burnin_track_simple():
         seq = hiero.ui.activeSequence()
         if not seq:
             debug_print("❌ No hay una secuencia activa.")
-            return False
+            return False, False
 
         for index, track in enumerate(seq.videoTracks()):
             if track.name() == "BurnIn":
@@ -184,23 +183,63 @@ def disable_burnin_track_simple():
                 if was_enabled:
                     debug_print("🔄 Deshabilitando track BurnIn...")
                     track.setEnabled(False)
-                    debug_print("✅ Track BurnIn deshabilitado PERMANENTEMENTE")
+                    debug_print("✅ Track BurnIn deshabilitado temporalmente")
 
                     # Solo un refresh básico, nada agresivo
                     QApplication.processEvents()
                     debug_print("✅ Procesamiento básico de eventos Qt")
 
-                    return True
+                    return True, True  # track found, was enabled
                 else:
                     debug_print("ℹ️ Track BurnIn ya estaba deshabilitado")
-                    return True
+                    return True, False  # track found, was not enabled
 
         debug_print("⚠️ No se encontró un track llamado 'BurnIn'")
-        return False
+        return False, False
 
     except Exception as e:
         debug_print(f"❌ Error durante la operación de deshabilitar BurnIn: {e}")
-        return False
+        return False, False
+
+
+def restore_burnin_track_simple(track_found, was_enabled):
+    """
+    Restaura el track BurnIn a su estado original si era necesario.
+    """
+    if not track_found:
+        debug_print("ℹ️ No hay track BurnIn que restaurar")
+        return
+
+    if not was_enabled:
+        debug_print("ℹ️ Track BurnIn originalmente estaba deshabilitado, no se restaura")
+        return
+
+    debug_print("🔄 Restaurando track BurnIn...")
+
+    try:
+        seq = hiero.ui.activeSequence()
+        if not seq:
+            debug_print("❌ No hay una secuencia activa")
+            return
+
+        for index, track in enumerate(seq.videoTracks()):
+            if track.name() == "BurnIn":
+                track.setEnabled(True)
+                debug_print(
+                    f"✅ Track 'BurnIn' restaurado a habilitado en índice {index}"
+                )
+
+                # Solo un procesamiento básico de eventos
+                QApplication.processEvents()
+                debug_print(
+                    "✅ Procesamiento básico de eventos Qt después de restaurar"
+                )
+                break
+        else:
+            debug_print("⚠️ No se encontró un track llamado 'BurnIn' para restaurar")
+
+    except Exception as e:
+        debug_print(f"❌ Error durante la restauración del track BurnIn: {e}")
 
 
 def zoom_to_fill_simple():
@@ -302,13 +341,13 @@ def main():
         print(f"❌ No se pudo crear el directorio {thumbs_dir}: {e}")
         return
 
-    # PASO 1: Deshabilitar track BurnIn PERMANENTEMENTE
+    # PASO 1: Deshabilitar track BurnIn temporalmente
     debug_print("📋 PASO 1: Deshabilitando track BurnIn...")
-    burnin_disabled = disable_burnin_track_simple()
-    if burnin_disabled:
-        debug_print("✅ Track BurnIn deshabilitado correctamente")
+    track_found, was_enabled = disable_burnin_track_simple()
+    if track_found:
+        debug_print("✅ Track BurnIn manejado correctamente")
     else:
-        debug_print("ℹ️ No se encontró track BurnIn o ya estaba deshabilitado")
+        debug_print("ℹ️ No se encontró track BurnIn")
 
     try:
         # PASO 2: Aplicar zoom to fill con actualización del viewer
@@ -398,8 +437,9 @@ def main():
         debug_print(f"❌ Error completo: {e}")
 
     finally:
-        # IMPORTANTE: NO restaurar el estado del track BurnIn
-        debug_print("🚫 Track BurnIn NO será restaurado - permanece deshabilitado")
+        # PASO 8: Restaurar el estado del track BurnIn
+        debug_print("🔄 PASO 8: Restaurando track BurnIn...")
+        restore_burnin_track_simple(track_found, was_enabled)
         debug_print("🏁 Script completado")
 
 

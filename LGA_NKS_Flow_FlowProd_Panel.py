@@ -51,6 +51,13 @@ class FlowProdPanel(QWidget):
                 "Shift+F",
             ),
             (
+                "Thumbnail",
+                self.create_thumbnail_for_selected_clip,
+                "#3a2a4d",
+                "Shift+T",
+                "Shift+T",
+            ),
+            (
                 "Create Shot",
                 self.create_shot_for_selected_clip,
                 "#2a4d3a",
@@ -161,6 +168,33 @@ class FlowProdPanel(QWidget):
             spec.loader.exec_module(module)
             # Llamar a la función principal
             module.show_in_flow_from_selected_clip()
+        except Exception as e:
+            QMessageBox.warning(self, "Error al ejecutar", str(e))
+
+    def create_thumbnail_for_selected_clip(self):
+        """Llama al script Thumbnail para crear un thumbnail del clip seleccionado"""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Flow", "LGA_NKS_Flow_Thumbs.py"
+        )
+        if not os.path.exists(script_path):
+            QMessageBox.warning(
+                self,
+                "Script no encontrado",
+                f"No se encontró el script en la ruta: {script_path}",
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Flow_Thumbs", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError("No se pudo cargar el módulo LGA_NKS_Flow_Thumbs.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Llamar a la función principal
+            module.main()
         except Exception as e:
             QMessageBox.warning(self, "Error al ejecutar", str(e))
 
