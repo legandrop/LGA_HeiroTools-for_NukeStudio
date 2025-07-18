@@ -1,10 +1,10 @@
 """
 ______________________________________________________
 
-  LGA_NKS_Flow_Thumbs v0.2 - Lega
+  LGA_NKS_Flow_Thumbs v0.3 - Lega
   Crea un snapshot del viewer actual con zoom to fill y lo guarda en N:/(proyecto)/Thumbs
   organizando por nombre de proyecto extraido del archivo
-  Maneja el track BurnIn temporalmente para la captura
+  Maneja el track BurnIn temporalmente para la captura - SIN RESTAURAR
 ______________________________________________________
 
 """
@@ -15,7 +15,7 @@ import os
 import re
 import time
 from PySide2.QtWidgets import QApplication
-from PySide2.QtCore import QRect
+from PySide2.QtCore import QRect, QTimer
 
 DEBUG = True
 
@@ -129,121 +129,84 @@ def get_shot_name_from_selected_clip():
     return sequence_name
 
 
-def force_viewer_refresh():
+def force_viewer_refresh_conservative():
     """
-    Fuerza el refresh del viewer usando los métodos disponibles en Hiero.
+    Fuerza el refresh del viewer usando métodos conservadores que no rompan el player.
     """
+    debug_print("🔄 Iniciando refresh conservador del viewer...")
+
     try:
         viewer = hiero.ui.currentViewer()
-        if viewer:
-            # Método 1: flushCache del viewer específico
-            viewer.flushCache()
-            debug_print("viewer.flushCache() aplicado")
+        if not viewer:
+            debug_print("❌ No hay viewer activo")
+            return False
 
-            # Método 2: flush de todos los viewers
-            hiero.ui.flushAllViewersCache()
-            debug_print("hiero.ui.flushAllViewersCache() aplicado")
+        # Método 1: Solo flush cache básico
+        viewer.flushCache()
+        debug_print("✅ viewer.flushCache() aplicado")
 
-            # Método 3: procesar eventos pendientes de Qt
-            from PySide2.QtWidgets import QApplication
+        # Método 2: Procesar eventos Qt una sola vez
+        QApplication.processEvents()
+        debug_print("✅ QApplication.processEvents() ejecutado")
 
-            QApplication.processEvents()
-            debug_print("QApplication.processEvents() ejecutado")
-
-            # Método 4: forzar una actualización moviendo el tiempo y regresando
-            current_time = viewer.time()
-            if current_time > 0:
-                viewer.setTime(current_time - 1)
-                QApplication.processEvents()
-                viewer.setTime(current_time)
-                debug_print("Actualización forzada moviendo tiempo")
+        # NO usar hiero.ui.flushAllViewersCache() - puede ser demasiado agresivo
+        # NO mover el tiempo del viewer - puede causar problemas
+        # NO usar QTimer.singleShot - puede causar conflictos
 
         return True
     except Exception as e:
-        debug_print(f"Error en force_viewer_refresh: {e}")
+        debug_print(f"❌ Error en force_viewer_refresh_conservative: {e}")
         return False
 
 
-def manage_burnin_track():
+def disable_burnin_track_simple():
     """
-    Busca el track llamado BurnIn y lo deshabilita si está habilitado.
-    Retorna (track_found, was_enabled) donde:
-    - track_found: True si se encontró el track BurnIn
-    - was_enabled: True si estaba habilitado antes de deshabilitarlo
+    Busca el track llamado BurnIn y lo deshabilita de forma simple.
+    NO lo restaura después.
+    Retorna True si se encontró y deshabilitó el track.
     """
+    debug_print("🔍 Buscando track BurnIn para deshabilitar...")
+
     try:
         seq = hiero.ui.activeSequence()
         if not seq:
-            debug_print("No hay una secuencia activa.")
-            return False, False
+            debug_print("❌ No hay una secuencia activa.")
+            return False
 
         for index, track in enumerate(seq.videoTracks()):
             if track.name() == "BurnIn":
                 was_enabled = track.isEnabled()
-                debug_print(f"Track 'BurnIn' encontrado en índice {index}")
+                debug_print(f"✅ Track 'BurnIn' encontrado en índice {index}")
                 debug_print(
                     f"Estado original: {'Habilitado' if was_enabled else 'Deshabilitado'}"
                 )
 
-                # Si está habilitado, deshabilitarlo
                 if was_enabled:
+                    debug_print("🔄 Deshabilitando track BurnIn...")
                     track.setEnabled(False)
-                    debug_print("Track BurnIn deshabilitado para la captura.")
+                    debug_print("✅ Track BurnIn deshabilitado PERMANENTEMENTE")
 
-                    # Forzar múltiples actualizaciones del viewer
-                    force_viewer_refresh()
+                    # Solo un refresh básico, nada agresivo
+                    QApplication.processEvents()
+                    debug_print("✅ Procesamiento básico de eventos Qt")
+
+                    return True
                 else:
-                    debug_print("Track BurnIn ya estaba deshabilitado.")
+                    debug_print("ℹ️ Track BurnIn ya estaba deshabilitado")
+                    return True
 
-                return True, was_enabled
-        else:
-            debug_print("No se encontró un track llamado 'BurnIn'.")
-            return False, False
+        debug_print("⚠️ No se encontró un track llamado 'BurnIn'")
+        return False
 
     except Exception as e:
-        debug_print(f"Error durante la operación: {e}")
-        return False, False
+        debug_print(f"❌ Error durante la operación de deshabilitar BurnIn: {e}")
+        return False
 
 
-def restore_burnin_track(track_found, was_enabled):
-    """
-    Restaura el track BurnIn a su estado original usando múltiples métodos de refresh.
-    """
-    if not track_found:
-        debug_print("No hay track BurnIn que restaurar.")
-        return
+def zoom_to_fill_simple():
+    """Aplica zoom to fill al viewer actual de forma simple"""
+    debug_print("🔍 Aplicando zoom to fill...")
 
-    try:
-        seq = hiero.ui.activeSequence()
-        if not seq:
-            debug_print("No hay una secuencia activa.")
-            return
-
-        for index, track in enumerate(seq.videoTracks()):
-            if track.name() == "BurnIn":
-                # Solo restaurar si originalmente estaba habilitado
-                if was_enabled:
-                    track.setEnabled(True)
-                    debug_print(
-                        f"Track 'BurnIn' restaurado a habilitado en índice {index}"
-                    )
-
-                    # Forzar múltiples actualizaciones del viewer
-                    force_viewer_refresh()
-                else:
-                    debug_print(
-                        f"Track 'BurnIn' mantenido deshabilitado en índice {index}"
-                    )
-                break
-        else:
-            debug_print("No se encontró un track llamado 'BurnIn' para restaurar.")
-
-    except Exception as e:
-        debug_print(f"Error durante la operación: {e}")
-
-
-def zoom_to_fill_in_viewer():
-    """Aplica zoom to fill al viewer actual"""
     viewer = hiero.ui.currentViewer()
     if not viewer:
         debug_print("❌ No hay viewer activo")
@@ -257,6 +220,11 @@ def zoom_to_fill_in_viewer():
 
         player.zoomToFill()
         debug_print("✅ Zoom to Fill aplicado con éxito")
+
+        # Solo un procesamiento básico de eventos
+        QApplication.processEvents()
+        debug_print("✅ Procesamiento básico de eventos Qt después del zoom")
+
         return True
     except Exception as e:
         debug_print(f"❌ Error aplicando zoomToFill: {e}")
@@ -314,6 +282,8 @@ def get_next_available_filename(base_path, shot_name):
 
 
 def main():
+    debug_print("🚀 Iniciando LGA_NKS_Flow_Thumbs v0.3...")
+
     # Obtener el nombre del proyecto
     project_name = get_project_name_from_clip()
     if not project_name:
@@ -322,35 +292,37 @@ def main():
 
     # Crear la ruta semi-hardcodeada
     thumbs_dir = f"N:/{project_name}/Thumbs"
-    debug_print(f"Carpeta de destino: {thumbs_dir}")
+    debug_print(f"📁 Carpeta de destino: {thumbs_dir}")
 
     # Crear directorio si no existe
     try:
         os.makedirs(thumbs_dir, exist_ok=True)
+        debug_print(f"✅ Directorio verificado/creado: {thumbs_dir}")
     except Exception as e:
         print(f"❌ No se pudo crear el directorio {thumbs_dir}: {e}")
         return
 
-    # Manejar el track BurnIn
-    track_found, was_enabled = manage_burnin_track()
+    # PASO 1: Deshabilitar track BurnIn PERMANENTEMENTE
+    debug_print("📋 PASO 1: Deshabilitando track BurnIn...")
+    burnin_disabled = disable_burnin_track_simple()
+    if burnin_disabled:
+        debug_print("✅ Track BurnIn deshabilitado correctamente")
+    else:
+        debug_print("ℹ️ No se encontró track BurnIn o ya estaba deshabilitado")
 
     try:
-        # Esperar para que se actualice el viewer después de deshabilitar BurnIn
-        if track_found and was_enabled:
-            time.sleep(1.0)  # Aumentar el tiempo de espera
-            debug_print(
-                "Esperando para que se actualice el viewer después de deshabilitar BurnIn"
-            )
-
-        # Aplicar zoom to fill
-        if not zoom_to_fill_in_viewer():
+        # PASO 2: Aplicar zoom to fill con actualización del viewer
+        debug_print("🔍 PASO 2: Aplicando zoom to fill...")
+        if not zoom_to_fill_simple():
             print("❌ No se pudo aplicar zoom to fill")
             return
 
-        # Esperar un momento adicional para que se actualice el viewer
-        time.sleep(0.5)
+        # PASO 3: Espera mínima sin refresh agresivo
+        debug_print("⏱️ PASO 3: Espera mínima antes de captura...")
+        time.sleep(0.5)  # Solo una espera, sin refresh adicional
 
-        # Obtener el shot name
+        # PASO 4: Obtener información del shot
+        debug_print("📸 PASO 4: Obteniendo información del shot...")
         shot_name = get_shot_name_from_selected_clip()
         if not shot_name:
             print("❌ No se pudo obtener el nombre del shot")
@@ -360,9 +332,10 @@ def main():
         shot_name = re.sub(
             r'[<>:"/\\|?*]', "_", shot_name
         )  # Remover caracteres inválidos
-        debug_print(f"Shot name limpio: {shot_name}")
+        debug_print(f"🎬 Shot name limpio: {shot_name}")
 
-        # Obtener imagen del viewer
+        # PASO 5: Capturar imagen del viewer
+        debug_print("📷 PASO 5: Capturando imagen del viewer...")
         viewer = hiero.ui.currentViewer()
         if not viewer:
             print("❌ No hay viewer activo")
@@ -373,10 +346,13 @@ def main():
             print("❌ viewer.image() devolvió None o imagen nula")
             return
 
-        # Obtener la secuencia activa y su relacion de aspecto
+        debug_print(f"✅ Imagen capturada: {qimage.width()} × {qimage.height()}")
+
+        # PASO 6: Obtener relación de aspecto y crop
+        debug_print("✂️ PASO 6: Aplicando crop de aspecto...")
         sequence = hiero.ui.activeSequence()
         if sequence is None:
-            debug_print("No hay ninguna secuencia activa, usando 16:9 por defecto.")
+            debug_print("⚠️ No hay ninguna secuencia activa, usando 16:9 por defecto")
             target_aspect = 16 / 9
         else:
             format = sequence.format()
@@ -384,19 +360,20 @@ def main():
             height = format.height()
             target_aspect = width / height
             debug_print(
-                f"Relación de aspecto de la secuencia: {width} x {height} ({target_aspect:.2f})"
+                f"📐 Relación de aspecto de la secuencia: {width} x {height} ({target_aspect:.2f})"
             )
 
         # Aplicar crop
         qimage_cropped = crop_to_aspect_ratio(qimage, target_aspect)
         debug_print(
-            f"Snapshot size (cropped): {qimage_cropped.width()} × {qimage_cropped.height()}"
+            f"✅ Imagen cropped: {qimage_cropped.width()} × {qimage_cropped.height()}"
         )
 
-        # Generar nombre de archivo con verificacion de duplicados
+        # PASO 7: Guardar archivo
+        debug_print("💾 PASO 7: Guardando thumbnail...")
         try:
             full_path, filename = get_next_available_filename(thumbs_dir, shot_name)
-            debug_print(f"Archivo de destino: {filename}")
+            debug_print(f"📄 Archivo de destino: {filename}")
 
             # Guardar imagen
             ok = qimage_cropped.save(full_path, "JPEG")
@@ -405,19 +382,25 @@ def main():
                 print(
                     f"✅ Shot Thumbnail guardado en {project_name}/Thumbs: {filename}"
                 )
-                debug_print(f"Ruta completa: {full_path}")
+                debug_print(f"📍 Ruta completa: {full_path}")
             else:
-                print("❌ No se pudo crear el archivo.")
-                debug_print(f"save() result: {ok}, exists: {os.path.exists(full_path)}")
+                print("❌ No se pudo crear el archivo")
+                debug_print(
+                    f"❌ save() result: {ok}, exists: {os.path.exists(full_path)}"
+                )
 
         except Exception as e:
             print(f"❌ Error al guardar: {e}")
-            debug_print(f"Error completo: {e}")
+            debug_print(f"❌ Error completo: {e}")
+
+    except Exception as e:
+        print(f"❌ Error durante la operación principal: {e}")
+        debug_print(f"❌ Error completo: {e}")
 
     finally:
-        # Restaurar el estado del track BurnIn
-        restore_burnin_track(track_found, was_enabled)
-        debug_print("Track BurnIn restaurado a su estado original")
+        # IMPORTANTE: NO restaurar el estado del track BurnIn
+        debug_print("🚫 Track BurnIn NO será restaurado - permanece deshabilitado")
+        debug_print("🏁 Script completado")
 
 
 # --- Main Execution ---
