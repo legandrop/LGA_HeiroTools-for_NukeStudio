@@ -54,8 +54,6 @@ class FlowProdPanel(QWidget):
                 "Thumbnail",
                 self.create_thumbnail_for_selected_clip,
                 "#3a2a4d",
-                "Shift+T",
-                "Shift+T",
             ),
             (
                 "Create Shot",

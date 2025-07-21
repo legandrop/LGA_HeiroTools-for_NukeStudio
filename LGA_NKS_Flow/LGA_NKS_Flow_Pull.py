@@ -1,6 +1,6 @@
 """
 ____________________________________________________________________________
-  LGA_NKS_Flow_Pull v3.22 - Lega Pugliese
+  LGA_NKS_Flow_Pull v3.23 | Lega Pugliese
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
@@ -338,10 +338,23 @@ class HieroOperations:
         }
 
     def parse_exr_name(self, file_name):
-        """Extrae el nombre base del archivo EXR y el numero de version con prefijo."""
+        """Extrae el nombre base del archivo y el numero de version con prefijo."""
+        debug_print(f"Parseando nombre de archivo: {file_name}")
+
+        # Remover extension y secuencia numerica para archivos EXR
         base_name = re.sub(r"_%04d\.exr$", "", file_name)
+        debug_print(f"Despues de remover secuencia EXR: {base_name}")
+
+        # Si no cambio, puede ser un archivo de video (mxf, mov, etc)
+        if base_name == file_name:
+            # Remover extension para archivos de video
+            base_name = re.sub(r"\.[^.]+$", "", file_name)
+            debug_print(f"Despues de remover extension de video: {base_name}")
+
         version_match = re.search(r"(_v\d+)", base_name)
         version_str = version_match.group(1) if version_match else "_vUnknown"
+        debug_print(f"Version string extraida: {version_str}")
+
         return base_name, version_str
 
     def get_current_clip_color(self, item):
@@ -536,33 +549,72 @@ class HieroOperations:
                         if clip.source().mediaSource().fileinfos()
                         else None
                     )
-                    if (
-                        not file_path
-                        or "_comp_" not in os.path.basename(file_path).lower()
-                    ):
+                    debug_print(f"File path obtenido: {file_path}")
+                    if not file_path:
+                        debug_print(
+                            f"No se pudo obtener file_path para el clip: {clip.name()}"
+                        )
+                        continue
+
+                    file_basename = os.path.basename(file_path).lower()
+                    debug_print(f"Basename del archivo: {file_basename}")
+
+                    if "_comp_" not in file_basename:
+                        debug_print(
+                            f"El archivo no contiene '_comp_' en el nombre: {file_basename}"
+                        )
                         continue
                     exr_name = os.path.basename(file_path)
+                    debug_print(f"Nombre del archivo extraido: {exr_name}")
+
                     base_name, version_str = self.parse_exr_name(exr_name)
+                    debug_print(
+                        f"Base name: {base_name}, Version string: {version_str}"
+                    )
+
                     version_number = extract_version_number(
                         version_str
                     )  # Use extracted version number
                     debug_print(f"Version extraida: {version_number} de {version_str}")
-                    project_name = base_name.split("_")[0]
-                    parts = base_name.split("_")
-                    shot_code = "_".join(parts[:5])
-                    version_index = parts.index(version_str[1:])
-                    task_name = parts[version_index - 1].lower()
+
+                    try:
+                        project_name = base_name.split("_")[0]
+                        debug_print(f"Project name: {project_name}")
+
+                        parts = base_name.split("_")
+                        debug_print(f"Parts del nombre: {parts}")
+
+                        shot_code = "_".join(parts[:5])
+                        debug_print(f"Shot code: {shot_code}")
+
+                        version_index = parts.index(version_str[1:])
+                        debug_print(f"Version index: {version_index}")
+
+                        task_name = parts[version_index - 1].lower()
+                        debug_print(f"Task name: {task_name}")
+                    except Exception as e:
+                        debug_print(f"Error procesando nombre del archivo: {e}")
+                        debug_print(
+                            f"base_name: {base_name}, version_str: {version_str}"
+                        )
+                        continue
+
                     # Obtener la ruta base del shot (subimos un nivel adicional)
                     shot_base_path = os.path.dirname(
                         os.path.dirname(os.path.dirname(os.path.dirname(file_path)))
                     )
                     debug_print(f"Ruta base del shot: {shot_base_path}")
                     # Obtener el estado y el tag correspondiente
+                    debug_print(
+                        f"Buscando shot en SG: project='{project_name}', shot='{shot_code}'"
+                    )
                     shot = sg_manager.find_shot(project_name, shot_code)
                     if shot:
                         debug_print(f"Shot encontrado: {shot_code}")
+                        debug_print(f"Buscando task '{task_name}' en el shot")
                         task = sg_manager.find_task(shot, task_name)
                         if task:
+                            debug_print(f"Task encontrada: {task_name}")
                             task_status_code = task["task_status"]
                             task_status_name, new_color_hex, xyplorer_tag = (
                                 sg_manager.task_status_dict.get(
@@ -659,10 +711,17 @@ class HieroOperations:
                                             assignee,
                                         )
                         else:
-                            debug_print("No matching tasks found for this clip.")
+                            debug_print(
+                                f"No se encontro task '{task_name}' para el shot '{shot_code}'"
+                            )
+                            debug_print(
+                                f"Tasks disponibles en el shot: {[t['task_type'] for t in shot['tasks']]}"
+                            )
                             pass
                     else:
-                        debug_print(f"No valid data found for {shot_code}.")
+                        debug_print(
+                            f"No se encontro shot '{shot_code}' en el proyecto '{project_name}'"
+                        )
                         pass
                 # Llamar a enable_or_disable_clips al final del proceso
                 self.enable_or_disable_clips(selected_clips)
