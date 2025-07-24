@@ -1,8 +1,9 @@
 # _________________________________________________
 #
-#   LGA_FixRec709Clips_Hiero v1.2
+#   LGA_NKS_CleanColorspaces v1.1
 #   Detecta clips con colorspace "rec709" o "gamma2.2"
 #   y cambia su color transform a "Output - Rec.709"
+#   (ahora busca en todos los clips del proyecto)
 # _________________________________________________
 
 import hiero.core
@@ -22,22 +23,17 @@ def extraer_colorspace_desde_read(clip):
     return None
 
 
-def buscar_y_cambiar_clips_rec709(bin_obj, corregidos):
-    """Recorre recursivamente un bin, detecta clips con colorspace 'rec709' y los corrige."""
-    for item in bin_obj.items():
-        if isinstance(item, hiero.core.Bin):
-            buscar_y_cambiar_clips_rec709(item, corregidos)
-        elif isinstance(item, hiero.core.BinItem):
-            clip = item.activeItem()
-            if isinstance(clip, hiero.core.Clip):
-                colorspace = extraer_colorspace_desde_read(clip)
-                if colorspace and colorspace.lower() in COLORSPACE_INVALIDO:
-                    try:
-                        clip.setSourceMediaColourTransform(COLORSPACE_CORRECTO)
-                        path = clip.mediaSource().firstpath()
-                        corregidos.append((clip.name(), path, colorspace))
-                    except Exception as e:
-                        print(f"⚠️ Error al cambiar el colorspace de {clip.name()}: {e}")
+def buscar_y_cambiar_clips_rec709_en_todos(proyecto, corregidos):
+    """Recorre todos los clips del proyecto y corrige los que tengan colorspace 'rec709' o 'gamma2.2'."""
+    for clip in proyecto.clips():
+        colorspace = extraer_colorspace_desde_read(clip)
+        if colorspace and colorspace.lower() in COLORSPACE_INVALIDO:
+            try:
+                clip.setSourceMediaColourTransform(COLORSPACE_CORRECTO)
+                path = clip.mediaSource().firstpath()
+                corregidos.append((clip.name(), path, colorspace))
+            except Exception as e:
+                print(f"⚠️ Error al cambiar el colorspace de {clip.name()}: {e}")
 
 
 def corregir_clips_con_colorspace_rec709():
@@ -50,7 +46,7 @@ def corregir_clips_con_colorspace_rec709():
 
     for proyecto in proyectos:
         print(f"\n📁 Explorando proyecto: {proyecto.name()}")
-        buscar_y_cambiar_clips_rec709(proyecto.clipsBin(), corregidos)
+        buscar_y_cambiar_clips_rec709_en_todos(proyecto, corregidos)
 
     if corregidos:
         print("\n🔧 Clips corregidos con nuevo colorspace:")
