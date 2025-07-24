@@ -1,7 +1,7 @@
 """
 _____________________________________________________________
 
-  LGA_NKS_Flow_Push v3.60 - Lega Pugliese
+  LGA_NKS_Flow_Push v3.70 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -62,7 +62,7 @@ status_translation = {
 }
 
 # Variable global para activar o desactivar los prints // En esta version el Debug se imprime al final del script
-DEBUG = False
+DEBUG = True
 debug_messages = []
 
 
@@ -638,10 +638,9 @@ class ShotGridManager:
             debug_print(f"Error buscando proyecto: {e}")
             return None, None, None
         if projects:
-            project_id = projects[0]["id"]
-            debug_print(
-                f"Proyecto encontrado: {projects[0]['name']} (ID: {project_id})"
-            )
+            project = projects[0]
+            project_id = project["id"]
+            debug_print(f"Proyecto encontrado: {project['name']} (ID: {project_id})")
             filters = [
                 ["project", "is", {"type": "Project", "id": project_id}],
                 ["code", "is", shot_code],
@@ -651,15 +650,34 @@ class ShotGridManager:
                 shots = self.sg.find("Shot", filters, fields)
             except Exception as e:
                 debug_print(f"Error buscando shot: {e}")
-                return projects[0], None, None
+                return project, None, None
             if shots:
-                shot_id = shots[0]["id"]
-                debug_print(f"Shot encontrado: {shots[0]['code']} (ID: {shot_id})")
-                tasks = self.find_tasks_for_shot(shot_id)
-                return projects[0], shots[0], tasks
+                # Si hay múltiples shots con el mismo nombre, mostrar un diálogo y abortar
+                if len(shots) > 1:
+                    debug_print(
+                        f"Múltiples shots encontrados ({len(shots)}) para el código: {shot_code}"
+                    )
+                    # Mostrar el diálogo en el hilo principal si está disponible
+                    try:
+                        app = QApplication.instance()
+                        if app is not None:
+                            dialog = MultipleShotsDialog(shots, shot_code)
+                            dialog.exec_()
+                    except Exception as e:
+                        debug_print(f"Error mostrando diálogo: {e}")
+                    debug_print(
+                        "Operación abortada debido a múltiples shots con el mismo nombre."
+                    )
+                    return project, None, None
+                else:
+                    shot = shots[0]
+                    shot_id = shot["id"]
+                    debug_print(f"Shot encontrado: {shot['code']} (ID: {shot_id})")
+                    tasks = self.find_tasks_for_shot(shot_id)
+                    return project, shot, tasks
             else:
                 debug_print("No se encontro el Shot con el codigo especificado.")
-                return projects[0], None, None
+                return project, None, None
         else:
             debug_print("No se encontro el proyecto con el nombre especificado.")
             return None, None, None
@@ -1153,6 +1171,44 @@ class MessageBoxManager:
         msg_box.setWindowModality(Qt.NonModal)
         msg_box.show()
         self.message_boxes.append(msg_box)
+
+
+class MultipleShotsDialog(QDialog):
+    """Diálogo para informar sobre múltiples shots encontrados"""
+
+    def __init__(self, shots, shot_code, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Múltiples Shots Encontrados")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+
+        # Mensaje principal
+        msg = QLabel(f"Se encontraron {len(shots)} shots con el nombre '{shot_code}':")
+        msg.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(msg)
+
+        # Lista de shots con sus IDs
+        for shot in shots:
+            shot_info = QLabel(f"• Shot ID: {shot['id']} - {shot['code']}")
+            shot_info.setStyleSheet("margin-left: 20px; margin-bottom: 5px;")
+            layout.addWidget(shot_info)
+
+        # Mensaje de error
+        error_msg = QLabel(
+            "No se puede proceder con la operación cuando existen múltiples shots con el mismo nombre."
+        )
+        error_msg.setStyleSheet(
+            "color: #B95C5C; margin-top: 10px; margin-bottom: 10px;"
+        )
+        layout.addWidget(error_msg)
+
+        # Botón OK
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.accept)
+        layout.addWidget(ok_btn)
+
+        self.adjustSize()
 
 
 def show_version_dialog(base_name, local_version, flow_version):
