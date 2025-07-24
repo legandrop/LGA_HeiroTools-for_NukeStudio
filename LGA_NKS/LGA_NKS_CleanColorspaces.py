@@ -1,13 +1,13 @@
 # _________________________________________________
 #
-#   LGA_FixRec709Clips_Hiero v1.1
-#   Detecta clips con colorspace "rec709" y cambia
-#   su color transform a "Output - Rec.709"
+#   LGA_FixRec709Clips_Hiero v1.2
+#   Detecta clips con colorspace "rec709" o "gamma2.2"
+#   y cambia su color transform a "Output - Rec.709"
 # _________________________________________________
 
 import hiero.core
 
-COLORSPACE_INVALIDO = "rec709"
+COLORSPACE_INVALIDO = ("rec709", "gamma2.2")
 COLORSPACE_CORRECTO = "Output - Rec.709"
 
 
@@ -31,7 +31,7 @@ def buscar_y_cambiar_clips_rec709(bin_obj, corregidos):
             clip = item.activeItem()
             if isinstance(clip, hiero.core.Clip):
                 colorspace = extraer_colorspace_desde_read(clip)
-                if colorspace and colorspace.lower() == COLORSPACE_INVALIDO:
+                if colorspace and colorspace.lower() in COLORSPACE_INVALIDO:
                     try:
                         clip.setSourceMediaColourTransform(COLORSPACE_CORRECTO)
                         path = clip.mediaSource().firstpath()
@@ -57,7 +57,7 @@ def corregir_clips_con_colorspace_rec709():
         for nombre, ruta, cs in corregidos:
             print(f" • {nombre} → {cs} ➡ {COLORSPACE_CORRECTO}\n   📍 {ruta}")
     else:
-        print("✅ No se encontraron clips con colorspace 'rec709'.")
+        print("✅ No se encontraron clips con colorspace 'rec709' o 'gamma2.2'.")
 
 
 # Ejecutar
