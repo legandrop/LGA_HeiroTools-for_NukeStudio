@@ -1,6 +1,6 @@
 # _________________________________________________
 #
-#   LGA_NKS_CleanColorspaces v1.1
+#   LGA_NKS_FixColorspaces v1.1
 #   Detecta clips con colorspace "rec709" o "gamma2.2"
 #   y cambia su color transform a "Output - Rec.709"
 #   (ahora busca en todos los clips del proyecto)

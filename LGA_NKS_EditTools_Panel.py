@@ -1,7 +1,7 @@
 """
 _________________________________________
 
-  LGA_EditToolsPanel v2.82 - Lega
+  LGA_EditToolsPanel v2.83 - Lega
   Tools panel for Hiero / Nuke Studio
 _________________________________________
 
@@ -65,6 +65,7 @@ class ReconnectMediaWidget(QWidget):
             ("Clean Project", self.clean_project, "#283548"),
             ("Rec709 | Clip", self.rec709_clip, "#434c41"),
             ("Default | Clip", self.default_clip, "#434c41"),
+            ("Fix Colorspaces", self.fix_colorspaces, "#434c41"),
             ("New Video Track", self.create_new_track, "#263b23"),
             ("Set Shot Name", self.set_shot_name, "#453434"),
             ("Extend &Edit", self.extend_edit_to_playhead, "#453434", "Alt+E", "Alt+E"),
@@ -178,6 +179,31 @@ class ReconnectMediaWidget(QWidget):
                     debug_print("Error changing color transform:", e)
         else:
             debug_print("No active sequence found.")
+
+    ###### Fix Colorspaces
+    def fix_colorspaces(self):
+        """Ejecuta el script LGA_NKS_FixColorspaces.py para corregir colorspaces rec709 y gamma2.2"""
+        debug_print_b("\n>>> Ejecutando Fix Colorspaces script...")
+
+        try:
+            # Obtenemos el proyecto activo y comenzamos un bloque de undo
+            project = get_active_project()
+            if not project:  # Comprobacion de proyecto activo
+                debug_print_b("No active project found for Fix Colorspaces.")
+                return
+
+            with project.beginUndo("Fix Colorspaces"):
+                # Ejecutamos el script dentro del bloque de undo
+                result = self.execute_external_script("LGA_NKS_FixColorspaces.py")
+                if result:
+                    debug_print_b(">>> Fix Colorspaces script completado")
+                else:
+                    debug_print_b(">>> Error al ejecutar Fix Colorspaces script")
+        except Exception as e:
+            debug_print_b(f"Error durante la ejecución de Fix Colorspaces: {e}")
+            import traceback
+
+            debug_print_b(traceback.format_exc())
 
     def create_new_track(self):
         """Ejecuta el script LGA_NKS_CreateNewTrack.py para crear un nuevo track de video"""
