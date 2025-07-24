@@ -298,6 +298,9 @@ class ShotGridManager:
     def get_task_url(self, task_id):
         return f"{self.sg.base_url}/detail/Task/{task_id}"
 
+    def get_shot_url(self, shot_id):
+        return f"{self.sg.base_url}/detail/Shot/{shot_id}"
+
 
 class HieroOperations:
     def __init__(self, shotgrid_manager):
@@ -358,17 +361,33 @@ class HieroOperations:
                         return ("MULTIPLE_SHOTS", tasks)
 
                     if shot:
+                        # Buscar task Comp
+                        comp_task = None
                         for task in tasks:
                             if task["content"] == "Comp":
-                                task_url = self.sg_manager.get_task_url(task["id"])
-                                debug_print(
-                                    f"  - Task: {task['content']} (Status: {task['sg_status_list']}) URL: {task_url}"
-                                )
-                                if use_default_browser:
-                                    webbrowser.open(task_url)
-                                else:
-                                    self.open_url_in_browser(task_url)
-                                return True
+                                comp_task = task
+                                break
+
+                        if comp_task:
+                            # Si hay task Comp, abrir la URL de la task
+                            task_url = self.sg_manager.get_task_url(comp_task["id"])
+                            debug_print(
+                                f"  - Task: {comp_task['content']} (Status: {comp_task['sg_status_list']}) URL: {task_url}"
+                            )
+                            target_url = task_url
+                        else:
+                            # Si no hay task Comp, abrir la URL del shot
+                            shot_url = self.sg_manager.get_shot_url(shot["id"])
+                            debug_print(
+                                f"No hay task Comp. Abriendo URL del shot: {shot_url}"
+                            )
+                            target_url = shot_url
+
+                        if use_default_browser:
+                            webbrowser.open(target_url)
+                        else:
+                            self.open_url_in_browser(target_url)
+                        return True
                     else:
                         debug_print(
                             "No se encontro el shot correspondiente en ShotGrid."
@@ -464,22 +483,35 @@ def show_in_flow_from_selected_clip():
             debug_print(f"Shot seleccionado: {selected_shot['id']}")
 
             # Buscar task Comp y abrir URL
-            for task in selected_tasks:
-                if task["content"] == "Comp":
-                    # Recrear ShotGridManager para obtener la URL
-                    url, login, password = get_credentials_from_config()
-                    if url and login and password:
-                        sg_manager = ShotGridManager(url, login, password)
-                        task_url = sg_manager.get_task_url(task["id"])
-                        debug_print(f"Abriendo URL del shot seleccionado: {task_url}")
+            url, login, password = get_credentials_from_config()
+            if url and login and password:
+                sg_manager = ShotGridManager(url, login, password)
 
-                        # Usar la misma lógica que en el flujo normal
-                        if use_default_browser:
-                            webbrowser.open(task_url)
-                        else:
-                            hiero_ops = HieroOperations(sg_manager)
-                            hiero_ops.open_url_in_browser(task_url)
-                        return
+                # Intentar encontrar task Comp
+                comp_task = None
+                for task in selected_tasks:
+                    if task["content"] == "Comp":
+                        comp_task = task
+                        break
+
+                if comp_task:
+                    # Si hay task Comp, abrir la URL de la task
+                    task_url = sg_manager.get_task_url(comp_task["id"])
+                    debug_print(f"Abriendo URL de la task Comp: {task_url}")
+                    target_url = task_url
+                else:
+                    # Si no hay task Comp, abrir la URL del shot
+                    shot_url = sg_manager.get_shot_url(selected_shot["id"])
+                    debug_print(f"No hay task Comp. Abriendo URL del shot: {shot_url}")
+                    target_url = shot_url
+
+                # Usar la misma lógica que en el flujo normal
+                if use_default_browser:
+                    webbrowser.open(target_url)
+                else:
+                    hiero_ops = HieroOperations(sg_manager)
+                    hiero_ops.open_url_in_browser(target_url)
+                return
         return
 
     # Si es un string, es un mensaje de error
