@@ -29,7 +29,7 @@ from PySide2.QtWidgets import (
 from PySide2.QtCore import Qt
 
 # Variable global para controlar el debug
-DEBUG = True  # Poner en False para desactivar los mensajes de debug
+DEBUG = False  # Poner en False para desactivar los mensajes de debug
 
 
 # Funcion debug_print
