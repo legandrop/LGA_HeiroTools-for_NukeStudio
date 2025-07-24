@@ -1,8 +1,9 @@
 """
 _____________________________________________________________________________________________________
 
-  LGA_NKS_Flow_ShowInFlow v1.0 | Lega Pugliese
+  LGA_NKS_Flow_ShowInFlow v1.2 | Lega Pugliese
   Abre la URL de la task Comp del shot, tomando la informacion del nombre del clip seleccionado
+  Verifica si existe más de un shot con el mismo nombre y te pide que selecciones uno
 _____________________________________________________________________________________________________
 """
 
@@ -17,10 +18,18 @@ import threading
 import subprocess
 import base64  # Importar base64
 import binascii  # Importar binascii para la excepcion
-from PySide2.QtWidgets import QMessageBox
+from PySide2.QtWidgets import (
+    QMessageBox,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+)
+from PySide2.QtCore import Qt
 
 # Variable global para controlar el debug
-DEBUG = False  # Poner en False para desactivar los mensajes de debug
+DEBUG = True  # Poner en False para desactivar los mensajes de debug
 
 
 # Funcion debug_print
@@ -74,6 +83,47 @@ CONFIG_FILE_NAME = "ShowInFlow.dat"  # Cambiar extension a .dat
 CONFIG_URL_KEY = "shotgrid_url"  # Mantener nombres de clave conceptualmente
 CONFIG_LOGIN_KEY = "shotgrid_login"
 CONFIG_PASSWORD_KEY = "shotgrid_password"
+
+
+class ShotSelectionDialog(QDialog):
+    """Dialogo para seleccionar entre multiples shots encontrados"""
+
+    def __init__(self, shots_with_tasks, parent=None):
+        super().__init__(parent)
+        self.result_value = None
+
+        self.setWindowTitle("Seleccion de Shot")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+
+        # Mensaje
+        msg = QLabel(f"Se encontraron {len(shots_with_tasks)} shots. Selecciona uno:")
+        layout.addWidget(msg)
+
+        # Botones para cada shot
+        for i, (shot, tasks) in enumerate(shots_with_tasks):
+            comp_tasks = [t for t in tasks if "Comp" in t["content"]]
+            if comp_tasks:
+                text = (
+                    f"Shot ID: {shot['id']} - Comp: {comp_tasks[0]['sg_status_list']}"
+                )
+            else:
+                text = f"Shot ID: {shot['id']} - Sin Comp"
+
+            btn = QPushButton(text)
+            btn.clicked.connect(lambda checked=False, idx=i: self.select_shot(idx))
+            layout.addWidget(btn)
+
+        # Boton cancelar
+        cancel_btn = QPushButton("Cancelar")
+        cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(cancel_btn)
+
+    def select_shot(self, index):
+        self.result_value = index
+        self.accept()
+
 
 # --- Inicio: Funciones de manejo de configuracion (modificadas para base64) ---
 
@@ -194,28 +244,48 @@ class ShotGridManager:
 
     def find_shot_and_tasks(self, project_name, shot_code):
         debug_print(f"Buscando proyecto: {project_name}, shot: {shot_code}")
+
+        # Buscar proyecto
         projects = self.sg.find(
             "Project", [["name", "is", project_name]], ["id", "name"]
         )
-        if projects:
-            project_id = projects[0]["id"]
-            debug_print(f"Proyecto encontrado: {project_id}")
-            filters = [
-                ["project", "is", {"type": "Project", "id": project_id}],
-                ["code", "is", shot_code],
-            ]
-            fields = ["id", "code", "description"]
-            shots = self.sg.find("Shot", filters, fields)
-            if shots:
-                shot_id = shots[0]["id"]
-                debug_print(f"Shot encontrado: {shot_id}")
-                tasks = self.find_tasks_for_shot(shot_id)
-                return shots[0], tasks
-            else:
-                debug_print("No se encontro el shot.")
-        else:
-            debug_print("No se encontro el proyecto en ShotGrid.")
-        return None, None
+        if not projects:
+            debug_print("No se encontro el proyecto")
+            return None, None
+
+        project_id = projects[0]["id"]
+        debug_print(f"Proyecto encontrado: {project_id}")
+
+        # Buscar shots
+        filters = [
+            ["project", "is", {"type": "Project", "id": project_id}],
+            ["code", "is", shot_code],
+        ]
+        fields = ["id", "code", "description"]
+        shots = self.sg.find("Shot", filters, fields)
+
+        if not shots:
+            debug_print("No se encontro el shot")
+            return None, None
+
+        debug_print(f"Encontrados {len(shots)} shots")
+
+        # Si hay un solo shot, usarlo directamente (sin tiempo extra)
+        if len(shots) == 1:
+            shot = shots[0]
+            debug_print(f"Shot unico encontrado: {shot['id']}")
+            tasks = self.find_tasks_for_shot(shot["id"])
+            return shot, tasks
+
+        # Si hay multiples shots, devolver todos para que se maneje en el hilo principal
+        shots_with_tasks = []
+        for shot in shots:
+            tasks = self.find_tasks_for_shot(shot["id"])
+            shots_with_tasks.append((shot, tasks))
+            debug_print(f"Shot {shot['id']} tiene {len(tasks)} tasks")
+
+        # Devolver estructura especial que indica multiples shots
+        return "MULTIPLE_SHOTS", shots_with_tasks
 
     def find_tasks_for_shot(self, shot_id):
         debug_print(f"Buscando tareas para el shot: {shot_id}")
@@ -281,6 +351,12 @@ class HieroOperations:
                     shot, tasks = self.sg_manager.find_shot_and_tasks(
                         project_name, shot_code
                     )
+
+                    # Verificar si tenemos multiples shots
+                    if shot == "MULTIPLE_SHOTS":
+                        # Devolver informacion para manejar en el hilo principal
+                        return ("MULTIPLE_SHOTS", tasks)
+
                     if shot:
                         for task in tasks:
                             if task["content"] == "Comp":
@@ -328,12 +404,17 @@ def threaded_function():
         debug_print(f"Conectando a ShotGrid URL: {url} con login: {login}")
         sg_manager = ShotGridManager(url, login, password)
         hiero_ops = HieroOperations(sg_manager)
-        success = hiero_ops.process_selected_clips()  # Ejecutar la lógica principal
+        result = hiero_ops.process_selected_clips()  # Ejecutar la lógica principal
 
-        if not success:
+        if result is True:
+            return None  # Indicar éxito
+
+        if result is False:
             return "No se pudo procesar el clip seleccionado. Verifique que haya seleccionado un clip válido."
 
-        return None  # Indicar éxito
+        # Si result es una tupla, significa que hay múltiples shots
+        if isinstance(result, tuple) and result[0] == "MULTIPLE_SHOTS":
+            return result  # Devolver la información para manejar en el hilo principal
 
     except shotgun_api3.AuthenticationFault:
         # Error especifico de autenticacion
@@ -359,20 +440,55 @@ def show_in_flow_from_selected_clip():
     result_container = {}
 
     def run_in_thread():
-        result_container["error"] = threaded_function()
+        result_container["result"] = threaded_function()
 
     thread = threading.Thread(target=run_in_thread)
     thread.start()
     thread.join()  # Esperar a que el hilo termine
 
-    # Verificar si hubo un error devuelto por el hilo
-    error_message = result_container["error"]
-    if error_message:
-        # Mostrar el error usando QMessageBox en lugar de hiero.ui.showMessageBox
+    # Verificar el resultado del hilo
+    result = result_container["result"]
+
+    # Si es None, todo fue exitoso
+    if result is None:
+        return
+
+    # Si es una tupla con múltiples shots, manejar en el hilo principal
+    if isinstance(result, tuple) and result[0] == "MULTIPLE_SHOTS":
+        shots_with_tasks = result[1]
+
+        # Mostrar dialogo de seleccion en el hilo principal
+        dialog = ShotSelectionDialog(shots_with_tasks)
+        if dialog.exec_() == QDialog.Accepted and dialog.result_value is not None:
+            selected_shot, selected_tasks = shots_with_tasks[dialog.result_value]
+            debug_print(f"Shot seleccionado: {selected_shot['id']}")
+
+            # Buscar task Comp y abrir URL
+            for task in selected_tasks:
+                if task["content"] == "Comp":
+                    # Recrear ShotGridManager para obtener la URL
+                    url, login, password = get_credentials_from_config()
+                    if url and login and password:
+                        sg_manager = ShotGridManager(url, login, password)
+                        task_url = sg_manager.get_task_url(task["id"])
+                        debug_print(f"Abriendo URL del shot seleccionado: {task_url}")
+
+                        # Usar la misma lógica que en el flujo normal
+                        if use_default_browser:
+                            webbrowser.open(task_url)
+                        else:
+                            hiero_ops = HieroOperations(sg_manager)
+                            hiero_ops.open_url_in_browser(task_url)
+                        return
+        return
+
+    # Si es un string, es un mensaje de error
+    if isinstance(result, str):
+        # Mostrar el error usando QMessageBox
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Warning)
         msg.setWindowTitle("Show in Flow - Error")
-        msg.setText(error_message)
+        msg.setText(result)
         msg.exec_()
 
 
