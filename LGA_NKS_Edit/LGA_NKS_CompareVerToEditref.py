@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_CompareVerToEditref v1.0 | Lega
+  LGA_NKS_CompareVerToEditref v1.1 | Lega
   Compara los rangos de frames de todos los clips del track REV con
   los clips correspondientes del track EditRef para verificar coincidencias.
 _______________________________________________________________________________________
@@ -39,6 +39,23 @@ window = None
 def debug_print(*message):
     if DEBUG:
         print(*message)
+
+
+def tc_str_to_frames(tc_str, fps):
+    """Convierte string de timecode a frames totales"""
+    h, m, s, f = map(int, tc_str.split(":"))
+    return int(((h * 3600 + m * 60 + s) * fps) + f)
+
+
+def frame_to_tc(frame, fps):
+    """Convierte frames totales a string de timecode"""
+    frame = int(frame)
+    fps = int(fps)
+    h = frame // (3600 * fps)
+    m = (frame // (60 * fps)) % 60
+    s = (frame // fps) % 60
+    f = frame % fps
+    return f"{h:02d}:{m:02d}:{s:02d}:{f:02d}"
 
 
 def extract_version_number(version_str):
@@ -87,9 +104,18 @@ class FrameRangeComparisonGUI(QWidget):
         self.setWindowTitle("REV to EditRef Frame Range Comparison - Results")
         layout = QVBoxLayout(self)
 
-        self.table = QTableWidget(0, 5, self)
+        self.table = QTableWidget(0, 8, self)
         self.table.setHorizontalHeaderLabels(
-            ["Shot", "REV Range", "EditRef Range", "Timeline Range", "Status"]
+            [
+                "Shot",
+                "REV Range",
+                "EditRef Range",
+                "REV TC IN",
+                "EditRef TC IN",
+                "REV FPS",
+                "EditRef FPS",
+                "Status",
+            ]
         )
 
         # COPIADO DEL PULL - Configuracion de tabla
@@ -119,7 +145,17 @@ class FrameRangeComparisonGUI(QWidget):
         font.setBold(True)
         self.table.horizontalHeader().setFont(font)
 
-    def add_result(self, shot_base, rev_range, editref_range, timeline_range, status):
+    def add_result(
+        self,
+        shot_base,
+        rev_range,
+        editref_range,
+        rev_tc_in,
+        editref_tc_in,
+        rev_fps,
+        editref_fps,
+        status,
+    ):
         """Anadir una fila a la tabla con el resultado."""
         row = self.table.rowCount()
         self.table.insertRow(row)
@@ -128,19 +164,31 @@ class FrameRangeComparisonGUI(QWidget):
         shot_item = QTableWidgetItem(shot_base + "   ")  # COPIADO DEL PULL - espacios
         rev_item = QTableWidgetItem(rev_range)
         editref_item = QTableWidgetItem(editref_range)
-        timeline_item = QTableWidgetItem(timeline_range)
+        rev_tc_item = QTableWidgetItem(rev_tc_in)
+        editref_tc_item = QTableWidgetItem(editref_tc_in)
+        rev_fps_item = QTableWidgetItem(rev_fps)
+        editref_fps_item = QTableWidgetItem(editref_fps)
         status_item = QTableWidgetItem(status)
 
         # COPIADO DEL PULL - Centrado
         rev_item.setTextAlignment(Qt.AlignCenter)
         editref_item.setTextAlignment(Qt.AlignCenter)
-        timeline_item.setTextAlignment(Qt.AlignCenter)
+        rev_tc_item.setTextAlignment(Qt.AlignCenter)
+        editref_tc_item.setTextAlignment(Qt.AlignCenter)
+        rev_fps_item.setTextAlignment(Qt.AlignCenter)
+        editref_fps_item.setTextAlignment(Qt.AlignCenter)
 
         # Colorear segun el estado
         if status == "Match":
             status_color = "#244c19"  # Verde oscuro
         elif status == "Range Mismatch":
             status_color = "#933100"  # Rojo oscuro
+        elif status == "TC Mismatch":
+            status_color = "#8a4500"  # Naranja oscuro
+        elif status == "FPS Mismatch":
+            status_color = "#663399"  # Purpura oscuro
+        elif status == "Multiple Mismatches":
+            status_color = "#660000"  # Rojo muy oscuro
         elif status == "No EditRef Found":
             status_color = "#8a4500"  # Naranja oscuro
         else:
@@ -157,12 +205,15 @@ class FrameRangeComparisonGUI(QWidget):
         self.table.setItem(row, 0, shot_item)
         self.table.setItem(row, 1, rev_item)
         self.table.setItem(row, 2, editref_item)
-        self.table.setItem(row, 3, timeline_item)
-        self.table.setItem(row, 4, status_item)
+        self.table.setItem(row, 3, rev_tc_item)
+        self.table.setItem(row, 4, editref_tc_item)
+        self.table.setItem(row, 5, rev_fps_item)
+        self.table.setItem(row, 6, editref_fps_item)
+        self.table.setItem(row, 7, status_item)
 
         # COPIADO DEL PULL - Configuracion de colores para delegado
-        row_colors = ["#8a8a8a"] * 5  # Color por defecto
-        row_colors[4] = status_color  # Color para la columna de status
+        row_colors = ["#8a8a8a"] * 8  # Color por defecto para 8 columnas
+        row_colors[7] = status_color  # Color para la columna de status
         self.add_color_to_background_list(row_colors)
 
         self.table.resizeColumnsToContents()
@@ -432,13 +483,12 @@ class HieroOperations:
             rev_end_frame = rev_fileinfos[0].endFrame()
             rev_range = f"{rev_start_frame}-{rev_end_frame}"
 
-            # Obtener posición en timeline del clip REV
-            rev_timeline_in = rev_clip.timelineIn()
-            rev_timeline_out = rev_clip.timelineOut()
-            timeline_range = f"{rev_timeline_in}-{rev_timeline_out}"
+            # Obtener TC IN y FPS del clip REV
+            rev_tc_in, rev_fps = self.get_tc_in_and_fps(rev_clip)
 
             debug_print(f"- Rango de frames del REV: {rev_range}")
-            debug_print(f"- Posición en timeline del REV: {timeline_range}")
+            debug_print(f"- TC IN del REV: {rev_tc_in}")
+            debug_print(f"- FPS del REV: {rev_fps}")
 
             # Buscar clip correspondiente en EditRef
             if base_identifier in editref_clips_dict:
@@ -453,44 +503,86 @@ class HieroOperations:
                 editref_end_frame = editref_fileinfos[0].endFrame()
                 editref_range = f"{editref_start_frame}-{editref_end_frame}"
 
-                debug_print(f"- Rango de frames del EditRef: {editref_range}")
+                # Obtener TC IN y FPS del clip EditRef
+                editref_tc_in, editref_fps = self.get_tc_in_and_fps(editref_clip)
 
-                # Comparar rangos
-                if (
+                debug_print(f"- Rango de frames del EditRef: {editref_range}")
+                debug_print(f"- TC IN del EditRef: {editref_tc_in}")
+                debug_print(f"- FPS del EditRef: {editref_fps}")
+
+                # Comparar todos los aspectos
+                range_match = (
                     rev_start_frame == editref_start_frame
                     and rev_end_frame == editref_end_frame
-                ):
-                    debug_print(f"✓ Los rangos coinciden: {rev_range}")
-                    # Limpiar cualquier tag de Range Mismatch existente
+                )
+                tc_match = rev_tc_in == editref_tc_in
+                fps_match = rev_fps == editref_fps
+
+                # Determinar el status basado en las comparaciones
+                mismatches = []
+                if not range_match:
+                    mismatches.append("Range")
+                if not tc_match and rev_tc_in != "N/A" and editref_tc_in != "N/A":
+                    mismatches.append("TC")
+                if not fps_match and rev_fps != "N/A" and editref_fps != "N/A":
+                    mismatches.append("FPS")
+
+                if not mismatches:
+                    debug_print(f"✓ Todo coincide perfectamente: {base_identifier}")
+                    # Limpiar cualquier tag de mismatch existente
                     self.delete_range_mismatch_tags(rev_clip)
-                    gui_table.add_result(
-                        base_identifier,
-                        rev_range,
-                        editref_range,
-                        timeline_range,
-                        "Match",
-                    )
-                    results_found = True
+                    status = "Match"
+                    tag_description = "Perfecto match con EditRef"
+                    tag_icon = "icons:TagGreen.png"
+                elif len(mismatches) == 1:
+                    if "Range" in mismatches:
+                        debug_print(
+                            f"✗ Range mismatch: REV({rev_range}) vs EditRef({editref_range})"
+                        )
+                        status = "Range Mismatch"
+                        tag_description = f"EditRef range: {editref_range}"
+                    elif "TC" in mismatches:
+                        debug_print(
+                            f"✗ TC mismatch: REV({rev_tc_in}) vs EditRef({editref_tc_in})"
+                        )
+                        status = "TC Mismatch"
+                        tag_description = f"EditRef TC IN: {editref_tc_in}"
+                    elif "FPS" in mismatches:
+                        debug_print(
+                            f"✗ FPS mismatch: REV({rev_fps}) vs EditRef({editref_fps})"
+                        )
+                        status = "FPS Mismatch"
+                        tag_description = f"EditRef FPS: {editref_fps}"
+                    tag_icon = "icons:TagYellow.png"
                 else:
                     debug_print(
-                        f"✗ Los rangos NO coinciden: REV({rev_range}) vs EditRef({editref_range})"
+                        f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier}"
                     )
-                    # Agregar tag amarillo para mismatch de rango
+                    status = "Multiple Mismatches"
+                    tag_description = f"Mismatches: {', '.join(mismatches)}"
+                    tag_icon = "icons:TagRed.png"
+
+                # Agregar tag solo si hay mismatches
+                if mismatches:
                     self.add_custom_tag_to_clip(
                         rev_clip,
                         "Range Mismatch",
-                        f"EditRef range: {editref_range}",
-                        "icons:TagYellow.png",
+                        tag_description,
+                        tag_icon,
                     )
-                    debug_print(f"→ Agregado tag amarillo 'Range Mismatch' al clip REV")
-                    gui_table.add_result(
-                        base_identifier,
-                        rev_range,
-                        editref_range,
-                        timeline_range,
-                        "Range Mismatch",
-                    )
-                    results_found = True
+                    debug_print(f"→ Agregado tag '{status}' al clip REV")
+
+                gui_table.add_result(
+                    base_identifier,
+                    rev_range,
+                    editref_range,
+                    rev_tc_in,
+                    editref_tc_in,
+                    rev_fps,
+                    editref_fps,
+                    status,
+                )
+                results_found = True
             else:
                 debug_print(
                     f"- No se encontró clip EditRef correspondiente para: {base_identifier}"
@@ -509,7 +601,10 @@ class HieroOperations:
                     base_identifier,
                     rev_range,
                     "N/A",
-                    timeline_range,
+                    rev_tc_in,
+                    "N/A",
+                    rev_fps,
+                    "N/A",
                     "No EditRef Found",
                 )
                 results_found = True
@@ -523,6 +618,29 @@ class HieroOperations:
             return file_path
         except:
             return None
+
+    def get_tc_in_and_fps(self, clip):
+        """Obtener TC IN y FPS de un clip."""
+        try:
+            media_source = clip.source().mediaSource()
+            metadata = media_source.metadata()
+
+            if (
+                "foundry.source.startTC" in metadata
+                and "foundry.source.framerate" in metadata
+            ):
+                start_tc_str = metadata["foundry.source.startTC"]
+                fps = float(metadata["foundry.source.framerate"])
+                base_tc_frame = tc_str_to_frames(start_tc_str, fps)
+                tc_in = base_tc_frame + clip.sourceIn()
+                tc_in_str = frame_to_tc(tc_in, fps)
+                fps_str = f"{fps:.3f}"
+                return tc_in_str, fps_str
+            else:
+                return "N/A", "N/A"
+        except Exception as e:
+            debug_print(f"Error obteniendo TC IN y FPS: {e}")
+            return "N/A", "N/A"
 
 
 def compare_rev_to_editref(force_all_clips=False):
