@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_CompareVerToEditref v1.12 | Lega
+  LGA_NKS_CompareVerToEditref v1.13 | Lega
   Compara los rangos de frames de todos los clips del track REV con
   los clips correspondientes del track EditRef para verificar coincidencias.
 _______________________________________________________________________________________
@@ -434,15 +434,18 @@ class HieroOperations:
             QMessageBox.warning(None, "Error", "No se encontró el proyecto.")
             return False
 
-        # Encontrar tracks REV y EditRef
+        # Encontrar tracks REV, EditRef y EditRefClean
         rev_track = None
         editref_track = None
+        editrefclean_track = None
 
         for track in seq.videoTracks():
             if track.name().upper() == "REV":
                 rev_track = track
             elif track.name().upper() == "EDITREF":
                 editref_track = track
+            elif track.name().upper() == "EDITREFCLEAN":
+                editrefclean_track = track
 
         if not rev_track:
             QMessageBox.warning(None, "Error", "No se encontró el track REV.")
@@ -498,6 +501,24 @@ class HieroOperations:
             if base_identifier not in editref_clips_dict:
                 editref_clips_dict[base_identifier] = clip
 
+        # Crear diccionario de clips EditRefClean por base name (fallback)
+        editrefclean_clips_dict = {}
+        if editrefclean_track:
+            for clip in editrefclean_track.items():
+                if isinstance(clip, hiero.core.EffectTrackItem):
+                    continue
+
+                file_path = self.get_file_path(clip)
+                if not file_path:
+                    continue
+
+                base_identifier, version_str = self.parse_clip_name(
+                    os.path.basename(file_path)
+                )
+
+                if base_identifier not in editrefclean_clips_dict:
+                    editrefclean_clips_dict[base_identifier] = clip
+
         # Variable para saber si se encontraron resultados
         results_found = False
 
@@ -505,7 +526,7 @@ class HieroOperations:
         project.beginUndo("Compare REV to EditRef - Add Tags")
 
         try:
-            # Procesar clips REV - COMPARANDO CON EditRef
+            # Procesar clips REV - COMPARANDO CON EditRef y EditRefClean como fallback
             for rev_clip in rev_clips:
                 if isinstance(rev_clip, hiero.core.EffectTrackItem):
                     continue
@@ -560,14 +581,26 @@ class HieroOperations:
                     debug_print(f"- TC IN del REV: {rev_tc_in}")
                 debug_print(f"- FPS del REV: {rev_fps}")
 
-                # Buscar clip correspondiente en EditRef
+                # Buscar clip correspondiente primero en EditRef, luego en EditRefClean como fallback
+                editref_clip = None
+                used_track_name = ""
+
                 if base_identifier in editref_clips_dict:
                     editref_clip = editref_clips_dict[base_identifier]
+                    used_track_name = "EditRef"
+                    debug_print(f"- Clip encontrado en track EditRef")
+                elif base_identifier in editrefclean_clips_dict:
+                    editref_clip = editrefclean_clips_dict[base_identifier]
+                    used_track_name = "EditRefClean"
+                    debug_print(
+                        f"- Clip NO encontrado en EditRef, usando fallback EditRefClean"
+                    )
 
+                if editref_clip:
                     editref_fileinfos = editref_clip.source().mediaSource().fileinfos()
                     if not editref_fileinfos:
                         debug_print(
-                            "⚠️ No se encontraron fileinfos para el clip EditRef."
+                            f"⚠️ No se encontraron fileinfos para el clip {used_track_name}."
                         )
                         continue
 
@@ -575,7 +608,7 @@ class HieroOperations:
                     editref_end_frame = editref_fileinfos[0].endFrame()
                     editref_range = f"{editref_start_frame}-{editref_end_frame}"
 
-                    # Obtener TC IN y FPS del clip EditRef
+                    # Obtener TC IN y FPS del clip EditRef/EditRefClean
                     if AnalizeTC:
                         editref_tc_in, editref_fps = self.get_tc_in_and_fps(
                             editref_clip
@@ -595,10 +628,12 @@ class HieroOperations:
                             editref_fps = "N/A"
                             editref_tc_in = "N/A"
 
-                    debug_print(f"- Rango de frames del EditRef: {editref_range}")
+                    debug_print(
+                        f"- Rango de frames del {used_track_name}: {editref_range}"
+                    )
                     if AnalizeTC:
-                        debug_print(f"- TC IN del EditRef: {editref_tc_in}")
-                    debug_print(f"- FPS del EditRef: {editref_fps}")
+                        debug_print(f"- TC IN del {used_track_name}: {editref_tc_in}")
+                    debug_print(f"- FPS del {used_track_name}: {editref_fps}")
 
                     # Comparar todos los aspectos
                     range_match = (
@@ -624,38 +659,44 @@ class HieroOperations:
                         mismatches.append("FPS")
 
                     if not mismatches:
-                        debug_print(f"✓ Todo coincide perfectamente: {base_identifier}")
+                        debug_print(
+                            f"✓ Todo coincide perfectamente: {base_identifier} (usado {used_track_name})"
+                        )
                         # Limpiar cualquier tag de mismatch existente
                         self.delete_range_mismatch_tags(rev_clip)
                         status = "Match"
-                        tag_description = "Perfecto match con EditRef"
+                        tag_description = f"Perfecto match con {used_track_name}"
                         tag_icon = "icons:TagGreen.png"
                     elif len(mismatches) == 1:
                         if "Range" in mismatches:
                             debug_print(
-                                f"✗ Range mismatch: REV({rev_range}) vs EditRef({editref_range})"
+                                f"✗ Range mismatch: REV({rev_range}) vs {used_track_name}({editref_range})"
                             )
                             status = "Range Mismatch"
-                            tag_description = f"EditRef range: {editref_range}"
+                            tag_description = (
+                                f"{used_track_name} range: {editref_range}"
+                            )
                         elif "TC" in mismatches:
                             debug_print(
-                                f"✗ TC mismatch: REV({rev_tc_in}) vs EditRef({editref_tc_in})"
+                                f"✗ TC mismatch: REV({rev_tc_in}) vs {used_track_name}({editref_tc_in})"
                             )
                             status = "TC Mismatch"
-                            tag_description = f"EditRef TC IN: {editref_tc_in}"
+                            tag_description = (
+                                f"{used_track_name} TC IN: {editref_tc_in}"
+                            )
                         elif "FPS" in mismatches:
                             debug_print(
-                                f"✗ FPS mismatch: REV({rev_fps}) vs EditRef({editref_fps})"
+                                f"✗ FPS mismatch: REV({rev_fps}) vs {used_track_name}({editref_fps})"
                             )
                             status = "FPS Mismatch"
-                            tag_description = f"EditRef FPS: {editref_fps}"
+                            tag_description = f"{used_track_name} FPS: {editref_fps}"
                         tag_icon = "icons:TagYellow.png"
                     else:
                         debug_print(
-                            f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier}"
+                            f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier} (usado {used_track_name})"
                         )
                         status = "Multiple Mismatches"
-                        tag_description = f"Mismatches: {', '.join(mismatches)}"
+                        tag_description = f"Mismatches: {', '.join(mismatches)} (vs {used_track_name})"
                         tag_icon = "icons:TagRed.png"
 
                     # Agregar tag solo si hay mismatches
@@ -681,7 +722,7 @@ class HieroOperations:
                     results_found = True
                 else:
                     debug_print(
-                        f"- No se encontró clip EditRef correspondiente para: {base_identifier}"
+                        f"- No se encontró clip correspondiente para: {base_identifier} (ni en EditRef ni en EditRefClean)"
                     )
                     # Agregar tag amarillo para clip EditRef no encontrado
                     self.add_custom_tag_to_clip(
