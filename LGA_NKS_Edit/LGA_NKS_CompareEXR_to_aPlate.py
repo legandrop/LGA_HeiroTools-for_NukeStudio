@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_CompareEXR_to_aPlate v0.8 | Lega
+  LGA_NKS_CompareEXR_to_aPlate v1.0 | Lega
   Compara los rangos de frames de todos los clips del track EXR con
   los clips correspondientes del track aPlate para verificar coincidencias.
 _______________________________________________________________________________________
@@ -695,24 +695,22 @@ class HieroOperations:
             return None
 
     def get_tc_in_and_fps(self, clip):
-        """Obtener TC IN y FPS de un clip."""
+        """Obtener TC IN y FPS confiables desde timecodeStart()."""
         try:
-            media_source = clip.source().mediaSource()
+            source = clip.source()
+            media_source = source.mediaSource()
             metadata = media_source.metadata()
 
-            if (
-                "foundry.source.startTC" in metadata
-                and "foundry.source.framerate" in metadata
-            ):
-                start_tc_str = metadata["foundry.source.startTC"]
-                fps = float(metadata["foundry.source.framerate"])
-                base_tc_frame = tc_str_to_frames(start_tc_str, fps)
-                tc_in = base_tc_frame + clip.sourceIn()
-                tc_in_str = frame_to_tc(tc_in, fps)
-                fps_str = f"{fps:.3f}"
-                return tc_in_str, fps_str
-            else:
-                return "N/A", "N/A"
+            fps = (
+                float(metadata["foundry.source.framerate"])
+                if "foundry.source.framerate" in metadata
+                else 25.0
+            )
+            tc_start = int(source.timecodeStart())
+            tc_in_frames = tc_start + int(clip.sourceIn())
+            tc_in_str = frame_to_tc(tc_in_frames, fps)
+            fps_str = f"{fps:.3f}"
+            return tc_in_str, fps_str
         except Exception as e:
             debug_print(f"Error obteniendo TC IN y FPS: {e}")
             return "N/A", "N/A"
