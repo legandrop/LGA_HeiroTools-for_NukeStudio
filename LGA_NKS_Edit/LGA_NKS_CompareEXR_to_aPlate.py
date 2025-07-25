@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_CompareEXR_to_aPlate v1.0 | Lega
+  LGA_NKS_CompareEXR_to_aPlate v1.01 | Lega
   Compara los rangos de frames de todos los clips del track EXR con
   los clips correspondientes del track aPlate para verificar coincidencias.
 _______________________________________________________________________________________
@@ -502,6 +502,11 @@ class HieroOperations:
 
             file_path = self.get_file_path(exr_clip)
             if not file_path:
+                continue
+
+            # Verificar si el archivo contiene _v00 y saltearlo
+            if "_v00" in os.path.basename(file_path):
+                debug_print(f">>> SALTEANDO clip v00: {os.path.basename(file_path)}")
                 continue
 
             base_identifier, version_str = self.parse_clip_name(
