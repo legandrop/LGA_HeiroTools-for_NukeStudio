@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_CompareEXR_to_aPlate v1.01 | Lega
+  LGA_NKS_CompareEXR_to_aPlate v1.12 | Lega
   Compara los rangos de frames de todos los clips del track EXR con
   los clips correspondientes del track aPlate para verificar coincidencias.
 _______________________________________________________________________________________
@@ -428,6 +428,12 @@ class HieroOperations:
         current_time = viewer.time()
         debug_print(f"Tiempo actual del playhead: {current_time}")
 
+        # Obtener el proyecto para el manejo de UNDO
+        project = seq.project()
+        if not project:
+            QMessageBox.warning(None, "Error", "No se encontró el proyecto.")
+            return False
+
         # Encontrar tracks EXR y aPlate
         exr_track = None
         aplate_track = None
@@ -495,199 +501,213 @@ class HieroOperations:
         # Variable para saber si se encontraron resultados
         results_found = False
 
-        # Procesar clips EXR - COMPARANDO CON aPlate
-        for exr_clip in exr_clips:
-            if isinstance(exr_clip, hiero.core.EffectTrackItem):
-                continue
+        # Iniciar operacion de UNDO para agrupar todos los cambios de tags
+        project.beginUndo("Compare EXR to aPlate - Add Tags")
 
-            file_path = self.get_file_path(exr_clip)
-            if not file_path:
-                continue
-
-            # Verificar si el archivo contiene _v00 y saltearlo
-            if "_v00" in os.path.basename(file_path):
-                debug_print(f">>> SALTEANDO clip v00: {os.path.basename(file_path)}")
-                continue
-
-            base_identifier, version_str = self.parse_clip_name(
-                os.path.basename(file_path)
-            )
-
-            debug_print(f"\n=== PROCESANDO SHOT: {base_identifier} ===")
-
-            # Obtener rangos del clip EXR
-            exr_fileinfos = exr_clip.source().mediaSource().fileinfos()
-            if not exr_fileinfos:
-                debug_print("⚠️ No se encontraron fileinfos para el clip EXR.")
-                continue
-
-            exr_start_frame = exr_fileinfos[0].startFrame()
-            exr_end_frame = exr_fileinfos[0].endFrame()
-            exr_range = f"{exr_start_frame}-{exr_end_frame}"
-
-            # Obtener TC IN y FPS del clip EXR
-            if AnalizeTC:
-                exr_tc_in, exr_fps = self.get_tc_in_and_fps(exr_clip)
-            else:
-                # Solo obtener FPS cuando no se analiza TC
-                try:
-                    media_source = exr_clip.source().mediaSource()
-                    metadata = media_source.metadata()
-                    if "foundry.source.framerate" in metadata:
-                        fps = float(metadata["foundry.source.framerate"])
-                        exr_fps = f"{fps:.3f}"
-                    else:
-                        exr_fps = "N/A"
-                    exr_tc_in = "N/A"  # No analizar TC
-                except:
-                    exr_fps = "N/A"
-                    exr_tc_in = "N/A"
-
-            debug_print(f"- Rango de frames del EXR: {exr_range}")
-            if AnalizeTC:
-                debug_print(f"- TC IN del EXR: {exr_tc_in}")
-            debug_print(f"- FPS del EXR: {exr_fps}")
-
-            # Buscar clip correspondiente en aPlate
-            if base_identifier in aplate_clips_dict:
-                aplate_clip = aplate_clips_dict[base_identifier]
-
-                aplate_fileinfos = aplate_clip.source().mediaSource().fileinfos()
-                if not aplate_fileinfos:
-                    debug_print("⚠️ No se encontraron fileinfos para el clip aPlate.")
+        try:
+            # Procesar clips EXR - COMPARANDO CON aPlate
+            for exr_clip in exr_clips:
+                if isinstance(exr_clip, hiero.core.EffectTrackItem):
                     continue
 
-                aplate_start_frame = aplate_fileinfos[0].startFrame()
-                aplate_end_frame = aplate_fileinfos[0].endFrame()
-                aplate_range = f"{aplate_start_frame}-{aplate_end_frame}"
+                file_path = self.get_file_path(exr_clip)
+                if not file_path:
+                    continue
 
-                # Obtener TC IN y FPS del clip aPlate
+                # Verificar si el archivo contiene _v00 y saltearlo
+                if "_v00" in os.path.basename(file_path):
+                    debug_print(
+                        f">>> SALTEANDO clip v00: {os.path.basename(file_path)}"
+                    )
+                    continue
+
+                base_identifier, version_str = self.parse_clip_name(
+                    os.path.basename(file_path)
+                )
+
+                debug_print(f"\n=== PROCESANDO SHOT: {base_identifier} ===")
+
+                # Obtener rangos del clip EXR
+                exr_fileinfos = exr_clip.source().mediaSource().fileinfos()
+                if not exr_fileinfos:
+                    debug_print("⚠️ No se encontraron fileinfos para el clip EXR.")
+                    continue
+
+                exr_start_frame = exr_fileinfos[0].startFrame()
+                exr_end_frame = exr_fileinfos[0].endFrame()
+                exr_range = f"{exr_start_frame}-{exr_end_frame}"
+
+                # Obtener TC IN y FPS del clip EXR
                 if AnalizeTC:
-                    aplate_tc_in, aplate_fps = self.get_tc_in_and_fps(aplate_clip)
+                    exr_tc_in, exr_fps = self.get_tc_in_and_fps(exr_clip)
                 else:
                     # Solo obtener FPS cuando no se analiza TC
                     try:
-                        media_source = aplate_clip.source().mediaSource()
+                        media_source = exr_clip.source().mediaSource()
                         metadata = media_source.metadata()
                         if "foundry.source.framerate" in metadata:
                             fps = float(metadata["foundry.source.framerate"])
-                            aplate_fps = f"{fps:.3f}"
+                            exr_fps = f"{fps:.3f}"
                         else:
-                            aplate_fps = "N/A"
-                        aplate_tc_in = "N/A"  # No analizar TC
+                            exr_fps = "N/A"
+                        exr_tc_in = "N/A"  # No analizar TC
                     except:
-                        aplate_fps = "N/A"
-                        aplate_tc_in = "N/A"
+                        exr_fps = "N/A"
+                        exr_tc_in = "N/A"
 
-                debug_print(f"- Rango de frames del aPlate: {aplate_range}")
+                debug_print(f"- Rango de frames del EXR: {exr_range}")
                 if AnalizeTC:
-                    debug_print(f"- TC IN del aPlate: {aplate_tc_in}")
-                debug_print(f"- FPS del aPlate: {aplate_fps}")
+                    debug_print(f"- TC IN del EXR: {exr_tc_in}")
+                debug_print(f"- FPS del EXR: {exr_fps}")
 
-                # Comparar todos los aspectos
-                range_match = (
-                    exr_start_frame == aplate_start_frame
-                    and exr_end_frame == aplate_end_frame
-                )
-                tc_match = exr_tc_in == aplate_tc_in
-                fps_match = exr_fps == aplate_fps
+                # Buscar clip correspondiente en aPlate
+                if base_identifier in aplate_clips_dict:
+                    aplate_clip = aplate_clips_dict[base_identifier]
 
-                # Determinar el status basado en las comparaciones
-                mismatches = []
-                if not range_match:
-                    mismatches.append("Range")
-                # Solo comparar TC si la flag AnalizeTC esta activada
-                if (
-                    AnalizeTC
-                    and not tc_match
-                    and exr_tc_in != "N/A"
-                    and aplate_tc_in != "N/A"
-                ):
-                    mismatches.append("TC")
-                if not fps_match and exr_fps != "N/A" and aplate_fps != "N/A":
-                    mismatches.append("FPS")
+                    aplate_fileinfos = aplate_clip.source().mediaSource().fileinfos()
+                    if not aplate_fileinfos:
+                        debug_print(
+                            "⚠️ No se encontraron fileinfos para el clip aPlate."
+                        )
+                        continue
 
-                if not mismatches:
-                    debug_print(f"✓ Todo coincide perfectamente: {base_identifier}")
-                    # Limpiar cualquier tag de mismatch existente
-                    self.delete_range_mismatch_tags(exr_clip)
-                    status = "Match"
-                    tag_description = "Perfecto match con aPlate"
-                    tag_icon = "icons:TagGreen.png"
-                elif len(mismatches) == 1:
-                    if "Range" in mismatches:
+                    aplate_start_frame = aplate_fileinfos[0].startFrame()
+                    aplate_end_frame = aplate_fileinfos[0].endFrame()
+                    aplate_range = f"{aplate_start_frame}-{aplate_end_frame}"
+
+                    # Obtener TC IN y FPS del clip aPlate
+                    if AnalizeTC:
+                        aplate_tc_in, aplate_fps = self.get_tc_in_and_fps(aplate_clip)
+                    else:
+                        # Solo obtener FPS cuando no se analiza TC
+                        try:
+                            media_source = aplate_clip.source().mediaSource()
+                            metadata = media_source.metadata()
+                            if "foundry.source.framerate" in metadata:
+                                fps = float(metadata["foundry.source.framerate"])
+                                aplate_fps = f"{fps:.3f}"
+                            else:
+                                aplate_fps = "N/A"
+                            aplate_tc_in = "N/A"  # No analizar TC
+                        except:
+                            aplate_fps = "N/A"
+                            aplate_tc_in = "N/A"
+
+                    debug_print(f"- Rango de frames del aPlate: {aplate_range}")
+                    if AnalizeTC:
+                        debug_print(f"- TC IN del aPlate: {aplate_tc_in}")
+                    debug_print(f"- FPS del aPlate: {aplate_fps}")
+
+                    # Comparar todos los aspectos
+                    range_match = (
+                        exr_start_frame == aplate_start_frame
+                        and exr_end_frame == aplate_end_frame
+                    )
+                    tc_match = exr_tc_in == aplate_tc_in
+                    fps_match = exr_fps == aplate_fps
+
+                    # Determinar el status basado en las comparaciones
+                    mismatches = []
+                    if not range_match:
+                        mismatches.append("Range")
+                    # Solo comparar TC si la flag AnalizeTC esta activada
+                    if (
+                        AnalizeTC
+                        and not tc_match
+                        and exr_tc_in != "N/A"
+                        and aplate_tc_in != "N/A"
+                    ):
+                        mismatches.append("TC")
+                    if not fps_match and exr_fps != "N/A" and aplate_fps != "N/A":
+                        mismatches.append("FPS")
+
+                    if not mismatches:
+                        debug_print(f"✓ Todo coincide perfectamente: {base_identifier}")
+                        # Limpiar cualquier tag de mismatch existente
+                        self.delete_range_mismatch_tags(exr_clip)
+                        status = "Match"
+                        tag_description = "Perfecto match con aPlate"
+                        tag_icon = "icons:TagGreen.png"
+                    elif len(mismatches) == 1:
+                        if "Range" in mismatches:
+                            debug_print(
+                                f"✗ Range mismatch: EXR({exr_range}) vs aPlate({aplate_range})"
+                            )
+                            status = "Range Mismatch"
+                            tag_description = f"aPlate range: {aplate_range}"
+                        elif "TC" in mismatches:
+                            debug_print(
+                                f"✗ TC mismatch: EXR({exr_tc_in}) vs aPlate({aplate_tc_in})"
+                            )
+                            status = "TC Mismatch"
+                            tag_description = f"aPlate TC IN: {aplate_tc_in}"
+                        elif "FPS" in mismatches:
+                            debug_print(
+                                f"✗ FPS mismatch: EXR({exr_fps}) vs aPlate({aplate_fps})"
+                            )
+                            status = "FPS Mismatch"
+                            tag_description = f"aPlate FPS: {aplate_fps}"
+                        tag_icon = "icons:TagYellow.png"
+                    else:
                         debug_print(
-                            f"✗ Range mismatch: EXR({exr_range}) vs aPlate({aplate_range})"
+                            f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier}"
                         )
-                        status = "Range Mismatch"
-                        tag_description = f"aPlate range: {aplate_range}"
-                    elif "TC" in mismatches:
-                        debug_print(
-                            f"✗ TC mismatch: EXR({exr_tc_in}) vs aPlate({aplate_tc_in})"
+                        status = "Multiple Mismatches"
+                        tag_description = f"Mismatches: {', '.join(mismatches)}"
+                        tag_icon = "icons:TagRed.png"
+
+                    # Agregar tag solo si hay mismatches
+                    if mismatches:
+                        self.add_custom_tag_to_clip(
+                            exr_clip,
+                            "Range Mismatch",
+                            tag_description,
+                            tag_icon,
                         )
-                        status = "TC Mismatch"
-                        tag_description = f"aPlate TC IN: {aplate_tc_in}"
-                    elif "FPS" in mismatches:
-                        debug_print(
-                            f"✗ FPS mismatch: EXR({exr_fps}) vs aPlate({aplate_fps})"
-                        )
-                        status = "FPS Mismatch"
-                        tag_description = f"aPlate FPS: {aplate_fps}"
-                    tag_icon = "icons:TagYellow.png"
+                        debug_print(f"→ Agregado tag '{status}' al clip EXR")
+
+                    self.gui_table.add_result(
+                        base_identifier,
+                        exr_range,
+                        aplate_range,
+                        exr_tc_in,
+                        aplate_tc_in,
+                        exr_fps,
+                        aplate_fps,
+                        status,
+                    )
+                    results_found = True
                 else:
                     debug_print(
-                        f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier}"
+                        f"- No se encontró clip aPlate correspondiente para: {base_identifier}"
                     )
-                    status = "Multiple Mismatches"
-                    tag_description = f"Mismatches: {', '.join(mismatches)}"
-                    tag_icon = "icons:TagRed.png"
-
-                # Agregar tag solo si hay mismatches
-                if mismatches:
+                    # Agregar tag amarillo para clip aPlate no encontrado
                     self.add_custom_tag_to_clip(
                         exr_clip,
                         "Range Mismatch",
-                        tag_description,
-                        tag_icon,
+                        f"No aPlate found for {base_identifier}",
+                        "icons:TagYellow.png",
                     )
-                    debug_print(f"→ Agregado tag '{status}' al clip EXR")
+                    debug_print(
+                        f"→ Agregado tag amarillo 'Range Mismatch' al clip EXR (aPlate no encontrado)"
+                    )
+                    self.gui_table.add_result(
+                        base_identifier,
+                        exr_range,
+                        "N/A",
+                        exr_tc_in if AnalizeTC else "N/A",
+                        "N/A",
+                        exr_fps,
+                        "N/A",
+                        "No aPlate Found",
+                    )
+                    results_found = True
 
-                gui_table.add_result(
-                    base_identifier,
-                    exr_range,
-                    aplate_range,
-                    exr_tc_in,
-                    aplate_tc_in,
-                    exr_fps,
-                    aplate_fps,
-                    status,
-                )
-                results_found = True
-            else:
-                debug_print(
-                    f"- No se encontró clip aPlate correspondiente para: {base_identifier}"
-                )
-                # Agregar tag amarillo para clip aPlate no encontrado
-                self.add_custom_tag_to_clip(
-                    exr_clip,
-                    "Range Mismatch",
-                    f"No aPlate found for {base_identifier}",
-                    "icons:TagYellow.png",
-                )
-                debug_print(
-                    f"→ Agregado tag amarillo 'Range Mismatch' al clip EXR (aPlate no encontrado)"
-                )
-                gui_table.add_result(
-                    base_identifier,
-                    exr_range,
-                    "N/A",
-                    exr_tc_in if AnalizeTC else "N/A",
-                    "N/A",
-                    exr_fps,
-                    "N/A",
-                    "No aPlate Found",
-                )
-                results_found = True
+        except Exception as e:
+            debug_print(f"Error durante el procesamiento: {e}")
+        finally:
+            # Finalizar operacion de UNDO
+            project.endUndo()
 
         return results_found
 

@@ -1,7 +1,7 @@
 """
 _______________________________________________________________________________________
 
-  LGA_NKS_CompareVerToEditref v1.11 | Lega
+  LGA_NKS_CompareVerToEditref v1.12 | Lega
   Compara los rangos de frames de todos los clips del track REV con
   los clips correspondientes del track EditRef para verificar coincidencias.
 _______________________________________________________________________________________
@@ -428,6 +428,12 @@ class HieroOperations:
         current_time = viewer.time()
         debug_print(f"Tiempo actual del playhead: {current_time}")
 
+        # Obtener el proyecto para el manejo de UNDO
+        project = seq.project()
+        if not project:
+            QMessageBox.warning(None, "Error", "No se encontró el proyecto.")
+            return False
+
         # Encontrar tracks REV y EditRef
         rev_track = None
         editref_track = None
@@ -495,194 +501,215 @@ class HieroOperations:
         # Variable para saber si se encontraron resultados
         results_found = False
 
-        # Procesar clips REV - COMPARANDO CON EditRef
-        for rev_clip in rev_clips:
-            if isinstance(rev_clip, hiero.core.EffectTrackItem):
-                continue
+        # Iniciar operacion de UNDO para agrupar todos los cambios de tags
+        project.beginUndo("Compare REV to EditRef - Add Tags")
 
-            file_path = self.get_file_path(rev_clip)
-            if not file_path:
-                continue
-
-            base_identifier, version_str = self.parse_clip_name(
-                os.path.basename(file_path)
-            )
-
-            debug_print(f"\n=== PROCESANDO SHOT: {base_identifier} ===")
-
-            # Obtener rangos del clip REV
-            rev_fileinfos = rev_clip.source().mediaSource().fileinfos()
-            if not rev_fileinfos:
-                debug_print("⚠️ No se encontraron fileinfos para el clip REV.")
-                continue
-
-            rev_start_frame = rev_fileinfos[0].startFrame()
-            rev_end_frame = rev_fileinfos[0].endFrame()
-            rev_range = f"{rev_start_frame}-{rev_end_frame}"
-
-            # Obtener TC IN y FPS del clip REV
-            if AnalizeTC:
-                rev_tc_in, rev_fps = self.get_tc_in_and_fps(rev_clip)
-            else:
-                # Solo obtener FPS cuando no se analiza TC
-                try:
-                    media_source = rev_clip.source().mediaSource()
-                    metadata = media_source.metadata()
-                    if "foundry.source.framerate" in metadata:
-                        fps = float(metadata["foundry.source.framerate"])
-                        rev_fps = f"{fps:.3f}"
-                    else:
-                        rev_fps = "N/A"
-                    rev_tc_in = "N/A"  # No analizar TC
-                except:
-                    rev_fps = "N/A"
-                    rev_tc_in = "N/A"
-
-            debug_print(f"- Rango de frames del REV: {rev_range}")
-            if AnalizeTC:
-                debug_print(f"- TC IN del REV: {rev_tc_in}")
-            debug_print(f"- FPS del REV: {rev_fps}")
-
-            # Buscar clip correspondiente en EditRef
-            if base_identifier in editref_clips_dict:
-                editref_clip = editref_clips_dict[base_identifier]
-
-                editref_fileinfos = editref_clip.source().mediaSource().fileinfos()
-                if not editref_fileinfos:
-                    debug_print("⚠️ No se encontraron fileinfos para el clip EditRef.")
+        try:
+            # Procesar clips REV - COMPARANDO CON EditRef
+            for rev_clip in rev_clips:
+                if isinstance(rev_clip, hiero.core.EffectTrackItem):
                     continue
 
-                editref_start_frame = editref_fileinfos[0].startFrame()
-                editref_end_frame = editref_fileinfos[0].endFrame()
-                editref_range = f"{editref_start_frame}-{editref_end_frame}"
+                file_path = self.get_file_path(rev_clip)
+                if not file_path:
+                    continue
 
-                # Obtener TC IN y FPS del clip EditRef
+                # Verificar si el archivo contiene _v00 y saltearlo
+                if "_v00" in os.path.basename(file_path):
+                    debug_print(
+                        f">>> SALTEANDO clip v00: {os.path.basename(file_path)}"
+                    )
+                    continue
+
+                base_identifier, version_str = self.parse_clip_name(
+                    os.path.basename(file_path)
+                )
+
+                debug_print(f"\n=== PROCESANDO SHOT: {base_identifier} ===")
+
+                # Obtener rangos del clip REV
+                rev_fileinfos = rev_clip.source().mediaSource().fileinfos()
+                if not rev_fileinfos:
+                    debug_print("⚠️ No se encontraron fileinfos para el clip REV.")
+                    continue
+
+                rev_start_frame = rev_fileinfos[0].startFrame()
+                rev_end_frame = rev_fileinfos[0].endFrame()
+                rev_range = f"{rev_start_frame}-{rev_end_frame}"
+
+                # Obtener TC IN y FPS del clip REV
                 if AnalizeTC:
-                    editref_tc_in, editref_fps = self.get_tc_in_and_fps(editref_clip)
+                    rev_tc_in, rev_fps = self.get_tc_in_and_fps(rev_clip)
                 else:
                     # Solo obtener FPS cuando no se analiza TC
                     try:
-                        media_source = editref_clip.source().mediaSource()
+                        media_source = rev_clip.source().mediaSource()
                         metadata = media_source.metadata()
                         if "foundry.source.framerate" in metadata:
                             fps = float(metadata["foundry.source.framerate"])
-                            editref_fps = f"{fps:.3f}"
+                            rev_fps = f"{fps:.3f}"
                         else:
-                            editref_fps = "N/A"
-                        editref_tc_in = "N/A"  # No analizar TC
+                            rev_fps = "N/A"
+                        rev_tc_in = "N/A"  # No analizar TC
                     except:
-                        editref_fps = "N/A"
-                        editref_tc_in = "N/A"
+                        rev_fps = "N/A"
+                        rev_tc_in = "N/A"
 
-                debug_print(f"- Rango de frames del EditRef: {editref_range}")
+                debug_print(f"- Rango de frames del REV: {rev_range}")
                 if AnalizeTC:
-                    debug_print(f"- TC IN del EditRef: {editref_tc_in}")
-                debug_print(f"- FPS del EditRef: {editref_fps}")
+                    debug_print(f"- TC IN del REV: {rev_tc_in}")
+                debug_print(f"- FPS del REV: {rev_fps}")
 
-                # Comparar todos los aspectos
-                range_match = (
-                    rev_start_frame == editref_start_frame
-                    and rev_end_frame == editref_end_frame
-                )
-                tc_match = rev_tc_in == editref_tc_in
-                fps_match = rev_fps == editref_fps
+                # Buscar clip correspondiente en EditRef
+                if base_identifier in editref_clips_dict:
+                    editref_clip = editref_clips_dict[base_identifier]
 
-                # Determinar el status basado en las comparaciones
-                mismatches = []
-                if not range_match:
-                    mismatches.append("Range")
-                # Solo comparar TC si la flag AnalizeTC esta activada
-                if (
-                    AnalizeTC
-                    and not tc_match
-                    and rev_tc_in != "N/A"
-                    and editref_tc_in != "N/A"
-                ):
-                    mismatches.append("TC")
-                if not fps_match and rev_fps != "N/A" and editref_fps != "N/A":
-                    mismatches.append("FPS")
+                    editref_fileinfos = editref_clip.source().mediaSource().fileinfos()
+                    if not editref_fileinfos:
+                        debug_print(
+                            "⚠️ No se encontraron fileinfos para el clip EditRef."
+                        )
+                        continue
 
-                if not mismatches:
-                    debug_print(f"✓ Todo coincide perfectamente: {base_identifier}")
-                    # Limpiar cualquier tag de mismatch existente
-                    self.delete_range_mismatch_tags(rev_clip)
-                    status = "Match"
-                    tag_description = "Perfecto match con EditRef"
-                    tag_icon = "icons:TagGreen.png"
-                elif len(mismatches) == 1:
-                    if "Range" in mismatches:
-                        debug_print(
-                            f"✗ Range mismatch: REV({rev_range}) vs EditRef({editref_range})"
+                    editref_start_frame = editref_fileinfos[0].startFrame()
+                    editref_end_frame = editref_fileinfos[0].endFrame()
+                    editref_range = f"{editref_start_frame}-{editref_end_frame}"
+
+                    # Obtener TC IN y FPS del clip EditRef
+                    if AnalizeTC:
+                        editref_tc_in, editref_fps = self.get_tc_in_and_fps(
+                            editref_clip
                         )
-                        status = "Range Mismatch"
-                        tag_description = f"EditRef range: {editref_range}"
-                    elif "TC" in mismatches:
+                    else:
+                        # Solo obtener FPS cuando no se analiza TC
+                        try:
+                            media_source = editref_clip.source().mediaSource()
+                            metadata = media_source.metadata()
+                            if "foundry.source.framerate" in metadata:
+                                fps = float(metadata["foundry.source.framerate"])
+                                editref_fps = f"{fps:.3f}"
+                            else:
+                                editref_fps = "N/A"
+                            editref_tc_in = "N/A"  # No analizar TC
+                        except:
+                            editref_fps = "N/A"
+                            editref_tc_in = "N/A"
+
+                    debug_print(f"- Rango de frames del EditRef: {editref_range}")
+                    if AnalizeTC:
+                        debug_print(f"- TC IN del EditRef: {editref_tc_in}")
+                    debug_print(f"- FPS del EditRef: {editref_fps}")
+
+                    # Comparar todos los aspectos
+                    range_match = (
+                        rev_start_frame == editref_start_frame
+                        and rev_end_frame == editref_end_frame
+                    )
+                    tc_match = rev_tc_in == editref_tc_in
+                    fps_match = rev_fps == editref_fps
+
+                    # Determinar el status basado en las comparaciones
+                    mismatches = []
+                    if not range_match:
+                        mismatches.append("Range")
+                    # Solo comparar TC si la flag AnalizeTC esta activada
+                    if (
+                        AnalizeTC
+                        and not tc_match
+                        and rev_tc_in != "N/A"
+                        and editref_tc_in != "N/A"
+                    ):
+                        mismatches.append("TC")
+                    if not fps_match and rev_fps != "N/A" and editref_fps != "N/A":
+                        mismatches.append("FPS")
+
+                    if not mismatches:
+                        debug_print(f"✓ Todo coincide perfectamente: {base_identifier}")
+                        # Limpiar cualquier tag de mismatch existente
+                        self.delete_range_mismatch_tags(rev_clip)
+                        status = "Match"
+                        tag_description = "Perfecto match con EditRef"
+                        tag_icon = "icons:TagGreen.png"
+                    elif len(mismatches) == 1:
+                        if "Range" in mismatches:
+                            debug_print(
+                                f"✗ Range mismatch: REV({rev_range}) vs EditRef({editref_range})"
+                            )
+                            status = "Range Mismatch"
+                            tag_description = f"EditRef range: {editref_range}"
+                        elif "TC" in mismatches:
+                            debug_print(
+                                f"✗ TC mismatch: REV({rev_tc_in}) vs EditRef({editref_tc_in})"
+                            )
+                            status = "TC Mismatch"
+                            tag_description = f"EditRef TC IN: {editref_tc_in}"
+                        elif "FPS" in mismatches:
+                            debug_print(
+                                f"✗ FPS mismatch: REV({rev_fps}) vs EditRef({editref_fps})"
+                            )
+                            status = "FPS Mismatch"
+                            tag_description = f"EditRef FPS: {editref_fps}"
+                        tag_icon = "icons:TagYellow.png"
+                    else:
                         debug_print(
-                            f"✗ TC mismatch: REV({rev_tc_in}) vs EditRef({editref_tc_in})"
+                            f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier}"
                         )
-                        status = "TC Mismatch"
-                        tag_description = f"EditRef TC IN: {editref_tc_in}"
-                    elif "FPS" in mismatches:
-                        debug_print(
-                            f"✗ FPS mismatch: REV({rev_fps}) vs EditRef({editref_fps})"
+                        status = "Multiple Mismatches"
+                        tag_description = f"Mismatches: {', '.join(mismatches)}"
+                        tag_icon = "icons:TagRed.png"
+
+                    # Agregar tag solo si hay mismatches
+                    if mismatches:
+                        self.add_custom_tag_to_clip(
+                            rev_clip,
+                            "Range Mismatch",
+                            tag_description,
+                            tag_icon,
                         )
-                        status = "FPS Mismatch"
-                        tag_description = f"EditRef FPS: {editref_fps}"
-                    tag_icon = "icons:TagYellow.png"
+                        debug_print(f"→ Agregado tag '{status}' al clip REV")
+
+                    self.gui_table.add_result(
+                        base_identifier,
+                        rev_range,
+                        editref_range,
+                        rev_tc_in,
+                        editref_tc_in,
+                        rev_fps,
+                        editref_fps,
+                        status,
+                    )
+                    results_found = True
                 else:
                     debug_print(
-                        f"✗ Multiple mismatches ({', '.join(mismatches)}): {base_identifier}"
+                        f"- No se encontró clip EditRef correspondiente para: {base_identifier}"
                     )
-                    status = "Multiple Mismatches"
-                    tag_description = f"Mismatches: {', '.join(mismatches)}"
-                    tag_icon = "icons:TagRed.png"
-
-                # Agregar tag solo si hay mismatches
-                if mismatches:
+                    # Agregar tag amarillo para clip EditRef no encontrado
                     self.add_custom_tag_to_clip(
                         rev_clip,
                         "Range Mismatch",
-                        tag_description,
-                        tag_icon,
+                        f"No EditRef found for {base_identifier}",
+                        "icons:TagYellow.png",
                     )
-                    debug_print(f"→ Agregado tag '{status}' al clip REV")
+                    debug_print(
+                        f"→ Agregado tag amarillo 'Range Mismatch' al clip REV (EditRef no encontrado)"
+                    )
+                    self.gui_table.add_result(
+                        base_identifier,
+                        rev_range,
+                        "N/A",
+                        rev_tc_in if AnalizeTC else "N/A",
+                        "N/A",
+                        rev_fps,
+                        "N/A",
+                        "No EditRef Found",
+                    )
+                    results_found = True
 
-                gui_table.add_result(
-                    base_identifier,
-                    rev_range,
-                    editref_range,
-                    rev_tc_in,
-                    editref_tc_in,
-                    rev_fps,
-                    editref_fps,
-                    status,
-                )
-                results_found = True
-            else:
-                debug_print(
-                    f"- No se encontró clip EditRef correspondiente para: {base_identifier}"
-                )
-                # Agregar tag amarillo para clip EditRef no encontrado
-                self.add_custom_tag_to_clip(
-                    rev_clip,
-                    "Range Mismatch",
-                    f"No EditRef found for {base_identifier}",
-                    "icons:TagYellow.png",
-                )
-                debug_print(
-                    f"→ Agregado tag amarillo 'Range Mismatch' al clip REV (EditRef no encontrado)"
-                )
-                gui_table.add_result(
-                    base_identifier,
-                    rev_range,
-                    "N/A",
-                    rev_tc_in if AnalizeTC else "N/A",
-                    "N/A",
-                    rev_fps,
-                    "N/A",
-                    "No EditRef Found",
-                )
-                results_found = True
+        except Exception as e:
+            debug_print(f"Error durante el procesamiento: {e}")
+        finally:
+            # Finalizar operacion de UNDO
+            project.endUndo()
 
         return results_found
 
