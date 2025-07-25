@@ -314,6 +314,17 @@ class HieroOperations:
                     clip.removeTag(tag)
                     debug_print(f"→ Eliminado tag 'Version Mismatch' del clip")
 
+    def delete_range_mismatch_tags(self, clip):
+        """Elimina tags de Range Mismatch de un clip"""
+        tags = clip.tags()
+        if tags:
+            for tag in list(
+                tags
+            ):  # Usar list() para evitar modificar durante iteración
+                if tag.name() == "Range Mismatch":
+                    clip.removeTag(tag)
+                    debug_print(f"→ Eliminado tag 'Range Mismatch' del clip")
+
     def process_tracks(self, table, gui_table):
         """MODIFICADO - Procesar clip del track REV basado en posicion del playhead"""
         seq = hiero.ui.activeSequence()
@@ -450,6 +461,8 @@ class HieroOperations:
                     and rev_end_frame == editref_end_frame
                 ):
                     debug_print(f"✓ Los rangos coinciden: {rev_range}")
+                    # Limpiar cualquier tag de Range Mismatch existente
+                    self.delete_range_mismatch_tags(rev_clip)
                     gui_table.add_result(
                         base_identifier,
                         rev_range,
@@ -462,6 +475,14 @@ class HieroOperations:
                     debug_print(
                         f"✗ Los rangos NO coinciden: REV({rev_range}) vs EditRef({editref_range})"
                     )
+                    # Agregar tag amarillo para mismatch de rango
+                    self.add_custom_tag_to_clip(
+                        rev_clip,
+                        "Range Mismatch",
+                        f"EditRef range: {editref_range}",
+                        "icons:TagYellow.png",
+                    )
+                    debug_print(f"→ Agregado tag amarillo 'Range Mismatch' al clip REV")
                     gui_table.add_result(
                         base_identifier,
                         rev_range,
@@ -473,6 +494,16 @@ class HieroOperations:
             else:
                 debug_print(
                     f"- No se encontró clip EditRef correspondiente para: {base_identifier}"
+                )
+                # Agregar tag amarillo para clip EditRef no encontrado
+                self.add_custom_tag_to_clip(
+                    rev_clip,
+                    "Range Mismatch",
+                    f"No EditRef found for {base_identifier}",
+                    "icons:TagYellow.png",
+                )
+                debug_print(
+                    f"→ Agregado tag amarillo 'Range Mismatch' al clip REV (EditRef no encontrado)"
                 )
                 gui_table.add_result(
                     base_identifier,
