@@ -1,7 +1,7 @@
 """
 _________________________________________
 
-  LGA_EditToolsPanel v2.85 - Lega
+  LGA_EditToolsPanel v2.90 | Lega
   Tools panel for Hiero / Nuke Studio
 _________________________________________
 
@@ -116,6 +116,11 @@ class ReconnectMediaWidget(QWidget):
                 self.match_rev_version,
                 "#3d2a47",
             ),  # Nuevo boton para EXR to REV Version Matcher
+            (
+                "Compare Rev EdRef",
+                self.compare_rev_editref,
+                "#3d2a47",
+            ),  # Nuevo boton para comparar REV con EditRef
             # ("Check Frames", self.check_frames, "#4a4329"),  # Nuevo boton
         ]
 
@@ -134,11 +139,15 @@ class ReconnectMediaWidget(QWidget):
             shortcut = button_info[3] if len(button_info) > 3 else None
             tooltip = button_info[4] if len(button_info) > 4 else None
 
-            # Usar CustomButton para el boton Match Rev Ver
+            # Usar CustomButton para el boton Match Rev Ver y Compare Rev EdRef
             if name == "Match Rev Ver":
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.match_rev_version)
                 button.setShiftClickHandler(self.match_rev_version_force_all)
+            elif name == "Compare Rev EdRef":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.compare_rev_editref)
+                button.setShiftClickHandler(self.compare_rev_editref_force_all)
             else:
                 button = QPushButton(name)
                 button.clicked.connect(handler)
@@ -693,6 +702,53 @@ class ReconnectMediaWidget(QWidget):
                 debug_print_b(f"Script no encontrado en la ruta: {script_path}")
         except Exception as e:
             debug_print_b(f"Error general en _execute_match_rev_version: {e}")
+
+    #### Compare Rev EdRef - Nuevo boton para comparar REV con EditRef
+    def compare_rev_editref(self):
+        """Ejecuta el script de comparacion REV vs EditRef (modo playhead)."""
+        debug_print_b("Ejecutando Compare Rev EdRef (modo playhead)...")
+        self._execute_compare_rev_editref(force_all_clips=False)
+
+    def compare_rev_editref_force_all(self):
+        """Ejecuta el script de comparacion REV vs EditRef forzando todos los clips."""
+        debug_print_b("Ejecutando Compare Rev EdRef (forzando todos los clips)...")
+        self._execute_compare_rev_editref(force_all_clips=True)
+
+    def _execute_compare_rev_editref(self, force_all_clips=False):
+        """Ejecuta el script de comparacion con parametro force_all_clips."""
+        try:
+            # Importar y ejecutar el script desde la carpeta LGA_NKS_Edit
+            script_path = os.path.join(
+                os.path.dirname(__file__),
+                "LGA_NKS_Edit",
+                "LGA_NKS_CompareVerToEditref.py",
+            )
+            if os.path.exists(script_path):
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        "LGA_NKS_CompareVerToEditref", script_path
+                    )
+                    if spec is not None and isinstance(
+                        spec.loader,
+                        importlib.machinery.SourceFileLoader,
+                    ):
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        # Llamar a la funcion principal con el parametro
+                        module.compare_rev_to_editref(force_all_clips=force_all_clips)
+                        debug_print_b(
+                            "Compare Rev EdRef script ejecutado correctamente."
+                        )
+                    else:
+                        debug_print_b(
+                            f"No se pudo crear el spec o loader para el script: LGA_NKS_CompareVerToEditref.py"
+                        )
+                except Exception as e:
+                    debug_print_b(f"Error al ejecutar el script Compare Rev EdRef: {e}")
+            else:
+                debug_print_b(f"Script no encontrado en la ruta: {script_path}")
+        except Exception as e:
+            debug_print_b(f"Error general en _execute_compare_rev_editref: {e}")
 
 
 class CleanUnusedAction(QtWidgets.QAction):
