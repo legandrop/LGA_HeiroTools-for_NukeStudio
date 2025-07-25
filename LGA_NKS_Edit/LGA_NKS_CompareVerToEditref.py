@@ -31,6 +31,9 @@ import sys
 # Variable global para activar o desactivar los prints
 DEBUG = True
 
+# Flag para controlar si se analiza y muestra TC IN en la comparacion
+AnalizeTC = False
+
 # Variables globales para mantener la ventana en memoria - COPIADO DEL PULL
 app = None
 window = None
@@ -104,19 +107,33 @@ class FrameRangeComparisonGUI(QWidget):
         self.setWindowTitle("REV to EditRef Frame Range Comparison - Results")
         layout = QVBoxLayout(self)
 
-        self.table = QTableWidget(0, 8, self)
-        self.table.setHorizontalHeaderLabels(
-            [
-                "Shot",
-                "REV Range",
-                "EditRef Range",
-                "REV TC IN",
-                "EditRef TC IN",
-                "REV FPS",
-                "EditRef FPS",
-                "Status",
-            ]
-        )
+        # Ajustar columnas segun la flag AnalizeTC
+        if AnalizeTC:
+            self.table = QTableWidget(0, 8, self)
+            self.table.setHorizontalHeaderLabels(
+                [
+                    "Shot",
+                    "REV Range",
+                    "EditRef Range",
+                    "REV TC IN",
+                    "EditRef TC IN",
+                    "REV FPS",
+                    "EditRef FPS",
+                    "Status",
+                ]
+            )
+        else:
+            self.table = QTableWidget(0, 6, self)
+            self.table.setHorizontalHeaderLabels(
+                [
+                    "Shot",
+                    "REV Range",
+                    "EditRef Range",
+                    "REV FPS",
+                    "EditRef FPS",
+                    "Status",
+                ]
+            )
 
         # COPIADO DEL PULL - Configuracion de tabla
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -164,19 +181,24 @@ class FrameRangeComparisonGUI(QWidget):
         shot_item = QTableWidgetItem(shot_base + "   ")  # COPIADO DEL PULL - espacios
         rev_item = QTableWidgetItem(rev_range)
         editref_item = QTableWidgetItem(editref_range)
-        rev_tc_item = QTableWidgetItem(rev_tc_in)
-        editref_tc_item = QTableWidgetItem(editref_tc_in)
         rev_fps_item = QTableWidgetItem(rev_fps)
         editref_fps_item = QTableWidgetItem(editref_fps)
         status_item = QTableWidgetItem(status)
 
+        # Items de TC solo si AnalizeTC esta activado
+        if AnalizeTC:
+            rev_tc_item = QTableWidgetItem(rev_tc_in)
+            editref_tc_item = QTableWidgetItem(editref_tc_in)
+
         # COPIADO DEL PULL - Centrado
         rev_item.setTextAlignment(Qt.AlignCenter)
         editref_item.setTextAlignment(Qt.AlignCenter)
-        rev_tc_item.setTextAlignment(Qt.AlignCenter)
-        editref_tc_item.setTextAlignment(Qt.AlignCenter)
         rev_fps_item.setTextAlignment(Qt.AlignCenter)
         editref_fps_item.setTextAlignment(Qt.AlignCenter)
+
+        if AnalizeTC:
+            rev_tc_item.setTextAlignment(Qt.AlignCenter)
+            editref_tc_item.setTextAlignment(Qt.AlignCenter)
 
         # Colorear segun el estado
         if status == "Match":
@@ -201,19 +223,34 @@ class FrameRangeComparisonGUI(QWidget):
         status_item.setForeground(QBrush(QColor(status_text_color)))
         status_item.setTextAlignment(Qt.AlignCenter)
 
-        # Agregar items
-        self.table.setItem(row, 0, shot_item)
-        self.table.setItem(row, 1, rev_item)
-        self.table.setItem(row, 2, editref_item)
-        self.table.setItem(row, 3, rev_tc_item)
-        self.table.setItem(row, 4, editref_tc_item)
-        self.table.setItem(row, 5, rev_fps_item)
-        self.table.setItem(row, 6, editref_fps_item)
-        self.table.setItem(row, 7, status_item)
+        # Agregar items segun la flag AnalizeTC
+        if AnalizeTC:
+            # Modo con TC IN (8 columnas)
+            self.table.setItem(row, 0, shot_item)
+            self.table.setItem(row, 1, rev_item)
+            self.table.setItem(row, 2, editref_item)
+            self.table.setItem(row, 3, rev_tc_item)
+            self.table.setItem(row, 4, editref_tc_item)
+            self.table.setItem(row, 5, rev_fps_item)
+            self.table.setItem(row, 6, editref_fps_item)
+            self.table.setItem(row, 7, status_item)
 
-        # COPIADO DEL PULL - Configuracion de colores para delegado
-        row_colors = ["#8a8a8a"] * 8  # Color por defecto para 8 columnas
-        row_colors[7] = status_color  # Color para la columna de status
+            # COPIADO DEL PULL - Configuracion de colores para delegado
+            row_colors = ["#8a8a8a"] * 8  # Color por defecto para 8 columnas
+            row_colors[7] = status_color  # Color para la columna de status
+        else:
+            # Modo sin TC IN (5 columnas)
+            self.table.setItem(row, 0, shot_item)
+            self.table.setItem(row, 1, rev_item)
+            self.table.setItem(row, 2, editref_item)
+            self.table.setItem(row, 3, rev_fps_item)
+            self.table.setItem(row, 4, editref_fps_item)
+            self.table.setItem(row, 5, status_item)
+
+            # COPIADO DEL PULL - Configuracion de colores para delegado
+            row_colors = ["#8a8a8a"] * 6  # Color por defecto para 6 columnas
+            row_colors[5] = status_color  # Color para la columna de status
+
         self.add_color_to_background_list(row_colors)
 
         self.table.resizeColumnsToContents()
@@ -484,10 +521,26 @@ class HieroOperations:
             rev_range = f"{rev_start_frame}-{rev_end_frame}"
 
             # Obtener TC IN y FPS del clip REV
-            rev_tc_in, rev_fps = self.get_tc_in_and_fps(rev_clip)
+            if AnalizeTC:
+                rev_tc_in, rev_fps = self.get_tc_in_and_fps(rev_clip)
+            else:
+                # Solo obtener FPS cuando no se analiza TC
+                try:
+                    media_source = rev_clip.source().mediaSource()
+                    metadata = media_source.metadata()
+                    if "foundry.source.framerate" in metadata:
+                        fps = float(metadata["foundry.source.framerate"])
+                        rev_fps = f"{fps:.3f}"
+                    else:
+                        rev_fps = "N/A"
+                    rev_tc_in = "N/A"  # No analizar TC
+                except:
+                    rev_fps = "N/A"
+                    rev_tc_in = "N/A"
 
             debug_print(f"- Rango de frames del REV: {rev_range}")
-            debug_print(f"- TC IN del REV: {rev_tc_in}")
+            if AnalizeTC:
+                debug_print(f"- TC IN del REV: {rev_tc_in}")
             debug_print(f"- FPS del REV: {rev_fps}")
 
             # Buscar clip correspondiente en EditRef
@@ -504,10 +557,26 @@ class HieroOperations:
                 editref_range = f"{editref_start_frame}-{editref_end_frame}"
 
                 # Obtener TC IN y FPS del clip EditRef
-                editref_tc_in, editref_fps = self.get_tc_in_and_fps(editref_clip)
+                if AnalizeTC:
+                    editref_tc_in, editref_fps = self.get_tc_in_and_fps(editref_clip)
+                else:
+                    # Solo obtener FPS cuando no se analiza TC
+                    try:
+                        media_source = editref_clip.source().mediaSource()
+                        metadata = media_source.metadata()
+                        if "foundry.source.framerate" in metadata:
+                            fps = float(metadata["foundry.source.framerate"])
+                            editref_fps = f"{fps:.3f}"
+                        else:
+                            editref_fps = "N/A"
+                        editref_tc_in = "N/A"  # No analizar TC
+                    except:
+                        editref_fps = "N/A"
+                        editref_tc_in = "N/A"
 
                 debug_print(f"- Rango de frames del EditRef: {editref_range}")
-                debug_print(f"- TC IN del EditRef: {editref_tc_in}")
+                if AnalizeTC:
+                    debug_print(f"- TC IN del EditRef: {editref_tc_in}")
                 debug_print(f"- FPS del EditRef: {editref_fps}")
 
                 # Comparar todos los aspectos
@@ -522,7 +591,13 @@ class HieroOperations:
                 mismatches = []
                 if not range_match:
                     mismatches.append("Range")
-                if not tc_match and rev_tc_in != "N/A" and editref_tc_in != "N/A":
+                # Solo comparar TC si la flag AnalizeTC esta activada
+                if (
+                    AnalizeTC
+                    and not tc_match
+                    and rev_tc_in != "N/A"
+                    and editref_tc_in != "N/A"
+                ):
                     mismatches.append("TC")
                 if not fps_match and rev_fps != "N/A" and editref_fps != "N/A":
                     mismatches.append("FPS")
@@ -601,7 +676,7 @@ class HieroOperations:
                     base_identifier,
                     rev_range,
                     "N/A",
-                    rev_tc_in,
+                    rev_tc_in if AnalizeTC else "N/A",
                     "N/A",
                     rev_fps,
                     "N/A",
