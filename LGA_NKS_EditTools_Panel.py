@@ -1,7 +1,7 @@
 """
 _________________________________________
 
-  LGA_EditToolsPanel v2.83 - Lega
+  LGA_EditToolsPanel v2.85 - Lega
   Tools panel for Hiero / Nuke Studio
 _________________________________________
 
@@ -25,12 +25,37 @@ from PySide2.QtWidgets import (
 )
 from PySide2.QtGui import QIcon
 from PySide2.QtCore import *
+from PySide2.QtCore import Qt
 import importlib.util
 import importlib.machinery
 
 # Variable global para activar o desactivar los prints
 DEBUG = False
 DEBUG_BASIC = True
+
+
+# Clase de botón personalizada que maneja el Shift+Click
+class CustomButton(QPushButton):
+    def __init__(self, text):
+        super(CustomButton, self).__init__(text)
+        self._custom_click_handler = None
+        self._shift_click_handler = None
+
+    def setCustomClickHandler(self, handler):
+        self._custom_click_handler = handler
+
+    def setShiftClickHandler(self, handler):
+        self._shift_click_handler = handler
+
+    def mousePressEvent(self, event):
+        if self._custom_click_handler and self._shift_click_handler:
+            modifiers = event.modifiers()
+            if modifiers & Qt.ShiftModifier:
+                self._shift_click_handler()
+            else:
+                self._custom_click_handler()
+        else:
+            super(CustomButton, self).mousePressEvent(event)
 
 
 def debug_print(*message):
@@ -86,6 +111,11 @@ class ReconnectMediaWidget(QWidget):
                 self.run_clear_tag_script,
                 "#1f1f1f",
             ),  # Nuevo boton movido desde Flow Panel
+            (
+                "Match Rev Ver",
+                self.match_rev_version,
+                "#3d2a47",
+            ),  # Nuevo boton para EXR to REV Version Matcher
             # ("Check Frames", self.check_frames, "#4a4329"),  # Nuevo boton
         ]
 
@@ -104,9 +134,16 @@ class ReconnectMediaWidget(QWidget):
             shortcut = button_info[3] if len(button_info) > 3 else None
             tooltip = button_info[4] if len(button_info) > 4 else None
 
-            button = QPushButton(name)
+            # Usar CustomButton para el boton Match Rev Ver
+            if name == "Match Rev Ver":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.match_rev_version)
+                button.setShiftClickHandler(self.match_rev_version_force_all)
+            else:
+                button = QPushButton(name)
+                button.clicked.connect(handler)
+
             button.setStyleSheet(f"background-color: {style}")
-            button.clicked.connect(handler)
             if shortcut:
                 button.setShortcut(shortcut)
             if tooltip:
@@ -611,6 +648,51 @@ class ReconnectMediaWidget(QWidget):
                 project.endUndo()
         else:
             debug_print("No active project found for Clear Tag.")
+
+    #### Match Rev Ver - Nuevo boton para EXR to REV Version Matcher
+    def match_rev_version(self):
+        """Ejecuta el script de match de versiones EXR to REV."""
+        debug_print_b("Ejecutando Match Rev Ver (modo normal)...")
+        self._execute_match_rev_version(force_all_clips=False)
+
+    def match_rev_version_force_all(self):
+        """Ejecuta el script de match de versiones EXR to REV forzando todos los clips."""
+        debug_print_b("Ejecutando Match Rev Ver (forzando todos los clips)...")
+        self._execute_match_rev_version(force_all_clips=True)
+
+    def _execute_match_rev_version(self, force_all_clips=False):
+        """Ejecuta el script de match de versiones con parametro force_all_clips."""
+        try:
+            # Importar y ejecutar el script desde la carpeta LGA_NKS_Edit
+            script_path = os.path.join(
+                os.path.dirname(__file__),
+                "LGA_NKS_Edit",
+                "LGA_NKS_MatchVerToEXR.py",
+            )
+            if os.path.exists(script_path):
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        "LGA_NKS_MatchVerToEXR", script_path
+                    )
+                    if spec is not None and isinstance(
+                        spec.loader,
+                        importlib.machinery.SourceFileLoader,
+                    ):
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        # Llamar a la funcion principal con el parametro
+                        module.match_exr_to_rev(force_all_clips=force_all_clips)
+                        debug_print_b("Match Rev Ver script ejecutado correctamente.")
+                    else:
+                        debug_print_b(
+                            f"No se pudo crear el spec o loader para el script: LGA_NKS_MatchVerToEXR.py"
+                        )
+                except Exception as e:
+                    debug_print_b(f"Error al ejecutar el script Match Rev Ver: {e}")
+            else:
+                debug_print_b(f"Script no encontrado en la ruta: {script_path}")
+        except Exception as e:
+            debug_print_b(f"Error general en _execute_match_rev_version: {e}")
 
 
 class CleanUnusedAction(QtWidgets.QAction):
