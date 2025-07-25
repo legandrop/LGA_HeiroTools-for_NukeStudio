@@ -121,6 +121,11 @@ class ReconnectMediaWidget(QWidget):
                 self.compare_rev_editref,
                 "#3d2a47",
             ),  # Nuevo boton para comparar REV con EditRef
+            (
+                "Compare EXR aPlate",
+                self.compare_exr_aplate,
+                "#3d2a47",
+            ),  # Nuevo boton para comparar EXR con aPlate
             # ("Check Frames", self.check_frames, "#4a4329"),  # Nuevo boton
         ]
 
@@ -139,7 +144,7 @@ class ReconnectMediaWidget(QWidget):
             shortcut = button_info[3] if len(button_info) > 3 else None
             tooltip = button_info[4] if len(button_info) > 4 else None
 
-            # Usar CustomButton para el boton Match Rev Ver y Compare Rev EdRef
+            # Usar CustomButton para el boton Match Rev Ver, Compare Rev EdRef y Compare EXR aPlate
             if name == "Match Rev Ver":
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.match_rev_version)
@@ -148,6 +153,10 @@ class ReconnectMediaWidget(QWidget):
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.compare_rev_editref)
                 button.setShiftClickHandler(self.compare_rev_editref_force_all)
+            elif name == "Compare EXR aPlate":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.compare_exr_aplate)
+                button.setShiftClickHandler(self.compare_exr_aplate_force_all)
             else:
                 button = QPushButton(name)
                 button.clicked.connect(handler)
@@ -749,6 +758,55 @@ class ReconnectMediaWidget(QWidget):
                 debug_print_b(f"Script no encontrado en la ruta: {script_path}")
         except Exception as e:
             debug_print_b(f"Error general en _execute_compare_rev_editref: {e}")
+
+    #### Compare EXR aPlate - Nuevo boton para comparar EXR con aPlate
+    def compare_exr_aplate(self):
+        """Ejecuta el script de comparacion EXR vs aPlate (modo playhead)."""
+        debug_print_b("Ejecutando Compare EXR aPlate (modo playhead)...")
+        self._execute_compare_exr_aplate(force_all_clips=False)
+
+    def compare_exr_aplate_force_all(self):
+        """Ejecuta el script de comparacion EXR vs aPlate forzando todos los clips."""
+        debug_print_b("Ejecutando Compare EXR aPlate (forzando todos los clips)...")
+        self._execute_compare_exr_aplate(force_all_clips=True)
+
+    def _execute_compare_exr_aplate(self, force_all_clips=False):
+        """Ejecuta el script de comparacion EXR vs aPlate con parametro force_all_clips."""
+        try:
+            # Importar y ejecutar el script desde la carpeta LGA_NKS_Edit
+            script_path = os.path.join(
+                os.path.dirname(__file__),
+                "LGA_NKS_Edit",
+                "LGA_NKS_CompareEXR_to_aPlate.py",
+            )
+            if os.path.exists(script_path):
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        "LGA_NKS_CompareEXR_to_aPlate", script_path
+                    )
+                    if spec is not None and isinstance(
+                        spec.loader,
+                        importlib.machinery.SourceFileLoader,
+                    ):
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        # Llamar a la funcion principal con el parametro
+                        module.compare_exr_to_aplate(force_all_clips=force_all_clips)
+                        debug_print_b(
+                            "Compare EXR aPlate script ejecutado correctamente."
+                        )
+                    else:
+                        debug_print_b(
+                            f"No se pudo crear el spec o loader para el script: LGA_NKS_CompareEXR_to_aPlate.py"
+                        )
+                except Exception as e:
+                    debug_print_b(
+                        f"Error al ejecutar el script Compare EXR aPlate: {e}"
+                    )
+            else:
+                debug_print_b(f"Script no encontrado en la ruta: {script_path}")
+        except Exception as e:
+            debug_print_b(f"Error general en _execute_compare_exr_aplate: {e}")
 
 
 class CleanUnusedAction(QtWidgets.QAction):
