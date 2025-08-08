@@ -35,9 +35,19 @@
             "wasabi_user": "Mati_Moretti"
         },
         {
-            "name": "TestPoli",
-            "color": "#6C00F9",
-            "wasabi_user": "TestPoli"
+            "name": "Daniel Falco",
+            "color": "#2763C1",
+            "wasabi_user": "checho"
+        },
+        {
+            "name": "Javi Bravo",
+            "color": "#27C163",
+            "wasabi_user": "javibravo"
+        },
+        {
+            "name": "Francisco Biancardi",
+            "color": "E57F3A",
+            "wasabi_user": "Francisco_Biancardi"
         }
     ]
 }
