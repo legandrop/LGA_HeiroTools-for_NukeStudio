@@ -1,13 +1,14 @@
 """
 __________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.80 - Lega Pugliese
+  LGA_NKS_Flow_Shot_info v1.81 - Lega Pugliese
   Imprime informacion del shot y las versiones de la task comp
 __________________________________________________________________
 
 """
 
 import hiero.core
+import hiero.ui
 import os
 import re
 import json
@@ -304,6 +305,30 @@ class HieroOperations:
     def __init__(self, shotgrid_manager):
         self.sg_manager = shotgrid_manager
 
+    def find_clip_at_playhead_in_track(self, seq, track_name="EXR"):
+        """Busca el clip en un track dado que coincide con la posicion del playhead.
+        Evita efectos y devuelve el primer clip que cumpla la condicion o None.
+        """
+        try:
+            viewer = hiero.ui.currentViewer()
+            if not viewer:
+                return None
+            current_time = viewer.time()
+            for track in seq.videoTracks():
+                if track.name().upper() == track_name.upper():
+                    for clip in track:
+                        if isinstance(clip, hiero.core.EffectTrackItem):
+                            continue
+                        if clip.timelineIn() <= current_time < clip.timelineOut():
+                            debug_print(
+                                f">>> Clip encontrado en track {track_name} en posicion {current_time}"
+                            )
+                            return clip
+            return None
+        except Exception as e:
+            debug_print(f"Error buscando clip por playhead en track {track_name}: {e}")
+            return None
+
     def parse_exr_name(self, file_name):
         """Extrae el nombre base del archivo EXR y el numero de version."""
         base_name = re.sub(r"_%04d\.exr$", "", file_name)
@@ -312,75 +337,91 @@ class HieroOperations:
         return base_name, version_number
 
     def process_selected_clips(self):
-        """Procesa los clips seleccionados en el timeline de Hiero."""
+        """Procesa primero el clip en playhead del track EXR y, si no existe, la seleccion."""
         debug_print("Processing selected clips...")
         seq = hiero.ui.activeSequence()
-        if seq:
-            te = hiero.ui.getTimelineEditor(seq)
-            selected_clips = te.selection()
-            results = []
-
-            if selected_clips:
-                for clip in selected_clips:
-                    if isinstance(clip, hiero.core.EffectTrackItem):
-                        continue  # Pasar de largo los clips que sean efectos
-
-                    file_path = clip.source().mediaSource().fileinfos()[0].filename()
-                    exr_name = os.path.basename(file_path)
-                    base_name, version_number = self.parse_exr_name(exr_name)
-
-                    project_name = base_name.split("_")[0]
-                    parts = base_name.split("_")
-                    shot_code = "_".join(parts[:5])
-
-                    # Realizar operacion intensiva en el JSON
-                    QCoreApplication.processEvents()
-                    shot = self.sg_manager.find_shot(project_name, shot_code)
-                    debug_print(f"Shot found: {shot}")
-
-                    QCoreApplication.processEvents()
-                    if shot:
-                        task = self.sg_manager.find_task(shot, "comp")
-                        debug_print(f"Task found: {task}")
-                        task_description = (
-                            task["task_description"] if task else "No info available"
-                        )
-                        assignee = task["task_assigned_to"] if task else "No assignee"
-                        versions = task["versions"] if task else []
-
-                        # Obtener las tres ultimas versiones
-                        last_versions = sorted(
-                            versions, key=lambda v: v["version_date"], reverse=True
-                        )
-                        version_info = []
-                        for v in last_versions:
-                            match = re.search(r"v(\d+)", v["version_number"])
-                            version_number = (
-                                match.group() if match else v["version_number"]
-                            )
-                            version_info.append(
-                                {
-                                    "version_number": version_number,
-                                    "version_description": v["version_description"]
-                                    or "No description",
-                                    "comments": v.get("comments", []),
-                                    "created_by": v.get("created_by", "Unknown"),
-                                }
-                            )
-
-                        shot_info = {
-                            "shot_code": shot["shot_name"],
-                            "description": task_description,
-                            "assignee": assignee,
-                            "versions": version_info,
-                        }
-                        results.append(shot_info)
-                    QCoreApplication.processEvents()
-            debug_print("Processing completed.")
-            return results
-        else:
+        if not seq:
             debug_print("No se encontro una secuencia activa en Hiero.")
             return []
+
+        # Intentar obtener clip por playhead en track EXR
+        playhead_clip = self.find_clip_at_playhead_in_track(seq, track_name="EXR")
+
+        # Fallback a seleccion
+        te = hiero.ui.getTimelineEditor(seq)
+        selected_clips = te.selection() if te else []
+
+        if playhead_clip:
+            clips_to_process = [playhead_clip]
+            debug_print(
+                ">>> Usando clip del playhead en track EXR; fallback a seleccion si no hay"
+            )
+        else:
+            clips_to_process = selected_clips
+            debug_print(
+                ">>> No hay clip en playhead sobre EXR; usando clips seleccionados como fallback"
+            )
+
+        results = []
+        if not clips_to_process:
+            debug_print("No se encontraron clips para procesar.")
+            return results
+
+        for clip in clips_to_process:
+            if isinstance(clip, hiero.core.EffectTrackItem):
+                continue  # Pasar de largo los clips que sean efectos
+
+            file_path = clip.source().mediaSource().fileinfos()[0].filename()
+            exr_name = os.path.basename(file_path)
+            base_name, version_number = self.parse_exr_name(exr_name)
+
+            project_name = base_name.split("_")[0]
+            parts = base_name.split("_")
+            shot_code = "_".join(parts[:5])
+
+            # Operaciones intensivas: ceder tiempo de UI
+            QCoreApplication.processEvents()
+            shot = self.sg_manager.find_shot(project_name, shot_code)
+            debug_print(f"Shot found: {shot}")
+
+            QCoreApplication.processEvents()
+            if shot:
+                task = self.sg_manager.find_task(shot, "comp")
+                debug_print(f"Task found: {task}")
+                task_description = (
+                    task["task_description"] if task else "No info available"
+                )
+                assignee = task["task_assigned_to"] if task else "No assignee"
+                versions = task["versions"] if task else []
+
+                last_versions = sorted(
+                    versions, key=lambda v: v["version_date"], reverse=True
+                )
+                version_info = []
+                for v in last_versions:
+                    match = re.search(r"v(\d+)", v["version_number"])
+                    version_number = match.group() if match else v["version_number"]
+                    version_info.append(
+                        {
+                            "version_number": version_number,
+                            "version_description": v["version_description"]
+                            or "No description",
+                            "comments": v.get("comments", []),
+                            "created_by": v.get("created_by", "Unknown"),
+                        }
+                    )
+
+                shot_info = {
+                    "shot_code": shot["shot_name"],
+                    "description": task_description,
+                    "assignee": assignee,
+                    "versions": version_info,
+                }
+                results.append(shot_info)
+            QCoreApplication.processEvents()
+
+        debug_print("Processing completed.")
+        return results
 
 
 class GUIWindow(QWidget):
