@@ -1,7 +1,7 @@
 """
 __________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.81 - Lega Pugliese
+  LGA_NKS_Flow_Shot_info v1.82 - Lega Pugliese
   Imprime informacion del shot y las versiones de la task comp
 __________________________________________________________________
 
@@ -680,8 +680,15 @@ class GUIWindow(QWidget):
 
 def main():
     global app, window
-    # Usar la ruta hardcodeada de la base de datos
-    db_path = r"C:/Portable/LGA/PipeSync/cache/pipesync.db"
+    # Selecciona la ruta de la base de datos segun el sistema operativo
+    if platform.system() == "Windows":
+        db_path = r"C:/Portable/LGA/PipeSync/cache/pipesync.db"
+    elif platform.system() == "Darwin":  # macOS
+        db_path = "/Users/leg4/Library/Caches/LGA/PipeSync/pipesync.db"
+    else:
+        debug_print(f"Sistema operativo no soportado: {platform.system()}")
+        return
+
     if not os.path.exists(db_path):
         debug_print(f"DB file not found at path: {db_path}")
         return
