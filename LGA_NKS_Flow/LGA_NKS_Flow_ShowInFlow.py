@@ -1,7 +1,7 @@
 """
 _____________________________________________________________________________________________________
 
-  LGA_NKS_Flow_ShowInFlow v1.2 | Lega Pugliese
+  LGA_NKS_Flow_ShowInFlow v1.22 | Lega Pugliese
   Abre la URL de la task Comp del shot, tomando la informacion del nombre del clip seleccionado
   Verifica si existe más de un shot con el mismo nombre y te pide que selecciones uno
 _____________________________________________________________________________________________________
@@ -78,11 +78,11 @@ if toolpack_dir:
 # Ahora importamos shotgun_api3
 import shotgun_api3
 
-# Constantes para el archivo de configuracion
-CONFIG_FILE_NAME = "ShowInFlow.dat"  # Cambiar extension a .dat
-CONFIG_URL_KEY = "shotgrid_url"  # Mantener nombres de clave conceptualmente
-CONFIG_LOGIN_KEY = "shotgrid_login"
-CONFIG_PASSWORD_KEY = "shotgrid_password"
+# --- INICIO: Importar el módulo de configuración segura ---
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent))
+from SecureConfig_Reader import get_flow_credentials
+# --- FIN: Importar el módulo de configuración segura ---
 
 
 class ShotSelectionDialog(QDialog):
@@ -124,108 +124,6 @@ class ShotSelectionDialog(QDialog):
         self.result_value = index
         self.accept()
 
-
-# --- Inicio: Funciones de manejo de configuracion (modificadas para base64) ---
-
-
-def get_config_path():
-    """Devuelve la ruta completa al archivo de configuracion."""
-    try:
-        user_config_dir = get_user_config_dir()
-        if not user_config_dir:
-            return None
-        config_dir = os.path.join(user_config_dir, "LGA", "ToolPack")
-        return os.path.join(config_dir, CONFIG_FILE_NAME)
-    except Exception as e:
-        debug_print(f"Error al obtener la ruta de configuracion: {e}")
-        return None
-
-
-def ensure_config_exists():
-    """
-    Asegura que el directorio de configuracion y el archivo .dat existan.
-    Si no existen, los crea con valores vacios codificados.
-    """
-    config_file_path = get_config_path()
-    if not config_file_path:
-        return
-
-    config_dir = os.path.dirname(config_file_path)
-
-    try:
-        # Crear el directorio si no existe
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-            debug_print(f"Directorio de configuracion creado: {config_dir}")
-
-        # Crear el archivo .dat si no existe, con lineas vacias codificadas
-        if not os.path.exists(config_file_path):
-            # Escribir lineas vacias codificadas para mantener estructura
-            empty_encoded = base64.b64encode("".encode("utf-8")).decode("utf-8")
-            with open(config_file_path, "w", encoding="utf-8") as configfile:
-                configfile.write(f"{empty_encoded}\\n")  # URL
-                configfile.write(f"{empty_encoded}\\n")  # Login
-                configfile.write(f"{empty_encoded}\\n")  # Password
-            debug_print(
-                f"Archivo de configuración creado: {config_file_path}. Por favor, complételo usando LGA_ToolPack_settings."
-            )
-
-    except Exception as e:
-        debug_print(f"Error al asegurar la configuración: {e}")
-
-
-def get_credentials_from_config():
-    """
-    Lee las credenciales de ShotGrid desde el archivo .dat codificado.
-    Devuelve (url, login, password) decodificados o (None, None, None) si hay errores.
-    """
-    config_file_path = get_config_path()
-    if not config_file_path or not os.path.exists(config_file_path):
-        debug_print(
-            f"Archivo de configuración (.dat) no encontrado en la ruta esperada: {config_file_path}"
-        )
-        return None, None, None
-
-    try:
-        with open(config_file_path, "r", encoding="utf-8") as configfile:
-            lines = configfile.readlines()
-
-        if len(lines) < 3:
-            debug_print(
-                f"Archivo de configuración {config_file_path} está incompleto o corrupto."
-            )
-            return None, None, None
-
-        # Decodificar cada linea
-        sg_url_encoded = lines[0].strip()
-        sg_login_encoded = lines[1].strip()
-        sg_password_encoded = lines[2].strip()
-
-        sg_url = base64.b64decode(sg_url_encoded).decode("utf-8")
-        sg_login = base64.b64decode(sg_login_encoded).decode("utf-8")
-        sg_password = base64.b64decode(sg_password_encoded).decode("utf-8")
-
-        # Validar que los valores no esten vacios despues de decodificar
-        if sg_url and sg_login and sg_password:
-            return sg_url, sg_login, sg_password
-        else:
-            debug_print(
-                f"Una o más credenciales en {config_file_path} están vacías (después de decodificar)."
-            )
-            return None, None, None
-
-    except (binascii.Error, UnicodeDecodeError) as e:  # Usar binascii.Error
-        debug_print(
-            f"Error al decodificar el archivo de configuración {config_file_path}: {e}"
-        )
-        return None, None, None
-    except Exception as e:
-        debug_print(f"Error inesperado al leer la configuración codificada: {e}")
-        return None, None, None
-
-
-# Asegurarse de que el archivo de configuracion existe al iniciar
-ensure_config_exists()
 
 # Verificacion del sistema operativo y configuracion de la ruta del navegador
 if platform.system() == "Windows":
@@ -413,9 +311,9 @@ class HieroOperations:
 
 def threaded_function():
     # Leer credenciales desde el archivo .dat usando la funcion adaptada
-    url, login, password = get_credentials_from_config()
+    url, login, password = get_flow_credentials()
     if not url or not login or not password:
-        config_path = get_config_path() or "LGA/ToolPack/ShowInFlow.dat"
+        config_path = get_user_config_dir() or "LGA/ToolPack/ShowInFlow.dat"
         return f"No se pudieron leer las credenciales desde: {config_path}\nRevise la consola para detalles y asegúrese de que el archivo esté completo usando LGA_ToolPack_settings."
 
     # Si las credenciales son validas, proceder con la logica original
@@ -437,7 +335,7 @@ def threaded_function():
 
     except shotgun_api3.AuthenticationFault:
         # Error especifico de autenticacion
-        error_message = f"Error de autenticación con ShotGrid.\nVerifique las credenciales en:\n{get_config_path()}"
+        error_message = f"Error de autenticación con ShotGrid.\nVerifique las credenciales en:\n{get_user_config_dir()}"
         debug_print("Error de autenticación con ShotGrid.")
         return error_message  # Devolver el mensaje de error
 
@@ -483,7 +381,7 @@ def show_in_flow_from_selected_clip():
             debug_print(f"Shot seleccionado: {selected_shot['id']}")
 
             # Buscar task Comp y abrir URL
-            url, login, password = get_credentials_from_config()
+            url, login, password = get_flow_credentials()
             if url and login and password:
                 sg_manager = ShotGridManager(url, login, password)
 
