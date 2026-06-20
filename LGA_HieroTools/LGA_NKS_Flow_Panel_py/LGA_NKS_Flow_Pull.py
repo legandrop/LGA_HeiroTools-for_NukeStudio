@@ -1,12 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.45 | Lega
+  LGA_NKS_Flow_Pull v3.46 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.46: El Pull distingue "DB vacia/sin sincronizar" de "no hay cambios". Si la DB de
+         PipeSync no tiene proyectos (tipico en modo client sin Flow sincronizado) avisa
+         claramente con un warning en vez de mostrar "No changes detected". Tambien, si
+         ningun shot del timeline aparece en la DB, avisa que puede no estar sincronizada.
+         Nuevo ShotGridManager.count_projects() y contadores shots_found_in_db/shots_not_found.
   v3.45: La tabla de resultados del Pull navega primero al proyecto/secuencia
          correctos usando switch_to_sequence_hybrid del Projects Panel. Esto
          evita abrir o seleccionar clips en timelines homonimos de otros proyectos.
@@ -288,6 +293,7 @@ from LGA_NKS_Shared.LGA_NKS_TaskMismatchDialog import (
 )
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import validate_pull_preflight
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -558,6 +564,20 @@ class ShotGridManager:
             "version_description": highest_version.get("description", ""),
         }
 
+    def count_projects(self):
+        """Cuenta los proyectos en la DB. Sirve para detectar DB vacia/sin sincronizar.
+
+        Devuelve el numero de proyectos, o -1 si no se pudo determinar.
+        """
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM projects")
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+        except Exception as e:
+            debug_print(f"Error contando proyectos en DB: {e}")
+            return -1
+
     def close(self):
         if hasattr(self, "conn") and self.conn:
             self.conn.close()
@@ -594,6 +614,23 @@ class GUI_Table(QWidget):
             if changes_exist:
                 self.adjust_window_size()
                 self.show()
+            elif (
+                self.hiero_ops.shots_found_in_db == 0
+                and self.hiero_ops.shots_not_found > 0
+            ):
+                # Ningun shot del timeline existe en la DB: probablemente la DB
+                # esta sin sincronizar para este contexto (no es que no haya cambios).
+                QMessageBox.warning(
+                    self,
+                    "Shots no encontrados en PipeSync",
+                    (
+                        f"Ninguno de los {self.hiero_ops.shots_not_found} shot(s) del timeline "
+                        "se encontro en la base de datos de PipeSync.\n\n"
+                        "Puede que la DB no este sincronizada para este contexto, o que los "
+                        "nombres de proyecto/shot no coincidan con Flow.\n\n"
+                        "Abri PipeSync, configura Flow y sincroniza."
+                    ),
+                )
             else:
                 QMessageBox.information(
                     self,
@@ -737,6 +774,9 @@ class HieroOperations:
             "v_00": "#8a8a8a",
             "Rev Dir Den": "#4d21a8",
         }
+        # Contadores para distinguir "sin cambios" de "shots no encontrados en la DB"
+        self.shots_found_in_db = 0
+        self.shots_not_found = 0
 
     def parse_exr_name(self, file_name):
         """Extrae el nombre base del archivo y el numero de version con prefijo."""
@@ -1146,6 +1186,7 @@ class HieroOperations:
                     )
                     shot = sg_manager.find_shot(project_name, shot_code)
                     if shot:
+                        self.shots_found_in_db += 1
                         debug_print(f"Shot encontrado: {shot_code}")
                         debug_print(f"Buscando task '{task_name}' en el shot")
                         task = sg_manager.find_task(shot, task_name)
@@ -1285,6 +1326,7 @@ class HieroOperations:
                             )
                             pass
                     else:
+                        self.shots_not_found += 1
                         debug_print(
                             f"No se encontro shot '{shot_code}' en el proyecto '{project_name}'"
                         )
@@ -1656,6 +1698,28 @@ def FPT_Hiero(force_all_clips=False):
         )
         return
     sg_manager = ShotGridManager(db_path)
+
+    # La DB puede existir pero estar vacia (sin sincronizar). Tipico en modo client
+    # cuando Flow no fue configurado/sincronizado. Avisar claramente en vez de
+    # mostrar "No changes detected" mas adelante.
+    project_count = sg_manager.count_projects()
+    if project_count == 0:
+        context_mode = get_context_mode()
+        debug_print(f"DB de PipeSync vacia (0 proyectos) en: {db_path}")
+        sg_manager.close()
+        QMessageBox.warning(
+            None,
+            "PipeSync sin datos",
+            (
+                f"La base de datos de PipeSync (modo '{context_mode}') esta vacia:\n"
+                f"{db_path}\n\n"
+                "No hay proyectos ni shots sincronizados, por eso el Pull no encuentra nada.\n\n"
+                "Abri PipeSync en este contexto, configura Flow y sincroniza para generar "
+                "la cache/DB local."
+            ),
+        )
+        return
+
     app = QApplication.instance() if QApplication.instance() else QApplication(sys.argv)
     window = GUI_Table(sg_manager)
     hiero_ops = HieroOperations(sg_manager, window)

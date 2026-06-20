@@ -2,14 +2,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.23 | Lega
+  LGA_NKS_Projects_Panel v2.24 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
-  - Botón de switch Studio/Client visible para lega@wanka.tv.
+  - Toggle pill Studio/Client (alineado a la derecha del contador) visible para lega@wanka.tv.
 
+  v2.24: Reemplazado el botón de switch por un toggle pill Client/Studio alineado a la derecha
+         de la línea de proyectos encontrados. Nuevos métodos set_context_mode() (cambio directo
+         sin popup) y _refresh_context_toggle() (estilo activo/inactivo). Se eliminó el botón viejo.
   v2.23: Agregado botón de switch Studio/Client: lee login de PipeSync normal y muestra botón
          debajo de refresh solo para lega@wanka.tv, permitiendo cambiar entre contextos studio/client
          con persistencia en INI y ENV. Se migró lógica de UIManager para inicializar dependencias
@@ -303,7 +306,8 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.settings_timer_dropdown = None
         self.auto_refresh_timer = QtCore.QTimer(self)
         self.auto_refresh_timer.timeout.connect(self._on_auto_refresh_timeout)
-        self.context_switch_button = None
+        self.ctx_client_btn = None
+        self.ctx_studio_btn = None
         self.normal_pipesync_login = self._get_normal_pipesync_login()
 
         UIManager.setup_ui(self)
@@ -334,15 +338,28 @@ class ProjectsPanel(QtWidgets.QWidget):
             return Path(ini_path)
         return Path(__file__).resolve().parent.parent / "LGA_HieroTools_context.ini"
 
-    def _refresh_context_switch_button_text(self):
-        if not self.context_switch_button:
+    def _refresh_context_toggle(self):
+        """Actualiza el estilo del toggle pill segun el contexto activo."""
+        if not hasattr(self, "ctx_client_btn") or self.ctx_client_btn is None:
             return
         current_mode = get_context_mode()
-        target_mode = "client" if current_mode == "studio" else "studio"
-        self.context_switch_button.setText(f"→ {target_mode}")
-        self.context_switch_button.setToolTip(
-            f"Contexto actual: {current_mode}. Click para cambiar a {target_mode}."
+        active_style = (
+            "QPushButton { background: #443a91; color: #cccccc; border: none;"
+            " border-radius: 11px; padding: 3px 14px; font-size: 12px; }"
         )
+        inactive_style = (
+            "QPushButton { background: transparent; color: #8a8a8a; border: none;"
+            " border-radius: 11px; padding: 3px 14px; font-size: 12px; }"
+            " QPushButton:hover { color: #c8c8c8; }"
+        )
+        if current_mode == "client":
+            self.ctx_client_btn.setStyleSheet(active_style)
+            self.ctx_studio_btn.setStyleSheet(inactive_style)
+        else:
+            self.ctx_studio_btn.setStyleSheet(active_style)
+            self.ctx_client_btn.setStyleSheet(inactive_style)
+        self.ctx_client_btn.setToolTip("Contexto Client (PipeSyncClient)")
+        self.ctx_studio_btn.setToolTip("Contexto Studio (PipeSync normal)")
 
     def _write_context_mode(self, mode):
         ini_path = self._get_context_ini_path()
@@ -367,24 +384,20 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.start_scan()
         QtCore.QTimer.singleShot(150, self.start_scan)
 
-    def toggle_context_mode(self):
+    def set_context_mode(self, mode):
+        """Cambia el contexto al modo indicado (studio|client) si difiere del actual."""
+        new_mode = "client" if mode == "client" else "studio"
         current_mode = get_context_mode()
-        new_mode = "client" if current_mode == "studio" else "studio"
+        if new_mode == current_mode:
+            return
         try:
-            ini_path = self._write_context_mode(new_mode)
+            self._write_context_mode(new_mode)
             self._reload_after_context_switch()
-            self._refresh_context_switch_button_text()
-            QtWidgets.QMessageBox.information(
-                self,
-                "Contexto actualizado",
-                (
-                    f"Contexto cambiado a '{new_mode}'.\n"
-                    f"INI: {ini_path}\n"
-                    "Se recargó el panel de Projects."
-                ),
-            )
+            self._refresh_context_toggle()
+            debug_print(f"Contexto cambiado a '{new_mode}' desde toggle")
         except Exception as e:
             debug_print(f"Error al cambiar contexto: {e}")
+            self._refresh_context_toggle()
             QtWidgets.QMessageBox.warning(
                 self, "Error al cambiar contexto", f"No se pudo cambiar el contexto:\n{e}"
             )
