@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.26 | Lega
+  LGA_import_shots v1.27 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.27: Bulk Import con seleccion multiple de carpetas, tabs editables por
+         shot, preview combinado acotado y ejecucion en un unico undo.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -231,6 +233,11 @@ if _BIN_HELPER in sys.modules:
     del sys.modules[_BIN_HELPER]
 bin_mod = importlib.import_module(_BIN_HELPER)
 
+_BULK_HELPER = "LGA_NKS_Edit_Panel_py.LGA_import_shots_bulk"
+if _BULK_HELPER in sys.modules:
+    del sys.modules[_BULK_HELPER]
+bulk_mod = importlib.import_module(_BULK_HELPER)
+
 # ── tooltip helper ──────────────────────────────────────────────────────────
 _TOOLTIP_HELPER = "LGA_NKS_Shared.LGA_tooltip_helper"
 if _TOOLTIP_HELPER in sys.modules:
@@ -344,7 +351,7 @@ def cleanup_logging():
 
 def _inject_preview_logger():
     """Inyecta debug_print en los módulos auxiliares para que usen el mismo logger."""
-    for mod in (preview_mod, timeline_mod, bin_mod):
+    for mod in (preview_mod, timeline_mod, bin_mod, bulk_mod):
         try:
             mod.set_debug_print(debug_print)
         except Exception:
@@ -6545,7 +6552,317 @@ class ImportShotDialog(QtWidgets.QDialog):
 #  Singleton del diálogo (patrón no-bloqueante, igual que CreateV000)
 # ══════════════════════════════════════════════════════════════════
 
+class _BulkShotPanel(ImportShotDialog):
+    """Editor liviano que reutiliza exactamente la tabla del import individual."""
+
+    def __init__(self, entry, seq, parent=None):
+        QtWidgets.QDialog.__init__(self, parent)
+        self.setWindowFlags(QtCore.Qt.Widget)
+        self.shot_root = entry["shot_root"]
+        self.shot_name = entry["shot_name"]
+        self.seq = seq
+        self.insert_frame = entry["insert_frame"]
+        self.frames_to_push = entry.get("max_frames", 100)
+        self.prev_shot_name = entry.get("prev_shot_name")
+        self.next_shot_name = entry.get("next_shot_name")
+        self.input_items = entry["input_items"]
+        self.publish_items = entry["publish_items"]
+        self._track_overrides = {}
+        self._create_v000_tasks = set()
+        try:
+            self._fps = float(seq.framerate().toFloat())
+        except Exception:
+            self._fps = 24.0
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(9, 9, 9, 9)
+        layout.addWidget(self._build_media_table(), 1)
+        buttons = QtWidgets.QHBoxLayout()
+        for label, slot in [
+            ("Select All", self._select_all),
+            ("Clear", self._clear_selection),
+            ("Plates", lambda: self._select_section("plates")),
+            ("References", lambda: self._select_section("refs")),
+            ("Publish", lambda: self._select_section("publish")),
+        ]:
+            button = QtWidgets.QPushButton(label)
+            button.setStyleSheet(_BTN_SMALL)
+            button.clicked.connect(slot)
+            buttons.addWidget(button)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+
+    def selected_items(self):
+        result = []
+        for row, checkbox in self._checkboxes.items():
+            if not checkbox.isChecked():
+                continue
+            row_data = self._table_rows[row]
+            track = self._get_track_for_row(row)
+            if row_data.get("type") == "data" and track:
+                result.append((track, row_data["item"], self._item_hiero_color(row_data)))
+        return result
+
+    def master_duration(self):
+        duration = max(
+            (it.get("frame_count") or 0 for it in self.input_items
+             if it.get("kind") == "exr_seq" and it.get("is_latest")),
+            default=0,
+        )
+        return duration or 100
+
+
+class BulkImportDialog(QtWidgets.QDialog):
+    """Tabs editables por shot, preview combinado y ejecucion atomica del batch."""
+
+    def __init__(self, seq, entries, skipped=None, parent=None):
+        super(BulkImportDialog, self).__init__(parent)
+        self.seq = seq
+        self.entries = entries
+        self.skipped = skipped or []
+        self.panels = []
+        self.setObjectName("LGA_BulkImportDialog")
+        self.setWindowTitle("Bulk Import Shots — %d shots" % len(entries))
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+        self.setMinimumSize(1300, 700)
+        self.setStyleSheet(_DIALOG_STYLE)
+
+        root = QtWidgets.QVBoxLayout(self)
+        self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setStyleSheet(ImportShotDialog._TAB_STYLE)
+        for entry in entries:
+            panel = _BulkShotPanel(entry, seq, self)
+            self.panels.append(panel)
+            self.tabs.addTab(panel, entry["shot_name"])
+        self.preview_page = self._build_preview_page()
+        self.tabs.addTab(self.preview_page, "PREVIEW")
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        root.addWidget(self.tabs, 1)
+
+        footer = QtWidgets.QHBoxLayout()
+        if self.skipped:
+            skipped_text = "Omitidos (ya existen o repetidos): %s" % ", ".join(self.skipped)
+            label = QtWidgets.QLabel(skipped_text)
+            label.setStyleSheet("color:#c69a58;")
+            label.setToolTip(skipped_text)
+            footer.addWidget(label, 1)
+        else:
+            footer.addStretch(1)
+        cancel = QtWidgets.QPushButton("Cancel")
+        cancel.setStyleSheet(_BTN_SECONDARY)
+        cancel.clicked.connect(self.reject)
+        footer.addWidget(cancel)
+        self.import_button = QtWidgets.QPushButton("Import All (%d shots)" % len(entries))
+        self.import_button.setStyleSheet(_BTN_PRIMARY)
+        self.import_button.clicked.connect(self._do_bulk_import)
+        footer.addWidget(self.import_button)
+        root.addLayout(footer)
+
+    def _build_preview_page(self):
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        note = QtWidgets.QLabel(
+            "Resultado combinado: desde el vecino anterior al primer shot nuevo "
+            "hasta el vecino siguiente al ultimo. Los shots violetas son nuevos."
+        )
+        note.setStyleSheet("color:#999999; padding:3px;")
+        layout.addWidget(note)
+        self.preview_table = QtWidgets.QTableWidget()
+        self.preview_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        self.preview_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.preview_table.verticalHeader().setVisible(False)
+        self.preview_table.setStyleSheet(_TABLE_STYLE)
+        layout.addWidget(self.preview_table, 1)
+        return page
+
+    def _on_tab_changed(self, index):
+        # Un tab puede haber creado un track. Refrescar las opciones del resto
+        # sin alterar sus selecciones actuales.
+        for panel in self.panels:
+            panel._refresh_track_combo_options()
+        if index == self.tabs.count() - 1:
+            self._refresh_preview()
+
+    def _preview_shots(self, layout_data):
+        alpha = sorted(layout_data["final_shots"], key=lambda s: s["shot_name"].lower())
+        new_indices = [i for i, shot in enumerate(alpha) if shot.get("is_new")]
+        if not new_indices:
+            return []
+        first = max(0, min(new_indices) - 1)
+        last = min(len(alpha) - 1, max(new_indices) + 1)
+        return alpha[first:last + 1]
+
+    def _existing_clip_names(self):
+        result = {}
+        for track in self.seq.videoTracks():
+            try:
+                track_name = track.name()
+            except Exception:
+                continue
+            for item in track.items():
+                if isinstance(item, hiero.core.EffectTrackItem):
+                    continue
+                try:
+                    shot_name = item.name()
+                    clip_name = item.source().name()
+                except Exception:
+                    continue
+                result.setdefault((shot_name, track_name), []).append(clip_name)
+        return result
+
+    def _refresh_preview(self):
+        new_data = [{"shot_name": p.shot_name, "max_frames": p.master_duration()}
+                    for p in self.panels]
+        layout_data = bulk_mod.simulate_bulk_layout(
+            _collect_timeline_shots(self.seq), new_data
+        )
+        shots = self._preview_shots(layout_data)
+        selected = {}
+        track_names = []
+        try:
+            track_names = [t.name() for t in reversed(list(self.seq.videoTracks()))]
+        except Exception:
+            pass
+        for panel in self.panels:
+            for track, item, color in panel.selected_items():
+                selected.setdefault((panel.shot_name, track), []).append((item, color))
+                if track not in track_names:
+                    track_names.append(track)
+
+        existing = self._existing_clip_names()
+        table = self.preview_table
+        table.clear()
+        table.setRowCount(len(track_names))
+        table.setColumnCount(len(shots) + 1)
+        table.setHorizontalHeaderLabels(["Track"] + [s["shot_name"] for s in shots])
+        for row, track_name in enumerate(track_names):
+            track_item = QtWidgets.QTableWidgetItem(track_name)
+            track_item.setForeground(QtGui.QColor("#aaaaaa"))
+            table.setItem(row, 0, track_item)
+            for col, shot in enumerate(shots, 1):
+                key = (shot["shot_name"], track_name)
+                if shot.get("is_new"):
+                    names = [it.get("name") or it.get("version_name") or "?"
+                             for it, _color in selected.get(key, [])]
+                    cell = QtWidgets.QTableWidgetItem("\n".join(names))
+                    cell.setForeground(QtGui.QColor("#b39ddb"))
+                    cell.setBackground(QtGui.QColor("#302a3d"))
+                else:
+                    cell = QtWidgets.QTableWidgetItem("\n".join(existing.get(key, [])))
+                    cell.setForeground(QtGui.QColor("#888888"))
+                cell.setTextAlignment(QtCore.Qt.AlignCenter)
+                table.setItem(row, col, cell)
+            table.setRowHeight(row, 42)
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
+        table.setColumnWidth(0, 130)
+        for col in range(1, table.columnCount()):
+            header.setSectionResizeMode(col, QtWidgets.QHeaderView.Interactive)
+            table.setColumnWidth(col, 190)
+
+    @staticmethod
+    def _editref_offset(track_name, item, master_duration):
+        if classify_track_type(track_name) != "editref":
+            return 0
+        duration = item.get("frame_count") or 0
+        return max(0, master_duration - duration) // 2
+
+    def _do_bulk_import(self):
+        empty = [p.shot_name for p in self.panels if not p.selected_items()]
+        if empty:
+            _show_tool_message(
+                self, "Bulk Import",
+                "Estos shots no tienen items seleccionados con track asignado:\n%s"
+                % "\n".join(empty),
+            )
+            return
+
+        project = None
+        try:
+            project = self.seq.project()
+        except Exception:
+            pass
+        errors, placed_items = [], []
+
+        def run():
+            for panel in sorted(self.panels, key=lambda p: p.shot_name.lower()):
+                duration = panel.master_duration()
+                selected_items = panel.selected_items()
+                selected_master = max(
+                    (item.get("frame_count") or 0
+                     for _track, item, _color in selected_items),
+                    default=duration,
+                )
+                insert_frame, frames_to_push, _prev, _next = _find_insert_frame(
+                    self.seq, panel.shot_name, duration
+                )
+                effective_frame = insert_frame
+                if frames_to_push > 0:
+                    _moved, effective_frame = timeline_mod.push_clips_right(
+                        self.seq, insert_frame, frames_to_push
+                    )
+                target_bin = bin_mod.find_or_create_shot_bin(self.seq, panel.shot_name)
+                for track_name, item, color in selected_items:
+                    clip_name = item.get("name") or item.get("version_name") or "?"
+                    clip, error = bin_mod.import_item_to_bin(item, target_bin)
+                    if error:
+                        errors.append("%s / %s (bin): %s" %
+                                      (panel.shot_name, clip_name, error))
+                        continue
+                    try:
+                        clip.binItem().setColor(QtGui.QColor(color))
+                    except Exception:
+                        pass
+                    frame_count = item.get("frame_count") or 0
+                    if not frame_count:
+                        try:
+                            frame_count = clip.mediaSource().duration()
+                        except Exception:
+                            frame_count = 0
+                    clip_in = effective_frame + self._editref_offset(
+                        track_name, item, selected_master
+                    )
+                    timeline_item, error = timeline_mod.place_clip_in_timeline(
+                        self.seq, clip, track_name, clip_in, frame_count, panel.shot_name
+                    )
+                    if error:
+                        errors.append("%s / %s (timeline): %s" %
+                                      (panel.shot_name, clip_name, error))
+                    elif timeline_item is not None:
+                        placed_items.append(timeline_item)
+            if placed_items:
+                timeline_mod.stretch_burnin(self.seq)
+                valid = [item for item in placed_items if item.parentTrack() is not None]
+                if valid:
+                    self.seq.setInTime(min(int(item.timelineIn()) for item in valid))
+                    self.seq.setOutTime(max(int(item.timelineOut()) for item in valid))
+
+        self.import_button.setEnabled(False)
+        try:
+            if project:
+                with project.beginUndo("Bulk Import: %d shots" % len(self.panels)):
+                    run()
+            else:
+                run()
+        finally:
+            self.import_button.setEnabled(True)
+
+        if placed_items:
+            tc_in = min(int(item.timelineIn()) for item in placed_items
+                        if item.parentTrack() is not None)
+            tc_out = max(int(item.timelineOut()) for item in placed_items
+                         if item.parentTrack() is not None)
+            timeline_mod.set_viewer_to_shot(self.seq, tc_in, tc_out)
+        if errors:
+            QtWidgets.QMessageBox.warning(
+                self, "Bulk Import — errores parciales",
+                "%d items colocados.\n\n%s" % (len(placed_items), "\n".join(errors)),
+            )
+        self.accept()
+
+
 _import_shot_dialog_instance = None
+_bulk_import_dialog_instance = None
 
 
 def _clear_import_dialog(*_):
@@ -6612,22 +6929,74 @@ def main():
     if not initial_directory or not Path(initial_directory).is_dir():
         initial_directory = ""
 
-    shot_root = QtWidgets.QFileDialog.getExistingDirectory(
-        None,
-        "Seleccionar carpeta del shot",
-        initial_directory,
-        QtWidgets.QFileDialog.ShowDirsOnly,
-    )
-    if not shot_root:
+    shot_roots = bulk_mod.pick_shot_folders(initial_directory, parent=None)
+    if not shot_roots:
         debug_print("Cancelled — no folder selected")
         return
 
-    shot_root = shot_root.replace("\\", "/")
+    shot_roots = [root.replace("\\", "/") for root in shot_roots]
+    shot_root = shot_roots[0]
     settings_mod.save_all_settings({
         "ui": {
             "last_shot_directory": shot_root,
         }
     })
+
+    if len(shot_roots) > 1:
+        global _bulk_import_dialog_instance
+        seen_names = set()
+        skipped = []
+        entries = []
+        timeline_shots = _collect_timeline_shots(seq)
+        timeline_names = {shot["shot_name"].lower() for shot in timeline_shots}
+        for root in shot_roots:
+            name = _get_shot_name_from_folder(root)
+            key = name.lower()
+            if (key in seen_names or key in timeline_names
+                    or _shot_exists_in_timeline(seq, name, root)):
+                skipped.append(name)
+                continue
+            seen_names.add(key)
+            debug_print("Bulk scan: %s" % root)
+            input_items = _scan_input_folder(root)
+            publish_items = _scan_publish_folders(root)
+            max_frames = max(
+                (item.get("frame_count") or 0 for item in input_items
+                 if item.get("kind") == "exr_seq" and item.get("is_latest")),
+                default=0,
+            ) or 100
+            entries.append({
+                "shot_root": root,
+                "shot_name": name,
+                "input_items": input_items,
+                "publish_items": publish_items,
+                "max_frames": max_frames,
+            })
+
+        if not entries:
+            _show_tool_message(
+                None, "Bulk Import",
+                "Todos los shots seleccionados ya existen en el timeline o estan repetidos."
+            )
+            return
+
+        placements = bulk_mod.simulate_bulk_layout(
+            timeline_shots, entries
+        )["placements"]
+        dlg = BulkImportDialog(seq, placements, skipped=skipped)
+
+        def _clear_bulk(*_args):
+            global _bulk_import_dialog_instance
+            _bulk_import_dialog_instance = None
+
+        dlg.finished.connect(_clear_bulk)
+        dlg.destroyed.connect(_clear_bulk)
+        _bulk_import_dialog_instance = dlg
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+        return
+
     shot_name = _get_shot_name_from_folder(shot_root)
     set_debug_context(shot_name)
     debug_print("Shot root: %s  shot_name: %s" % (shot_root, shot_name))

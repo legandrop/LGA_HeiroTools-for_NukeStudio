@@ -9,14 +9,21 @@
 
 # LGA_import_shots
 
-Herramienta para importar un shot completo al timeline de Hiero/Nuke Studio.
+Herramienta para importar uno o varios shots completos al timeline de Hiero/Nuke Studio.
 Analiza la carpeta del shot, detecta plates/editrefs y versiones en publish,
 y los coloca automaticamente en el timeline en la posicion alfabeticamente correcta.
 
 ## Descripcion
 
-Abre un file browser para elegir la carpeta raiz del shot. Luego presenta
-una ventana que siempre abre en el tab **Import**. Por defecto solo se muestra
+Abre un browser Qt no nativo que permite elegir una o varias carpetas de shot
+con Ctrl/Shift. Una carpeta conserva el flujo individual. Varias carpetas abren
+el Bulk Import: un tab editable por shot y un tab **Preview** que muestra el
+resultado combinado desde el vecino anterior al primer shot nuevo hasta el
+vecino siguiente al ultimo. Los shots existentes o repetidos se omiten y se
+informan en la ventana. El batch se ejecuta en orden alfabetico y dentro de un
+unico bloque de undo.
+
+En el flujo individual presenta una ventana que siempre abre en el tab **Import**. Por defecto solo se muestra
 ese tab; desde el checkbox persistente **Shot Rename and Transcode tabs** se
 habilitan tambien **Rename**, **Transcode Plates** y el boton **Open Queue**.
 
@@ -33,7 +40,7 @@ un track secundario no puede acortar el rango master del shot.
 
 ## Archivos principales
 
-- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.26)
+- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.27)
 - **Boton:** Edit Panel → "Import shot" (verde `#2a4d3a`)
 - **Plan de desarrollo:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\docs\LGA_import_shots_PLAN.md`
 
@@ -49,6 +56,7 @@ un track secundario no puede acortar el rango master del shot.
 | `LGA_import_shots_preview.py` | Lógica de datos del Import Preview. `build_import_preview_data`, `classify_track_type`, `_find_adjacent_clips` | **implementado** |
 | `LGA_import_shots_timeline.py` | Helpers de timeline para el import real. `push_clips_right`, `place_clip_in_timeline`, `stretch_burnin`, `set_debug_print` | **implementado** |
 | `LGA_import_shots_bin.py` | Helpers de bin para el import real. `find_or_create_shot_bin`, `import_item_to_bin`, `set_debug_print` | **implementado** |
+| `LGA_import_shots_bulk.py` | Browser multi-carpeta y simulacion pura del layout final. `pick_shot_folders`, `simulate_bulk_layout` | **implementado** |
 | `LGA_import_shots_scan.py` | Helpers de escaneo de carpetas y metadata | pendiente |
 | `LGA_import_shots_ui.py` | Estilos CSS, widgets helpers, separadores | pendiente |
 
