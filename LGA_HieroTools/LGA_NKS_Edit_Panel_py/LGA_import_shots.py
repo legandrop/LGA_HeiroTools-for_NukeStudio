@@ -9,7 +9,8 @@ ____________________________________________________________________
   alfabeticamente correcta.
 
   v1.27: Bulk Import con seleccion multiple de carpetas, tabs editables por
-         shot, preview combinado acotado y ejecucion en un unico undo.
+         shot, preview grafico combinado con chips proporcionales y colores,
+         y ejecucion en un unico undo.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -6663,14 +6664,16 @@ class BulkImportDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(page)
         note = QtWidgets.QLabel(
             "Resultado combinado: desde el vecino anterior al primer shot nuevo "
-            "hasta el vecino siguiente al ultimo. Los shots violetas son nuevos."
+            "hasta el vecino siguiente al ultimo. Nuevos en color; existentes en gris."
         )
         note.setStyleSheet("color:#999999; padding:3px;")
         layout.addWidget(note)
         self.preview_table = QtWidgets.QTableWidget()
         self.preview_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.preview_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.preview_table.setFocusPolicy(QtCore.Qt.NoFocus)
         self.preview_table.verticalHeader().setVisible(False)
+        self.preview_table.setShowGrid(False)
         self.preview_table.setStyleSheet(_TABLE_STYLE)
         layout.addWidget(self.preview_table, 1)
         return page
@@ -6692,8 +6695,10 @@ class BulkImportDialog(QtWidgets.QDialog):
         last = min(len(alpha) - 1, max(new_indices) + 1)
         return alpha[first:last + 1]
 
-    def _existing_clip_names(self):
+    def _existing_preview_data(self):
+        """Clips existentes con geometria relativa para dibujarlos greyed out."""
         result = {}
+        shot_ranges = {}
         for track in self.seq.videoTracks():
             try:
                 track_name = track.name()
@@ -6705,10 +6710,63 @@ class BulkImportDialog(QtWidgets.QDialog):
                 try:
                     shot_name = item.name()
                     clip_name = item.source().name()
+                    tl_in = int(item.timelineIn())
+                    tl_out = int(item.timelineOut())
                 except Exception:
                     continue
-                result.setdefault((shot_name, track_name), []).append(clip_name)
-        return result
+                result.setdefault((shot_name, track_name), []).append({
+                    "name": clip_name,
+                    "tl_in": tl_in,
+                    "tl_out": tl_out,
+                    "duration": max(1, tl_out - tl_in + 1),
+                })
+                bounds = shot_ranges.setdefault(shot_name, [tl_in, tl_out])
+                bounds[0] = min(bounds[0], tl_in)
+                bounds[1] = max(bounds[1], tl_out)
+        return result, shot_ranges
+
+    def _build_bulk_timeline_cell(self, clip, shot_start, shot_duration,
+                                  color, is_new=False, offset_frames=None):
+        """Bloque grafico proporcional, equivalente a las celdas del preview original."""
+        helper = self.panels[0]
+        widget = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(widget)
+        layout.setContentsMargins(2, 3, 2, 3)
+        layout.setSpacing(0)
+        widget.setStyleSheet("background: transparent;")
+        if not clip:
+            return widget
+
+        duration = max(0, int(clip.get("duration") or clip.get("frame_count") or 0))
+        if offset_frames is None:
+            offset_frames = max(0, int(clip.get("tl_in", shot_start)) - shot_start)
+        master = max(1, int(shot_duration or 1))
+        scale = 1000
+        offset_weight = int(min(1.0, offset_frames / float(master)) * scale)
+        chip_weight = max(1, int(min(1.0, duration / float(master)) * scale))
+        total = offset_weight + chip_weight
+        if total > scale:
+            offset_weight = int(offset_weight * scale // total)
+            chip_weight = max(1, scale - offset_weight)
+        trail_weight = max(0, scale - offset_weight - chip_weight)
+
+        if offset_weight:
+            layout.addStretch(offset_weight)
+        name = clip.get("name") or clip.get("version_name") or "?"
+        label = helper._make_chip_label(
+            name, color=color, is_new=is_new,
+            frames=duration, fps=helper._fps,
+        )
+        if not is_new:
+            label.setGraphicsEffect(None)
+            label.setStyleSheet(
+                "background:#303030; border:1px solid #595959; color:#858585; "
+                "font-weight:normal; padding:4px 6px; border-radius:3px;"
+            )
+        layout.addWidget(label, chip_weight)
+        if trail_weight:
+            layout.addStretch(trail_weight)
+        return widget
 
     def _refresh_preview(self):
         new_data = [{"shot_name": p.shot_name, "max_frames": p.master_duration()}
@@ -6729,36 +6787,84 @@ class BulkImportDialog(QtWidgets.QDialog):
                 if track not in track_names:
                     track_names.append(track)
 
-        existing = self._existing_clip_names()
+        existing, existing_ranges = self._existing_preview_data()
         table = self.preview_table
+        table.clearSpans()
         table.clear()
         table.setRowCount(len(track_names))
-        table.setColumnCount(len(shots) + 1)
-        table.setHorizontalHeaderLabels(["Track"] + [s["shot_name"] for s in shots])
+        table.setColumnCount(len(shots) + 2)
+        table.setHorizontalHeaderLabels(["", "Track"] + [s["shot_name"] for s in shots])
+        helper = self.panels[0]
         for row, track_name in enumerate(track_names):
+            track_type = classify_track_type(track_name)
+            bar_color = helper._track_bar_color(track_type)
+            bar = QtWidgets.QTableWidgetItem()
+            bar.setBackground(QtGui.QColor(bar_color))
+            bar.setFlags(QtCore.Qt.NoItemFlags)
+            table.setItem(row, 0, bar)
             track_item = QtWidgets.QTableWidgetItem(track_name)
-            track_item.setForeground(QtGui.QColor("#aaaaaa"))
-            table.setItem(row, 0, track_item)
-            for col, shot in enumerate(shots, 1):
+            track_item.setForeground(QtGui.QColor(mix_colors(bar_color, "#ffffff", 0.58)))
+            table.setItem(row, 1, track_item)
+
+            if helper._is_burnin_track(track_name):
+                if shots:
+                    table.setSpan(row, 2, 1, len(shots))
+                    table.setCellWidget(row, 2, helper._build_burnin_row())
+                table.setRowHeight(row, 42)
+                continue
+
+            for col, shot in enumerate(shots, 2):
                 key = (shot["shot_name"], track_name)
                 if shot.get("is_new"):
-                    names = [it.get("name") or it.get("version_name") or "?"
-                             for it, _color in selected.get(key, [])]
-                    cell = QtWidgets.QTableWidgetItem("\n".join(names))
-                    cell.setForeground(QtGui.QColor("#b39ddb"))
-                    cell.setBackground(QtGui.QColor("#302a3d"))
+                    entries = selected.get(key, [])
+                    item, item_color = (
+                        max(entries, key=lambda pair: pair[0].get("version_num", -1))
+                        if entries else (None, bar_color)
+                    )
+                    shot_duration = max(
+                        (candidate.get("frame_count") or 0
+                         for (shot_key, _track), values in selected.items()
+                         if shot_key == shot["shot_name"]
+                         for candidate, _candidate_color in values),
+                        default=max(1, shot["tl_out"] - shot["tl_in"] + 1),
+                    )
+                    offset = 0
+                    if item and track_type == "editref":
+                        offset = self._editref_offset(track_name, item, shot_duration)
+                    clip = dict(item) if item else None
+                    if clip:
+                        clip["duration"] = clip.get("frame_count") or 0
+                    cell_widget = self._build_bulk_timeline_cell(
+                        clip, shot["tl_in"], shot_duration,
+                        helper._chip_color(
+                            (clip or {}).get("name", ""), item_color, track_type
+                        ),
+                        is_new=True, offset_frames=offset,
+                    )
                 else:
-                    cell = QtWidgets.QTableWidgetItem("\n".join(existing.get(key, [])))
-                    cell.setForeground(QtGui.QColor("#888888"))
-                cell.setTextAlignment(QtCore.Qt.AlignCenter)
-                table.setItem(row, col, cell)
+                    clips = existing.get(key, [])
+                    clip = clips[0] if clips else None
+                    bounds = existing_ranges.get(shot["shot_name"], [0, 0])
+                    shot_duration = max(1, bounds[1] - bounds[0] + 1)
+                    cell_widget = self._build_bulk_timeline_cell(
+                        clip, bounds[0], shot_duration,
+                        "#666666", is_new=False,
+                    )
+                table.setCellWidget(row, col, cell_widget)
             table.setRowHeight(row, 42)
         header = table.horizontalHeader()
+        header.setMinimumSectionSize(1)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
-        table.setColumnWidth(0, 130)
-        for col in range(1, table.columnCount()):
+        table.setColumnWidth(0, 5)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
+        table.setColumnWidth(1, 130)
+        for col, shot in enumerate(shots, 2):
             header.setSectionResizeMode(col, QtWidgets.QHeaderView.Interactive)
-            table.setColumnWidth(col, 190)
+            table.setColumnWidth(col, 220)
+            header_item = table.horizontalHeaderItem(col)
+            header_item.setForeground(QtGui.QColor(
+                "#a88ee0" if shot.get("is_new") else "#686868"
+            ))
 
     @staticmethod
     def _editref_offset(track_name, item, master_duration):

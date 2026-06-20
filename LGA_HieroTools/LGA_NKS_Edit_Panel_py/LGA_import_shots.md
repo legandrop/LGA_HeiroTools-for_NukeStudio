@@ -17,9 +17,12 @@ y los coloca automaticamente en el timeline en la posicion alfabeticamente corre
 
 Abre un browser Qt no nativo que permite elegir una o varias carpetas de shot
 con Ctrl/Shift. Una carpeta conserva el flujo individual. Varias carpetas abren
-el Bulk Import: un tab editable por shot y un tab **Preview** que muestra el
-resultado combinado desde el vecino anterior al primer shot nuevo hasta el
-vecino siguiente al ultimo. Los shots existentes o repetidos se omiten y se
+el Bulk Import: un tab editable por shot y un tab **Preview** grafico que muestra
+el resultado combinado desde el vecino anterior al primer shot nuevo hasta el
+vecino siguiente al ultimo. Conserva las barras de color por tipo de track, los
+chips coloreados y proporcionales a la duracion, los offsets de EditRef, tooltips
+y la representacion grafica de BurnIn del preview individual. Los clips de shots
+existentes se muestran desaturados en gris. Los shots existentes o repetidos se omiten y se
 informan en la ventana. El batch se ejecuta en orden alfabetico y dentro de un
 unico bloque de undo.
 
