@@ -1,4 +1,5 @@
 v3.78:
+        - Review Pic y el boton Snapshot del ViewerTL Panel ahora tienen en cuenta el pixel aspect ratio (PAR) del formato de la secuencia. El `viewer.image()` ya entrega la imagen con el PAR aplicado (proporciones de display), pero el crop se hacia contra el storage aspect (`width/height`), recortando los lados en timelines con PAR != 1 (ej: PAR 1.8 -> canvas muy chico en X, imagen cortada). Ahora el crop usa el DISPLAY aspect (`width/height * pixelAspect`), conservando toda la imagen sin distorsionarla. [ Review Pic y Snapshot - Respetar pixel aspect ratio del timeline ]
         - Projects Panel corrige el inicio para usuarios que no tienen permitido ver el toggle Studio/Client. Los atributos de los botones se inicializaban en `None`, pero `setup_connections()` intentaba acceder igualmente a `.clicked` porque solo verificaba que los atributos existieran, provocando `AttributeError` durante la carga. Ahora las señales se conectan únicamente cuando ambos botones fueron creados. [ Projects Panel - Corregir inicio sin toggle de contexto ]
 
 v3.77:

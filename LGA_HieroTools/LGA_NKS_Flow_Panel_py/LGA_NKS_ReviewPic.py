@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ReviewPic v1.20 | Lega
+  LGA_NKS_ReviewPic v1.22 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo guarda en ReviewPic_Cache
   organizando por clips del track EXR de la task activa con numeracion de frames.
@@ -9,6 +9,11 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.22: Se tiene en cuenta el pixel aspect ratio (PAR) del formato. El viewer.image()
+         ya entrega la imagen con el PAR aplicado (proporciones de display), por lo que
+         el crop ahora se hace contra el DISPLAY aspect (storage * PAR) en lugar del
+         storage aspect. Antes, en timelines con PAR != 1, se recortaban los lados de
+         la imagen (canvas muy chico en X). No se estira la imagen (eso la distorsiona).
   v1.21: Task alias normalizado (compo → comp) en resolve_task_with_mismatch_check
          para evitar falsa advertencia de mismatch en clips con _Compo_ en el filename.
   v1.20: Imports de TaskSelectionDialog movidos a lazy (dentro de main()) para evitar
@@ -36,7 +41,7 @@ QRect = QtCore.QRect
 import subprocess
 import sys
 
-DEBUG = False
+DEBUG = True
 
 def debug_print(*message):
     if DEBUG:
@@ -224,12 +229,19 @@ def main():
         format = sequence.format()
         width = format.width()
         height = format.height()
-        target_aspect = width / height
+        pixel_aspect = format.pixelAspect()
+        # El viewer.image() ya entrega la imagen con el PAR aplicado (proporciones de
+        # display), por lo que el crop debe hacerse contra el DISPLAY aspect ratio
+        # (storage * PAR). Si se croppeara contra el storage aspect, se recortarian
+        # los lados de la imagen (canvas muy chico en X).
+        target_aspect = (width / height) * pixel_aspect
         debug_print(
-            f"Relación de aspecto de la secuencia: {width} x {height} ({target_aspect:.2f})"
+            f"Relación de aspecto de la secuencia: {width} x {height} "
+            f"(storage {width / height:.2f}, PAR {pixel_aspect:.2f}, "
+            f"display {target_aspect:.2f})"
         )
 
-    # Aplicar crop
+    # Aplicar crop (sobre la imagen ya corregida por PAR que entrega el viewer)
     qimage_cropped = crop_to_aspect_ratio(qimage, target_aspect)
     debug_print(
         f"Snapshot size (cropped): {qimage_cropped.width()} × {qimage_cropped.height()}"
