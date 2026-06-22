@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.31 | Lega
+  LGA_import_shots v1.32 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.32: Las versiones V000 importadas se colocan deshabilitadas en el
+         timeline, tanto en single como en bulk.
   v1.31: Bulk footer: se elimina botón Cancel y se agrega
          "Import All (N shots) and Create V000". En single y bulk,
          la apertura post-import de CreateV000 ahora pasa contextos
@@ -577,6 +579,15 @@ def _version_number(name):
     """Extrae numero de version de un nombre (v01, v001, v002). Retorna -1 si no hay."""
     m = re.search(r"[_\-]v(\d+)", name, re.IGNORECASE)
     return int(m.group(1)) if m else -1
+
+
+def _is_v000_item(item):
+    """True si el item representa una version cero ya existente en disco."""
+    for key in ("name", "version_name"):
+        value = str(item.get(key) or "")
+        if re.search(r'(?:^|[._])v0{2,}(?=$|[._])', value, re.IGNORECASE):
+            return True
+    return False
 
 
 def _folder_size_bytes(folder_path):
@@ -5025,12 +5036,12 @@ class ImportShotDialog(QtWidgets.QDialog):
         Devuelve el color del chip.
 
         Regla v000: si el clip pertenece a un track comp/roto/cleanup y su nombre
-        contiene una versión v000, v00, v0000, etc., el color es #474747 (gris oscuro).
+        contiene una versión v000, v00, v0000, etc., el color es #8a8a8a (gris oscuro).
         Esto indica que es una versión cero/base, aún no trabajada.
         """
         if track_type in ("comp", "roto", "cleanup", "dmp"):
             if re.search(r'[._]v0{2,}(?:\b|_|$)', clip_name, re.IGNORECASE):
-                return "#474747"
+                return "#8a8a8a"
         return bar_color
 
     @staticmethod
@@ -5831,6 +5842,10 @@ class ImportShotDialog(QtWidgets.QDialog):
                         debug_print("_do_import: error timeline '%s' → %s"
                                     % (clip_name, err2), level="warning")
                     else:
+                        if _is_v000_item(item):
+                            ti.setEnabled(False)
+                            debug_print("_do_import: V000 deshabilitado en timeline — '%s'"
+                                        % clip_name)
                         placed += 1
                         placed_items.append(ti)
                         debug_print("_do_import: OK — '%s' en track '%s' tl=%d-%d"
@@ -7634,6 +7649,12 @@ class BulkImportDialog(QtWidgets.QDialog):
                         errors.append("%s / %s (%s): %s" %
                                       (panel.shot_name, clip_name, track_label, error))
                     elif timeline_item is not None:
+                        if _is_v000_item(item):
+                            timeline_item.setEnabled(False)
+                            debug_print(
+                                "_do_bulk_import: V000 deshabilitado en timeline — %s / %s"
+                                % (panel.shot_name, clip_name)
+                            )
                         placed_items.append(timeline_item)
                         shot_placed_items.append(timeline_item)
             if placed_items:

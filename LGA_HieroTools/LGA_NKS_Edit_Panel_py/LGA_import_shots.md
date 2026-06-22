@@ -12,6 +12,8 @@
 Herramienta para importar uno o varios shots completos al timeline de Hiero/Nuke Studio.
 Analiza la carpeta del shot, detecta plates/editrefs y versiones en publish,
 y los coloca automaticamente en el timeline en la posicion alfabeticamente correcta.
+Las versiones V000 que ya existen en publish se importan deshabilitadas en el
+timeline, tanto en el flujo individual como en Bulk Import.
 
 ## Descripcion
 
