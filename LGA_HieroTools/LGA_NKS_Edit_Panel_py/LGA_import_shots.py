@@ -6954,6 +6954,7 @@ class _BulkShotPanel(ImportShotDialog):
         QtWidgets.QDialog.showEvent(self, event)
 
     def selected_items(self):
+        """Retorna track, item, color Hiero y color base de task para Preview."""
         result = []
         for row, checkbox in self._checkboxes.items():
             if not checkbox.isChecked():
@@ -6961,7 +6962,12 @@ class _BulkShotPanel(ImportShotDialog):
             row_data = self._table_rows[row]
             track = self._get_track_for_row(row)
             if row_data.get("type") == "data" and track:
-                result.append((track, row_data["item"], self._item_hiero_color(row_data)))
+                result.append((
+                    track,
+                    row_data["item"],
+                    self._item_hiero_color(row_data),
+                    self._item_section_color(row_data),
+                ))
         return result
 
     def selected_unassigned_items(self):
@@ -7282,8 +7288,10 @@ class BulkImportDialog(QtWidgets.QDialog):
         entries_by_key = {entry["key"]: entry for entry in track_entries}
 
         for panel in self.panels:
-            for track_key, item, color in panel.selected_items():
-                selected.setdefault((panel.shot_name, track_key), []).append((item, color))
+            for track_key, item, hiero_color, preview_task_color in panel.selected_items():
+                selected.setdefault((panel.shot_name, track_key), []).append(
+                    (item, hiero_color, preview_task_color)
+                )
                 if track_key not in entries_by_key:
                     track_name, _bt_idx = _parse_track_key(track_key)
                     extra_entry = {
@@ -7339,15 +7347,15 @@ class BulkImportDialog(QtWidgets.QDialog):
                 key = (shot["shot_name"], track_key)
                 if shot.get("is_new"):
                     entries = selected.get(key, [])
-                    item, item_color = (
+                    item, item_color, preview_task_color = (
                         max(entries, key=lambda pair: pair[0].get("version_num", -1))
-                        if entries else (None, bar_color)
+                        if entries else (None, bar_color, bar_color)
                     )
                     shot_duration = max(
                         (candidate.get("frame_count") or 0
                          for (shot_key, _track_key), values in selected.items()
                          if shot_key == shot["shot_name"]
-                         for candidate, _candidate_color in values),
+                         for candidate, _hiero_color, _preview_task_color in values),
                         default=max(1, shot["tl_out"] - shot["tl_in"] + 1),
                     )
                     offset = 0
@@ -7361,7 +7369,9 @@ class BulkImportDialog(QtWidgets.QDialog):
                         helper._chip_color(
                             (clip or {}).get("name", ""), item_color, track_type
                         ),
-                        task_border_color=helper._preview_chip_palette(item_color)[1],
+                        task_border_color=helper._preview_chip_palette(
+                            preview_task_color
+                        )[1],
                         is_new=True, offset_frames=offset,
                     )
                 else:
@@ -7505,7 +7515,8 @@ class BulkImportDialog(QtWidgets.QDialog):
                 selected_items = panel.selected_items()
                 selected_master = max(
                     (item.get("frame_count") or 0
-                     for _track, item, _color in selected_items),
+                     for _track, item, _hiero_color, _preview_task_color
+                     in selected_items),
                     default=duration,
                 )
                 insert_frame, frames_to_push, _prev, _next = _find_insert_frame(
@@ -7517,7 +7528,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                         self.seq, insert_frame, frames_to_push
                     )
                 target_bin = bin_mod.find_or_create_shot_bin(self.seq, panel.shot_name)
-                for track_key, item, color in selected_items:
+                for track_key, item, color, _preview_task_color in selected_items:
                     track_name, _bt_idx = _parse_track_key(track_key)
                     track_label = panel._track_display_from_key(track_key)
                     clip_name = item.get("name") or item.get("version_name") or "?"

@@ -84,6 +84,10 @@ el color definido específicamente en `_PREVIEW_<TASK>_BORDER_COLOR`
 `_PREVIEW_CLEANUP_BORDER_COLOR`, `_PREVIEW_DMP_BORDER_COLOR`, etc.), no el
 color base `_CLR_*` de la tabla. El helper
 `classify_track_type()` reconoce también `_dmp_` como tipo `dmp`.
+En Bulk, `_BulkShotPanel.selected_items()` transporta por separado
+`hiero_color` (que puede ser gris para V000 y se usa en el BinItem) y
+`preview_task_color` (color original de la task). Así el Preview no intenta
+deducir la task desde el gris V000.
 La paleta `GREY` tiene prioridad absoluta para clips de contexto: un V000
 anterior, posterior o existente permanece completamente greyed out. La mezcla
 V000 + borde de task se aplica únicamente a clips nuevos/no-greyed.
