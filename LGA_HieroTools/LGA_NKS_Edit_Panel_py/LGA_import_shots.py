@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.32 | Lega
+  LGA_import_shots v1.33 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.33: Los tabs suman margen horizontal configurable mediante
+         ANCHO_TAB_EXRA, aplicado a izquierda y derecha.
   v1.32: Las versiones V000 importadas se colocan deshabilitadas en el
          timeline, tanto en single como en bulk.
   v1.31: Bulk footer: se elimina botón Cancel y se agrega
@@ -167,12 +169,12 @@ else:
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
+from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
 
 # Flag temporal de feature: con False, Rename/Transcode y Open Queue no se
 # construyen como opciones habilitables para el usuario.
 RENAME_TRANSCODE_TABS = False
-
 
 def _has_visible_import_shot_dialogs():
     app = QtWidgets.QApplication.instance()
@@ -2008,7 +2010,7 @@ class _ImportShotTabBar(QtWidgets.QTabBar):
 
     def tabSizeHint(self, index):
         s = super(_ImportShotTabBar, self).tabSizeHint(index)
-        s.setWidth(s.width() + self.EXTRA_WIDTH)
+        s.setWidth(s.width() + self.EXTRA_WIDTH + (ANCHO_TAB_EXRA * 2))
         s.setHeight(max(s.height(), self.MIN_HEIGHT))
         return s
 

@@ -11,8 +11,19 @@ Abre un dialogo desde el Edit Panel o desde Import Shot y construye contexto por
 
 La herramienta crea archivos en disco, importa la v000 al bin correcto del proyecto y la coloca en el timeline cuando el rango destino está disponible. El set de tasks es context-aware:
 - `studio`: `comp`, `roto`, `cleanup`.
-- `client`: solo `comp`.
+- `client`: solo `comp`, seleccionada por defecto.
 Las tasks activas se deshabilitan automáticamente si ya existen clips superpuestos en su track para el rango del shot.
+El botón batch muestra `Create v000 (X shots)`, donde `X` se recalcula según
+los tabs que tengan al menos una task seleccionada.
+
+Si una V000 ya existe en disco, el diálogo de reemplazo identifica siempre el
+origen como `ShotName | TASK`: el shot usa el mismo magenta del encabezado del
+tab y la task conserva su color propio. Su ancho mínimo se calcula también con
+el ancho de esos labels para evitar recortes.
+
+El ancho adicional de cada tab se controla centralmente con
+`ANCHO_TAB_EXRA = 15` en `LGA_tab_width_config.py`, marcado con `✅✅📛📛`.
+El valor se agrega a cada lado del ancho calculado por Qt.
 
 ## Archivos principales
 
@@ -123,7 +134,7 @@ Resolution: ... x ... (fuente)
 
 [ Preview In/Out ]      (en cada tab)
 ...
-[ Cancel ] [ Create v000 (All tabs) ]     (footer global)
+[ Cancel ] [ Create v000 (X shots) ]      (footer global; X = tabs con task seleccionada)
 ```
 
 - Ancho minimo de la ventana tabulada: `980x700`.
@@ -700,6 +711,7 @@ C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\+Building_Blocks\Hiero\Time
 | Archivo | Funciones / clases clave |
 |---------|--------------------------|
 | `LGA_NKS_Edit_Panel_py\LGA_NKS_CreateV000.py` | `open_create_v000_dialog(shot_targets=...)`, `_resolve_active_tasks()`, `_collect_dialog_contexts()`, `_selected_shot_targets()`, `_collect_context_for_target()`, `_collect_context_from_playhead()`, `_task_overlap_state()`, `_context_has_available_tasks()`, `CreateV000TabsDialog`, `CreateV000Dialog`, `_create_all_tabs()`, `_build_outputs()`, `_preview_in_out()`, `_preflight_and_create_exr()`, `_hiero_import_for_params()`, `_create_black_exr_sequence()`, `_insert_task_track()` |
+| `LGA_NKS_Edit_Panel_py\LGA_tab_width_config.py` | `ANCHO_TAB_EXRA`, margen horizontal compartido por los tabs de Import Shot y Create V000 |
 | `+Building_Blocks\Hiero\LGA_H-Tracks-InsertTest.py` | Referencia del workaround remove-all/re-add para insertar tracks en posicion especifica |
 | `docs\Docu_Logging_System.md` | Valores por defecto y patron de `QueueHandler` / `QueueListener` |
 | `LGA_NKS_ViewerTL_Panel_py\LGA_NKS_InOut_Editref.py` | Referencia para `seq.setInTime()` y `seq.setOutTime()` |

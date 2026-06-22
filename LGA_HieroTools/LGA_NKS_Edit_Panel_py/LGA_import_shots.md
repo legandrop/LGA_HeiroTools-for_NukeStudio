@@ -65,6 +65,10 @@ libres arriba para que se vea el borde superior del tab activo. El tab bar usa
 una política horizontal `Expanding`, mientras sus tabs mantienen
 `setExpanding(False)`: el bar consume todo el ancho disponible antes de activar
 las flechas de navegación.
+Además, la variable compartida `ANCHO_TAB_EXRA = 15`, definida en
+`LGA_tab_width_config.py` y marcada con `✅✅📛📛`, agrega esa cantidad de
+píxeles a cada lado de todos los tabs de Import Shot y Create V000, por encima
+del ancho calculado automáticamente para el label.
 
 En la columna **Track**, el valor `— sin track —` se muestra en rojo y bold
 para señalar inmediatamente que ese ítem no será colocado en el timeline.
@@ -147,7 +151,7 @@ un track secundario no puede acortar el rango master del shot.
 
 ## Archivos principales
 
-- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.30)
+- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.33)
 - **Boton:** Edit Panel → "Import shot" (verde `#2a4d3a`)
 - **Plan de desarrollo:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\docs\LGA_import_shots_PLAN.md`
 
@@ -164,6 +168,7 @@ un track secundario no puede acortar el rango master del shot.
 | `LGA_import_shots_timeline.py` | Helpers de timeline para el import real. `push_clips_right`, `place_clip_in_timeline`, `stretch_burnin`, `set_debug_print` | **implementado** |
 | `LGA_import_shots_bin.py` | Helpers de bin para el import real. `find_or_create_shot_bin`, `import_item_to_bin`, `set_debug_print` | **implementado** |
 | `LGA_import_shots_bulk.py` | Browser multi-carpeta y simulacion pura del layout final. `pick_shot_folders`, `get_last_browser_directory`, `simulate_bulk_layout` | **implementado** |
+| `LGA_tab_width_config.py` | Configuración central `ANCHO_TAB_EXRA` para el margen horizontal extra de tabs en Import Shot y Create V000 | **implementado** |
 | `LGA_import_shots_scan.py` | Helpers de escaneo de carpetas y metadata | pendiente |
 | `LGA_import_shots_ui.py` | Estilos CSS, widgets helpers, separadores | pendiente |
 
@@ -940,6 +945,7 @@ donde se distribuya la repo.
 | Archivo | Funciones / clases clave |
 |---------|--------------------------|
 | `LGA_NKS_Edit_Panel_py/LGA_import_shots.py` | `main()`, `_import_shot_dialog_instance`, `_clear_import_dialog()`, `_visible_import_dialog_for_shot()`, `_show_tool_message()`, `_launch_create_v000()`, `ImportShotDialog`, `_do_import_and_v000()`, `_show_page()`, `_build_page_media()`, `_build_page_rename()`, `_update_rename_page()`, `_refresh_rename_preview()`, `_populate_rename_section_header()`, `_on_rename_chk_changed()`, `_update_rename_btn_state()`, `_run_rename()`, `_rn_escape()`, `_swap_sr()`, `_update_rename_summary()`, `_build_page_convert()`, `_update_convert_page()`, `_on_res_preset_changed()`, `_on_keep_ar_changed()`, `_update_match_dim_visibility()`, `_get_representative_res()`, `_on_custom_w_changed()`, `_on_custom_h_changed()`, `_current_target_res()`, `_target_compression()`, `_refresh_convert_destinos()`, `_update_res_combo_labels()`, `_on_dwaa_chk_changed()`, `_on_deana_chk_changed()`, `_apply_deana_if_active()`, `_load_settings_to_ui()`, `_save_all_settings()`, `_rebuild_res_combo()`, `_on_delete_preset()`, `_on_save_preset_clicked()`, `_run_transcode()`, `_start_next_sequence()`, `_on_sequence_started()`, `_poll_transcode_progress()`, `_on_sequence_done()`, `_on_worker_batch_done()`, `_finalize_transcode()`, `_on_transcode_error()`, `_fmt_bd()`, `_fmt_par()`, `_ar_str()`, `_read_exr_metadata()`, `_read_mov_metadata()`, `_find_insert_frame()` (retorna `insert_frame, frames_to_push, prev_shot_name, next_shot_name`), `_collect_timeline_shots()`, `_build_track_combo()`, `_on_track_combo_changed()`, `_refresh_track_combo_options(created_track_name, creator_row)`, `_create_plate_track()`, `_get_seq_track_names()` — widgets: `_TrackComboListView`, `_TrackComboDelegate` (botón "Crear track" en dropdown de track) |
+| `LGA_NKS_Edit_Panel_py/LGA_tab_width_config.py` | `ANCHO_TAB_EXRA`, margen horizontal compartido por todos los tabs de Import Shot y Create V000 |
 | `LGA_NKS_Edit_Panel_py/LGA_import_shots_transcode.py` | `TranscodeWorkerSignals` (señales: `log_message`, `sequence_started(row_i, dst_dir, total_frames)`, `sequence_done`, `all_done`, `error`), `TranscodeWorker`, `build_manifest_for_sequence(channels, pixel_aspect_ratio)`, `check_existing_outputs()`, `delete_existing_outputs()`, `show_overwrite_warning()` |
 | `LGA_NKS_Edit_Panel_py/LGA_import_shots_transcode_queue.py` | `TranscodeQueueManager`, `get_manager()`, `enqueue_jobs()`, `snapshot()`, `_start_next_if_idle()`, `_prepare_job_or_cancel()`, `_launch_worker()`, logging propio `debugPy_ImportShotsTranscodeQueue.log` |
 | `LGA_NKS_Edit_Panel_py/LGA_import_shots_transcode_queue_ui.py` | `TranscodeQueueWindow`, `show_queue_window()`, UI no modal `Import Shots - Transcode Queue`, historial visual, `Keep this window on top` persistente |

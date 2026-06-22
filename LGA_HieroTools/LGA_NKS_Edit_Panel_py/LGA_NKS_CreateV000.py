@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.10 | Lega
+  LGA_NKS_CreateV000 v1.11 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,9 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.11: En client, comp queda seleccionada por defecto. El botón batch indica
+         cuántos shots tienen tasks seleccionadas. Los avisos de EXR existente
+         muestran Shot | Task y los tabs suman margen horizontal configurable.
   v1.10: Context-aware tasks por perfil Studio/Client. En contexto client la
          herramienta trabaja solo con task comp: UI muestra únicamente comp,
          el chequeo de solape/bloqueo se hace solo sobre _comp_ y la elegibilidad
@@ -118,6 +121,8 @@ TASK_COLORS = {
     "roto":    "#2abf7e",
     "cleanup": "#27c8c3",
 }
+PROJECT_NAME_COLOR = "#6AB5CA"
+SHOT_NAME_COLOR = "#B56AB5"
 
 # Sistema de colores de path por nivel (igual que LGA_mediaManager / LGA_PipeSync)
 PATH_SHOT_COLOR = "#c56cf0"   # lavanda — segmentos dentro del shot folder
@@ -147,6 +152,7 @@ if str(SHARED_DIR) not in sys.path:
 if str(STARTUP_DIR) not in sys.path:
     sys.path.insert(0, str(STARTUP_DIR))
 
+from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Flow_NamingUtils import (
     clean_base_name,
@@ -426,7 +432,7 @@ class _ImportShotTabBar(QtWidgets.QTabBar):
 
     def tabSizeHint(self, index):
         size = super(_ImportShotTabBar, self).tabSizeHint(index)
-        size.setWidth(size.width() + self.EXTRA_WIDTH)
+        size.setWidth(size.width() + self.EXTRA_WIDTH + (ANCHO_TAB_EXRA * 2))
         size.setHeight(max(size.height(), self.MIN_HEIGHT))
         return size
 
@@ -1887,11 +1893,13 @@ class CreateV000Dialog(QtWidgets.QDialog):
         shot_code = self.context.get("shot_code") or ""
         if project_name:
             info_text = (
-                "<span style='color:#6AB5CA;'>%s</span> / "
-                "<span style='color:#B56AB5;'>%s</span>"
-            ) % (project_name, shot_code)
+                "<span style='color:%s;'>%s</span> / "
+                "<span style='color:%s;'>%s</span>"
+            ) % (PROJECT_NAME_COLOR, project_name, SHOT_NAME_COLOR, shot_code)
         else:
-            info_text = "<span style='color:#B56AB5;'>%s</span>" % shot_code
+            info_text = "<span style='color:%s;'>%s</span>" % (
+                SHOT_NAME_COLOR, shot_code
+            )
 
         header_row = QtWidgets.QHBoxLayout()
         info_label = QtWidgets.QLabel(info_text)
@@ -2286,6 +2294,8 @@ class CreateV000Dialog(QtWidgets.QDialog):
                     "Ya existen clips en timeline para '%s' (%s)"
                     % (task, task_state.get("track_name") or "track")
                 )
+            elif is_client_context() and task == "comp":
+                btn.setChecked(True)
             btn.toggled.connect(self._update_state)
             self.task_buttons[task] = btn
             layout.addWidget(btn)
@@ -2613,7 +2623,6 @@ class CreateV000Dialog(QtWidgets.QDialog):
         dialog = QtWidgets.QDialog(parent)
         dialog.setWindowTitle("Create v000")
         dialog.setModal(True)
-        dialog.setMinimumWidth(340)
         dialog.setStyleSheet(
             """
             QDialog {
@@ -2627,8 +2636,18 @@ class CreateV000Dialog(QtWidgets.QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 14, 16, 14)
 
-        # Header: badge de task coloreado
+        # Header: shot + task, con los mismos colores del header de cada tab.
         header_row = QtWidgets.QHBoxLayout()
+        shot_code = str(self.context.get("shot_code") or "Shot")
+        shot_badge = QtWidgets.QLabel(shot_code)
+        shot_badge.setStyleSheet(
+            "color: %s; font-weight: bold; font-size: 13px; padding: 2px 0px;"
+            % SHOT_NAME_COLOR
+        )
+        header_row.addWidget(shot_badge)
+        separator_badge = QtWidgets.QLabel("|")
+        separator_badge.setStyleSheet("color: #777777; font-size: 13px;")
+        header_row.addWidget(separator_badge)
         badge = QtWidgets.QLabel(task.upper())
         badge.setStyleSheet(
             "color: %s; font-weight: bold; font-size: 13px; padding: 2px 0px;" % task_color
@@ -2636,6 +2655,15 @@ class CreateV000Dialog(QtWidgets.QDialog):
         header_row.addWidget(badge)
         header_row.addStretch()
         layout.addLayout(header_row)
+
+        # El ancho mínimo acompaña shot names largos sin cortar Shot | Task.
+        header_min_width = (
+            shot_badge.sizeHint().width()
+            + separator_badge.sizeHint().width()
+            + badge.sizeHint().width()
+            + 90
+        )
+        dialog.setMinimumWidth(max(420, header_min_width))
 
         # Separador
         sep = QtWidgets.QFrame()
@@ -3020,6 +3048,8 @@ class CreateV000TabsDialog(QtWidgets.QDialog):
             self.panels.append(panel)
             self._tab_widget.addWidget(panel)
             self._tab_bar.addTab(str(context.get("shot_code") or "Shot"))
+            for task_button in panel.task_buttons.values():
+                task_button.toggled.connect(self._update_create_all_label)
 
         self._tab_bar.currentChanged.connect(self._tab_widget.setCurrentIndex)
         self._tab_bar.currentChanged.connect(self._on_tab_changed)
@@ -3052,15 +3082,20 @@ class CreateV000TabsDialog(QtWidgets.QDialog):
         cancel_btn.clicked.connect(self.reject)
         footer.addWidget(cancel_btn)
 
-        self.create_all_btn = QtWidgets.QPushButton("Create v000 (All tabs)")
+        self.create_all_btn = QtWidgets.QPushButton()
         self.create_all_btn.setStyleSheet(_BTN_PRIMARY)
         self.create_all_btn.clicked.connect(self._create_all_tabs)
         footer.addWidget(self.create_all_btn)
         body_layout.addLayout(footer)
+        self._update_create_all_label()
 
         if self._tab_bar.count() > 0:
             self._tab_bar.setCurrentIndex(0)
             self._tab_widget.setCurrentIndex(0)
+
+    def _update_create_all_label(self, *args):
+        shot_count = sum(1 for panel in self.panels if panel.has_selected_tasks())
+        self.create_all_btn.setText("Create v000 (%d shots)" % shot_count)
 
     def _on_tab_changed(self, index):
         panel = (
