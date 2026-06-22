@@ -38,7 +38,11 @@ patrón del flujo individual (`_ImportShotTabBar` + `_HeaderSeparator` +
 cuando no entran todos y mantener el gap visual del separador bajo el tab
 activo. El logger escribe trazas `Bulk tabs [...]` con geometría/ancho de tabs
 en `debugPy_ImportShots.log` para facilitar debugging. También registra las
-alturas reales y sugeridas del tab bar, header y cada tab.
+alturas reales y sugeridas del tab bar, header y cada tab. El header deja 2 px
+libres arriba para que se vea el borde superior del tab activo. El tab bar usa
+una política horizontal `Expanding`, mientras sus tabs mantienen
+`setExpanding(False)`: el bar consume todo el ancho disponible antes de activar
+las flechas de navegación.
 
 La posicion de insercion en el timeline se calcula automaticamente escaneando
 los shots existentes y determinando la posicion alfabeticamente correcta,
@@ -163,6 +167,10 @@ Detalles técnicos relevantes para tocar el header:
   → sin esto el texto de los tabs se cropea en los extremos.
 - **Altura mínima natural** (`_ImportShotTabBar.MIN_HEIGHT = 48`) forma parte
   del `sizeHint` del tab y obliga al layout a reservar espacio vertical.
+- **Ancho disponible del Bulk**: el `QTabBar` tiene `QSizePolicy.Expanding` y
+  ocupa el espacio completo del header; los tabs siguen usando ancho natural.
+  El log informa `tabs_total_w`, `free_w` y geometría/visibilidad de los botones
+  de scroll.
 - **`WA_StyledBackground`** en el wrapper del header: sin este flag, un
   `QWidget` plano no pinta el background definido por stylesheet.
 - **Root layout `setContentsMargins(0, 0, 0, 0)`**: margins en cero para que

@@ -20,6 +20,8 @@ ____________________________________________________________________
          la ultima carpeta navegada del browser (no el shot seleccionado).
          Fix altura tabs: tabSizeHint impone minimo de 48px y el log Bulk
          registra alturas reales/sugeridas del tab bar, header y cada tab.
+         Fix layout header Bulk: deja 2px sobre los tabs y permite que el
+         tab bar use todo el ancho libre antes de mostrar flechas de scroll.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -6640,7 +6642,8 @@ class BulkImportDialog(QtWidgets.QDialog):
         self._header.setObjectName("LGA_ImportShotHeader")
         self._header.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         _hdr_lay = QtWidgets.QHBoxLayout(self._header)
-        _hdr_lay.setContentsMargins(0, 0, 9, 0)
+        # 2px arriba dejan visible el borde superior del tab seleccionado.
+        _hdr_lay.setContentsMargins(0, 2, 9, 0)
         _hdr_lay.setSpacing(0)
 
         self._tab_bar = _ImportShotTabBar()
@@ -6648,8 +6651,13 @@ class BulkImportDialog(QtWidgets.QDialog):
         self._tab_bar.setDrawBase(False)
         self._tab_bar.setElideMode(QtCore.Qt.ElideNone)
         self._tab_bar.setUsesScrollButtons(True)
-        _hdr_lay.addWidget(self._tab_bar, 0, QtCore.Qt.AlignBottom)
-        _hdr_lay.addStretch(1)
+        # El bar debe ocupar todo el ancho libre del header. setExpanding(False)
+        # sigue controlando los tabs individuales: conservan su ancho natural.
+        self._tab_bar.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Preferred,
+        )
+        _hdr_lay.addWidget(self._tab_bar, 1, QtCore.Qt.AlignBottom)
 
         root.addWidget(self._header)
         self._header_sep = _HeaderSeparator(self._tab_bar)
@@ -6728,11 +6736,28 @@ class BulkImportDialog(QtWidgets.QDialog):
                 )
             header = getattr(self, "_header", None)
             header_h = int(header.height()) if header is not None else -1
+            header_w = int(header.width()) if header is not None else -1
             header_hint_h = int(header.sizeHint().height()) if header is not None else -1
             bar_hint = bar.sizeHint()
+            tabs_total_w = sum(int(bar.tabRect(idx).width()) for idx in range(bar.count()))
+            scroll_buttons = []
+            for button in bar.findChildren(QtWidgets.QToolButton):
+                geometry = button.geometry()
+                scroll_buttons.append(
+                    "visible=%s enabled=%s geo=%d,%d,%dx%d"
+                    % (
+                        bool(button.isVisible()),
+                        bool(button.isEnabled()),
+                        int(geometry.x()),
+                        int(geometry.y()),
+                        int(geometry.width()),
+                        int(geometry.height()),
+                    )
+                )
             debug_print(
                 "Bulk tabs [%s] bar=%dx%d bar_hint=%dx%d header_h=%d "
-                "header_hint_h=%d count=%d current=%d usesScrollButtons=%s :: %s"
+                "header_w=%d header_hint_h=%d tabs_total_w=%d free_w=%d "
+                "count=%d current=%d usesScrollButtons=%s scrollButtons=[%s] :: %s"
                 % (
                     reason,
                     int(bar.width()),
@@ -6740,10 +6765,14 @@ class BulkImportDialog(QtWidgets.QDialog):
                     int(bar_hint.width()),
                     int(bar_hint.height()),
                     header_h,
+                    header_w,
                     header_hint_h,
+                    tabs_total_w,
+                    int(bar.width()) - tabs_total_w,
                     int(bar.count()),
                     int(bar.currentIndex()),
                     bool(bar.usesScrollButtons()),
+                    " | ".join(scroll_buttons),
                     " | ".join(metrics),
                 )
             )
