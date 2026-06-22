@@ -12,6 +12,12 @@ ____________________________________________________________________
          shot, preview grafico combinado con chips proporcionales y colores,
          tabs de ancho natural, resumen compacto de omitidos y ejecucion en
          un unico undo. Rename/Transcode quedan controlados por flag global.
+         Fix UI Bulk: reutiliza _ImportShotTabBar + _HeaderSeparator para
+         respetar el ancho real del shot name y mantener el gap visual bajo
+         el tab activo. Agrega logs de diagnostico de tabs Bulk.
+         Fix follow-up: evita refresh del header en _BulkShotPanel (no tiene
+         _tab_bar propio), corrige ancho visible del tab bar del Bulk y guarda
+         la ultima carpeta navegada del browser (no el shot seleccionado).
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -2079,6 +2085,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._refresh_footer_controls()
 
     def _refresh_header_layout(self):
+        if not hasattr(self, "_tab_bar") or not hasattr(self, "_header"):
+            return
         # Si una versión previa forzó min/max width del tabbar, lo reseteamos.
         # Dejamos que Qt calcule el ancho natural para evitar header recortado.
         self._tab_bar.setMinimumWidth(0)
@@ -2155,7 +2163,8 @@ class ImportShotDialog(QtWidgets.QDialog):
 
     def showEvent(self, event):
         super(ImportShotDialog, self).showEvent(event)
-        QtCore.QTimer.singleShot(0, self._refresh_header_layout)
+        if hasattr(self, "_tab_bar") and hasattr(self, "_header"):
+            QtCore.QTimer.singleShot(0, self._refresh_header_layout)
 
     def closeEvent(self, event):
         debug_print(
@@ -6576,6 +6585,10 @@ class _BulkShotPanel(ImportShotDialog):
         buttons.addStretch()
         layout.addLayout(buttons)
 
+    def showEvent(self, event):
+        """No ejecutar lógica de header del diálogo principal en panel embebido."""
+        QtWidgets.QDialog.showEvent(self, event)
+
     def selected_items(self):
         result = []
         for row, checkbox in self._checkboxes.items():
@@ -6609,23 +6622,51 @@ class BulkImportDialog(QtWidgets.QDialog):
         self.setWindowTitle("Bulk Import Shots — %d shots" % len(entries))
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
         self.setMinimumSize(1300, 700)
-        self.setStyleSheet(_DIALOG_STYLE)
+        self.setStyleSheet(_DIALOG_STYLE + ImportShotDialog._TAB_STYLE)
 
         root = QtWidgets.QVBoxLayout(self)
-        self.tabs = QtWidgets.QTabWidget()
-        self.tabs.setStyleSheet(ImportShotDialog._TAB_STYLE)
-        tab_bar = self.tabs.tabBar()
-        tab_bar.setExpanding(False)
-        tab_bar.setElideMode(QtCore.Qt.ElideNone)
-        tab_bar.setUsesScrollButtons(True)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        self._header = QtWidgets.QWidget()
+        self._header.setObjectName("LGA_ImportShotHeader")
+        self._header.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        _hdr_lay = QtWidgets.QHBoxLayout(self._header)
+        _hdr_lay.setContentsMargins(0, 0, 9, 0)
+        _hdr_lay.setSpacing(0)
+
+        self._tab_bar = _ImportShotTabBar()
+        self._tab_bar.setExpanding(False)
+        self._tab_bar.setDrawBase(False)
+        self._tab_bar.setElideMode(QtCore.Qt.ElideNone)
+        self._tab_bar.setUsesScrollButtons(True)
+        _hdr_lay.addWidget(self._tab_bar, 0, QtCore.Qt.AlignBottom)
+        _hdr_lay.addStretch(1)
+
+        root.addWidget(self._header)
+        self._header_sep = _HeaderSeparator(self._tab_bar)
+        root.addWidget(self._header_sep)
+
+        _body = QtWidgets.QWidget()
+        _body_lay = QtWidgets.QVBoxLayout(_body)
+        _body_lay.setContentsMargins(9, 10, 9, 9)
+        _body_lay.setSpacing(6)
+
+        self._tab_widget = QtWidgets.QStackedWidget()
+        self.tabs = self._tab_widget  # compatibilidad con código anterior
+        _body_lay.addWidget(self._tab_widget, 1)
+
         for entry in entries:
             panel = _BulkShotPanel(entry, seq, self)
             self.panels.append(panel)
-            self.tabs.addTab(panel, entry["shot_name"])
+            self._tab_widget.addWidget(panel)
+            self._tab_bar.addTab(entry["shot_name"])
         self.preview_page = self._build_preview_page()
-        self.tabs.addTab(self.preview_page, "PREVIEW")
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-        root.addWidget(self.tabs, 1)
+        self._tab_widget.addWidget(self.preview_page)
+        self._tab_bar.addTab("PREVIEW")
+        self._tab_bar.currentChanged.connect(self._tab_widget.setCurrentIndex)
+        self._tab_bar.currentChanged.connect(self._on_tab_changed)
+        root.addWidget(_body, 1)
 
         footer = QtWidgets.QHBoxLayout()
         if self.skipped:
@@ -6644,7 +6685,48 @@ class BulkImportDialog(QtWidgets.QDialog):
         self.import_button.setStyleSheet(_BTN_PRIMARY)
         self.import_button.clicked.connect(self._do_bulk_import)
         footer.addWidget(self.import_button)
-        root.addLayout(footer)
+        _body_lay.addLayout(footer)
+
+        if self._tab_bar.count() > 0:
+            self._tab_bar.setCurrentIndex(0)
+            self._tab_widget.setCurrentIndex(0)
+            self._on_tab_changed(0)
+        self._log_bulk_tab_metrics("init")
+
+    def showEvent(self, event):
+        super(BulkImportDialog, self).showEvent(event)
+        self._log_bulk_tab_metrics("showEvent")
+
+    def _log_bulk_tab_metrics(self, reason):
+        """Loggea geometría y textos de tabs para diagnosticar recortes visuales."""
+        bar = getattr(self, "_tab_bar", None)
+        if bar is None:
+            return
+        try:
+            metrics = []
+            for idx in range(bar.count()):
+                rect = bar.tabRect(idx)
+                metrics.append(
+                    "%d:%s(x=%d,w=%d)" % (
+                        idx,
+                        bar.tabText(idx),
+                        int(rect.x()),
+                        int(rect.width()),
+                    )
+                )
+            debug_print(
+                "Bulk tabs [%s] bar_w=%d count=%d current=%d usesScrollButtons=%s :: %s"
+                % (
+                    reason,
+                    int(bar.width()),
+                    int(bar.count()),
+                    int(bar.currentIndex()),
+                    bool(bar.usesScrollButtons()),
+                    " | ".join(metrics),
+                )
+            )
+        except Exception as exc:
+            debug_print("Bulk tabs metrics error [%s]: %s" % (reason, exc), level="warning")
 
     def _build_preview_page(self):
         page = QtWidgets.QWidget()
@@ -6666,11 +6748,12 @@ class BulkImportDialog(QtWidgets.QDialog):
         return page
 
     def _on_tab_changed(self, index):
+        self._log_bulk_tab_metrics("tabChanged:%d" % index)
         # Un tab puede haber creado un track. Refrescar las opciones del resto
         # sin alterar sus selecciones actuales.
         for panel in self.panels:
             panel._refresh_track_combo_options()
-        if index == self.tabs.count() - 1:
+        if index == self._tab_bar.count() - 1:
             self._refresh_preview()
 
     def _preview_shots(self, layout_data):
@@ -7029,9 +7112,21 @@ def main():
 
     shot_roots = [root.replace("\\", "/") for root in shot_roots]
     shot_root = shot_roots[0]
+    browser_dir = ""
+    try:
+        browser_dir = (bulk_mod.get_last_browser_directory() or "").replace("\\", "/").rstrip("/")
+    except Exception as exc:
+        debug_print("Browser dir lookup failed: %s" % exc, level="warning")
+    if not browser_dir or not Path(browser_dir).is_dir():
+        # Fallback robusto: usar parent de la selección si no hubo dato del browser.
+        browser_dir = str(Path(shot_root).parent).replace("\\", "/")
+    debug_print(
+        "Browser dir persist: initial='%s' selected='%s' browser_current='%s'"
+        % (initial_directory, shot_root, browser_dir)
+    )
     settings_mod.save_all_settings({
         "ui": {
-            "last_shot_directory": shot_root,
+            "last_shot_directory": browser_dir,
         }
     })
 

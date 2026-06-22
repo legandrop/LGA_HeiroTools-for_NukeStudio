@@ -8,6 +8,8 @@ ____________________________________________________________________
 
   v1.00: Browser Qt con seleccion multiple de carpetas y simulacion del
          layout final para el preview combinado del Bulk Import.
+         Fix follow-up: expone la carpeta actual del browser al confirmar para
+         persistirla en settings (evita reabrir dentro del shot seleccionado).
 
   - pick_shot_folders(): browser Qt no-nativo con multi-seleccion de carpetas.
   - simulate_bulk_layout(): simula donde caera cada shot nuevo en el timeline
@@ -32,12 +34,18 @@ def _default_print(*args, **kwargs):
 
 
 debug_print = _default_print
+_last_browser_directory = ""
 
 
 def set_debug_print(fn):
     """El script principal inyecta su debug_print para unificar el logging."""
     global debug_print
     debug_print = fn
+
+
+def get_last_browser_directory():
+    """Último directorio visible en el browser al aceptar selección."""
+    return _last_browser_directory
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -85,6 +93,18 @@ def pick_shot_folders(initial_dir="", parent=None):
         debug_print("pick_shot_folders: cancelado")
         return []
 
+    global _last_browser_directory
+    try:
+        _last_browser_directory = (
+            dlg.directory().absolutePath().replace("\\", "/").rstrip("/")
+        )
+    except Exception as exc:
+        _last_browser_directory = ""
+        debug_print(
+            "pick_shot_folders: no se pudo leer current dir → %s" % exc,
+            level="warning",
+        )
+
     # selectedFiles() no siempre conserva la seleccion extendida en PySide.
     # Completarla leyendo los selectionModel de ambas vistas internas.
     selected_paths = list(dlg.selectedFiles())
@@ -104,7 +124,10 @@ def pick_shot_folders(initial_dir="", parent=None):
         norm = p.replace("\\", "/").rstrip("/")
         if norm and QtCore.QFileInfo(norm).isDir() and norm not in folders:
             folders.append(norm)
-    debug_print("pick_shot_folders: %d carpeta(s) → %s" % (len(folders), folders))
+    debug_print(
+        "pick_shot_folders: %d carpeta(s) current_dir='%s' → %s"
+        % (len(folders), _last_browser_directory or "", folders)
+    )
     return folders
 
 

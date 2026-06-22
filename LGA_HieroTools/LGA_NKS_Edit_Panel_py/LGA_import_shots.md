@@ -32,9 +32,12 @@ estan temporalmente controlados por el flag global `RENAME_TRANSCODE_TABS`,
 definido en `False`; no se muestra un checkbox para habilitarlos.
 
 En Bulk Import, el footer muestra solamente `N Shots omitidos`; la lista de
-nombres queda disponible en el tooltip. Los tabs usan el ancho natural del
-shot name y habilitan botones de scroll cuando el total excede la ventana, sin
-recortar los labels ni la palabra `PREVIEW`.
+nombres queda disponible en el tooltip. El header de tabs reutiliza el mismo
+patrón del flujo individual (`_ImportShotTabBar` + `_HeaderSeparator` +
+`QStackedWidget`) para respetar el ancho real del shot name, habilitar scroll
+cuando no entran todos y mantener el gap visual del separador bajo el tab
+activo. El logger escribe trazas `Bulk tabs [...]` con geometría/ancho de tabs
+en `debugPy_ImportShots.log` para facilitar debugging.
 
 La posicion de insercion en el timeline se calcula automaticamente escaneando
 los shots existentes y determinando la posicion alfabeticamente correcta,
@@ -65,7 +68,7 @@ un track secundario no puede acortar el rango master del shot.
 | `LGA_import_shots_preview.py` | Lógica de datos del Import Preview. `build_import_preview_data`, `classify_track_type`, `_find_adjacent_clips` | **implementado** |
 | `LGA_import_shots_timeline.py` | Helpers de timeline para el import real. `push_clips_right`, `place_clip_in_timeline`, `stretch_burnin`, `set_debug_print` | **implementado** |
 | `LGA_import_shots_bin.py` | Helpers de bin para el import real. `find_or_create_shot_bin`, `import_item_to_bin`, `set_debug_print` | **implementado** |
-| `LGA_import_shots_bulk.py` | Browser multi-carpeta y simulacion pura del layout final. `pick_shot_folders`, `simulate_bulk_layout` | **implementado** |
+| `LGA_import_shots_bulk.py` | Browser multi-carpeta y simulacion pura del layout final. `pick_shot_folders`, `get_last_browser_directory`, `simulate_bulk_layout` | **implementado** |
 | `LGA_import_shots_scan.py` | Helpers de escaneo de carpetas y metadata | pendiente |
 | `LGA_import_shots_ui.py` | Estilos CSS, widgets helpers, separadores | pendiente |
 
@@ -122,7 +125,9 @@ corner widget con `seq / shotname` a la derecha.
 El header **NO usa `QTabWidget`** (probado y descartado: `setCornerWidget` no
 respeta `SizePolicy::Expanding`, lo que dejaba el shotname más bajo que los
 tabs y con franjas grises arriba). En su lugar es un `QHBoxLayout` plano con
-tabs + stretch + shotname como hermanos:
+tabs + stretch + shotname como hermanos. El mismo patrón se reutiliza en
+`BulkImportDialog` para que los tabs mantengan exactamente el mismo tratamiento
+visual y geométrico:
 
 ```
 QWidget (objectName "LGA_ImportShotHeader")  ← fondo #232323, WA_StyledBackground
@@ -712,7 +717,7 @@ delete = false
 
 [UI]
 advanced_tabs = false ; false = solo Import y Open Queue oculto
-last_shot_directory =  ; ultima carpeta elegida en el browser
+last_shot_directory =  ; ultimo directorio visible en el browser al confirmar
 
 [ResPreset_0]
 name = Original
@@ -743,7 +748,9 @@ special = custom
 1. **Apertura de la herramienta:** `load_all_settings()` y `load_res_presets()` se llaman en
    `ImportShotDialog.__init__` **antes** de construir la UI.
    Antes de abrir `QFileDialog`, `main()` carga `ui/last_shot_directory` y la usa como
-   carpeta inicial si aun existe. Al confirmar una carpeta, la guarda inmediatamente.
+   carpeta inicial si aun existe. Al confirmar, guarda el **directorio actual del browser**
+   (no la carpeta de shot seleccionada), para que la próxima apertura arranque donde
+   estaba navegando el usuario.
 2. **Construccion de la UI:** los widgets se crean con sus defaults internos, luego
    `_load_settings_to_ui()` aplica los valores guardados (sin activar auto-save).
 3. **Tabs avanzados:** `ImportShotDialog.__init__` aplica `ui/advanced_tabs` y luego
