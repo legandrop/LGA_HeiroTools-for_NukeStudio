@@ -47,6 +47,11 @@ las flechas de navegación.
 En la columna **Track**, el valor `— sin track —` se muestra en rojo y bold
 para señalar inmediatamente que ese ítem no será colocado en el timeline.
 
+Cada `_BulkShotPanel` es técnicamente un `QDialog` embebido para reutilizar los
+métodos de `ImportShotDialog`, pero anula el borde de `_DIALOG_STYLE`. De esta
+forma visualmente coincide con la página `QWidget` del import individual y no
+aparece un marco adicional alrededor de la tabla.
+
 La posicion de insercion en el timeline se calcula automaticamente escaneando
 los shots existentes y determinando la posicion alfabeticamente correcta,
 sin depender del playhead.
@@ -174,6 +179,12 @@ Detalles técnicos relevantes para tocar el header:
   ocupa el espacio completo del header; los tabs siguen usando ancho natural.
   El log informa `tabs_total_w`, `free_w` y geometría/visibilidad de los botones
   de scroll.
+- **Separadores de tabs inactivos**: `_ImportShotTabBar.paintEvent()` dibuja
+  una línea vertical `#383838` únicamente entre dos tabs no seleccionados.
+  Los límites contiguos al tab activo permanecen abiertos para no competir con
+  su borde `#4a4a4a`. Las líneas ocupan toda la altura del tab, igual que el
+  borde lateral activo, y el último tab agrega un borde derecho cuando está
+  inactivo (habitualmente `PREVIEW`).
 - **`WA_StyledBackground`** en el wrapper del header: sin este flag, un
   `QWidget` plano no pinta el background definido por stylesheet.
 - **Root layout `setContentsMargins(0, 0, 0, 0)`**: margins en cero para que

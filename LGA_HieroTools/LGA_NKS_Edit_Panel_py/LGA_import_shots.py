@@ -23,6 +23,10 @@ ____________________________________________________________________
          Fix layout header Bulk: deja 2px sobre los tabs y permite que el
          tab bar use todo el ancho libre antes de mostrar flechas de scroll.
          Ajuste Track: el valor "sin track" se muestra en rojo y bold.
+         Ajuste visual: elimina el borde QDialog extra de cada panel Bulk y
+         separa con linea oscura los tabs no seleccionados adyacentes.
+         Los separadores inactivos cubren todo el alto y el ultimo tab suma
+         borde derecho cuando no esta seleccionado.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -1785,12 +1789,48 @@ class _ImportShotTabBar(QtWidgets.QTabBar):
     """
     EXTRA_WIDTH = 24  # px adicionales por tab — cubre letter-spacing + aire
     MIN_HEIGHT = 48   # 12px fuente + 16px arriba/abajo + bordes
+    INACTIVE_SEPARATOR_COLOR = QtGui.QColor("#424242")
 
     def tabSizeHint(self, index):
         s = super(_ImportShotTabBar, self).tabSizeHint(index)
         s.setWidth(s.width() + self.EXTRA_WIDTH)
         s.setHeight(max(s.height(), self.MIN_HEIGHT))
         return s
+
+    def paintEvent(self, event):
+        super(_ImportShotTabBar, self).paintEvent(event)
+
+        # QSS no permite expresar "separar solamente dos tabs inactivos".
+        # Dibujamos cada limite solo cuando ninguno de sus lados es el activo.
+        current = self.currentIndex()
+        painter = QtGui.QPainter(self)
+        painter.setPen(self.INACTIVE_SEPARATOR_COLOR)
+        for right_index in range(1, self.count()):
+            left_index = right_index - 1
+            if current in (left_index, right_index):
+                continue
+            left_rect = self.tabRect(left_index)
+            right_rect = self.tabRect(right_index)
+            if left_rect.isEmpty() or right_rect.isEmpty():
+                continue
+            x = right_rect.left()
+            top = max(left_rect.top(), right_rect.top())
+            bottom = min(left_rect.bottom(), right_rect.bottom())
+            if bottom >= top:
+                painter.drawLine(x, top, x, bottom)
+
+        # Cerrar visualmente el extremo derecho del último tab cuando está
+        # inactivo. Esto incluye PREVIEW, que normalmente ocupa esa posición.
+        last_index = self.count() - 1
+        if last_index >= 0 and current != last_index:
+            last_rect = self.tabRect(last_index)
+            if not last_rect.isEmpty():
+                painter.drawLine(
+                    last_rect.right(),
+                    last_rect.top(),
+                    last_rect.right(),
+                    last_rect.bottom(),
+                )
 
 
 class ImportShotDialog(QtWidgets.QDialog):
@@ -6583,6 +6623,10 @@ class _BulkShotPanel(ImportShotDialog):
     def __init__(self, entry, seq, parent=None):
         QtWidgets.QDialog.__init__(self, parent)
         self.setWindowFlags(QtCore.Qt.Widget)
+        # _DIALOG_STYLE aplica border a todo QDialog. Este objeto es una pagina
+        # embebida, equivalente al QWidget de _build_import_main(), no una
+        # ventana: anulamos únicamente ese borde heredado.
+        self.setStyleSheet("QDialog { border: 0px; background-color: #2B2B2B; }")
         self.shot_root = entry["shot_root"]
         self.shot_name = entry["shot_name"]
         self.seq = seq
