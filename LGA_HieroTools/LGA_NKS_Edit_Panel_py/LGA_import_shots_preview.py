@@ -1,9 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_preview v1.00 | Lega
+  LGA_import_shots_preview v1.01 | Lega
 
   Logica de datos para la pagina Import Preview de LGA_import_shots.
+
+  v1.01: Soporte de track keys unicas (name||bt_index) para distinguir tracks
+         duplicados por nombre en preview/import. Expone track_key y
+         track_label (con sufijo "(2)" cuando aplica), manteniendo
+         compatibilidad con mapeo legado por nombre.
 
 ____________________________________________________________________
 """
@@ -84,6 +89,24 @@ def classify_track_type(track_name: str) -> str:
     if lower == "_cleanup_" or lower.startswith("_cleanup_"):
         return "cleanup"
     return "other"
+
+
+_TRACK_KEY_SEP = "||"
+
+
+def _make_track_key(track_name: str, bt_index: int) -> str:
+    return "%s%s%d" % (str(track_name), _TRACK_KEY_SEP, int(bt_index))
+
+
+def _parse_track_key(track_ref):
+    text = str(track_ref or "")
+    if _TRACK_KEY_SEP in text:
+        name, idx_txt = text.rsplit(_TRACK_KEY_SEP, 1)
+        try:
+            return name, int(idx_txt)
+        except Exception:
+            return name, None
+    return text, None
 
 
 # ── helpers de búsqueda en track ─────────────────────────────────────────────
@@ -204,8 +227,10 @@ def build_import_preview_data(
         insert_frame:     frame de inserción calculado por _find_insert_frame()
         prev_shot_name:   nombre exacto del shot anterior en el timeline (o None)
         next_shot_name:   nombre exacto del shot siguiente en el timeline (o None)
-        items_by_track:   dict track_name → [item_dict] de los ítems chequeados
-                          (ya deduplicados: solo la última versión por track)
+        items_by_track:   dict track_key → [item_dict] de los ítems chequeados.
+                          track_key puede ser:
+                            - "TrackName||<bt_index>" (preferido, único)
+                            - "TrackName" (legado)
         unassigned_items: ítems chequeados sin track asignado, cada uno con
                           un campo extra "_color" con su color de barra
 
@@ -213,7 +238,9 @@ def build_import_preview_data(
         {
           "tracks": [
             {
+              "track_key": str,
               "track_name": str,
+              "track_label": str,
               "track_type": "plate"|"editref"|"comp"|"roto"|"cleanup"|"other",
               "before_clip": {"name": str, "tl_in": int, "tl_out": int, "duration": int} | None,
               "new_items":   [item_dict],
@@ -240,12 +267,11 @@ def build_import_preview_data(
         }
 
     try:
-        # Hiero devuelve los tracks de abajo hacia arriba;
-        # reversed() los da de arriba hacia abajo como se ven en el timeline.
-        video_tracks = list(reversed(list(seq.videoTracks())))
+        # bt-order: índice 0 = fondo del timeline.
+        tracks_bt = list(seq.videoTracks())
     except Exception as exc:
         _log("build_import_preview_data: error obteniendo videoTracks: %s" % exc, level="error")
-        video_tracks = []
+        tracks_bt = []
 
     _log(
         "build_import_preview_data: seq='%s', insert_frame=%d, "
@@ -253,59 +279,88 @@ def build_import_preview_data(
         "tracks_en_timeline=%d, tracks_con_items=%d, unassigned=%d"
         % (seq.name(), insert_frame,
            prev_shot_name or "", next_shot_name or "",
-           len(video_tracks), len(items_by_track), len(unassigned_items))
+           len(tracks_bt), len(items_by_track), len(unassigned_items))
     )
 
-    seen_track_names = set()
-    # Track names that ya recibieron new_items; cuando hay dos tracks con el mismo
-    # nombre solo el primero (mas alto visualmente) recibe los ítems nuevos.
-    assigned_track_names = set()
+    total_by_name = {}
+    for track in tracks_bt:
+        tname = track.name()
+        if tname.strip().lower() in {"burnin", "burn in", "burn_in"}:
+            continue
+        total_by_name[tname] = total_by_name.get(tname, 0) + 1
 
-    for track in video_tracks:
+    seen_by_name = {}
+    seen_track_keys = set()
+    seen_track_names = set()
+    # Compatibilidad: si llegan claves legadas por nombre y hay duplicados,
+    # solo el primer track topmost consume esos ítems.
+    assigned_legacy_names = set()
+
+    for bt_index in range(len(tracks_bt) - 1, -1, -1):  # top→bottom
+        track = tracks_bt[bt_index]
         try:
             tname = track.name()
         except Exception:
             continue
 
+        if tname.strip().lower() in {"burnin", "burn in", "burn_in"}:
+            continue
+
         seen_track_names.add(tname)
+        track_key = _make_track_key(tname, bt_index)
+        seen_track_keys.add(track_key)
+
+        seen_by_name[tname] = seen_by_name.get(tname, 0) + 1
+        occ = seen_by_name[tname]
+        track_label = tname if total_by_name.get(tname, 0) <= 1 else "%s (%d)" % (tname, occ)
+
         before, after = _find_adjacent_clips(track, prev_shot_name, next_shot_name)
 
-        if tname in items_by_track and tname not in assigned_track_names:
+        if track_key in items_by_track:
+            new_items = items_by_track[track_key]
+        elif tname in items_by_track and tname not in assigned_legacy_names:
             new_items = items_by_track[tname]
-            assigned_track_names.add(tname)
+            assigned_legacy_names.add(tname)
         else:
             new_items = []
 
         _log(
             "  track='%s' | before=%s | new_items=%d | after=%s"
             % (
-                tname,
+                track_label,
                 ("'%s' %df" % (before["name"], before["duration"])) if before else "None",
                 len(new_items),
                 ("'%s' %df" % (after["name"], after["duration"])) if after else "None",
             )
         )
 
-        # Se incluyen TODOS los tracks del timeline
         tracks_result.append({
+            "track_key": track_key,
             "track_name": tname,
+            "track_label": track_label,
             "track_type": classify_track_type(tname),
             "before_clip": before,
-            "new_items":   list(new_items),
-            "after_clip":  after,
+            "new_items": list(new_items),
+            "after_clip": after,
         })
 
     # Tracks asignados a ítems nuevos que NO existen en el timeline
-    for tname, items in items_by_track.items():
-        if tname in seen_track_names:
+    for track_ref, items in items_by_track.items():
+        track_name, bt_index = _parse_track_key(track_ref)
+        explicit_key = _make_track_key(track_name, bt_index) if bt_index is not None else None
+        if explicit_key and explicit_key in seen_track_keys:
             continue
-        _log("  track='%s' no existe en timeline → se añade al final" % tname)
+        if bt_index is None and track_name in seen_track_names:
+            continue
+        _log("  track='%s' no existe en timeline → se añade al final" % track_name)
         tracks_result.append({
-            "track_name": tname,
-            "track_type": classify_track_type(tname),
+            "track_key": explicit_key or track_name,
+            "track_name": track_name,
+            "track_label": track_name,
+            "track_type": classify_track_type(track_name),
             "before_clip": None,
-            "new_items":   list(items),
-            "after_clip":  None,
+            "new_items": list(items),
+            "after_clip": None,
         })
 
     return {

@@ -1,9 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_timeline v1.00 | Lega
+  LGA_import_shots_timeline v1.01 | Lega
 
   Helpers de timeline para la importacion real de LGA_import_shots.
+
+  v1.01: place_clip_in_timeline acepta track_ref con clave unica
+         "track_name||bt_index" para resolver la instancia exacta del track
+         cuando existen duplicados por nombre; fallback legacy por nombre.
 
 ____________________________________________________________________
 """
@@ -21,6 +25,7 @@ except ImportError:
 # ── constantes ────────────────────────────────────────────────────────────────
 
 _BURNIN_TRACK_NAMES = {"burnin", "burn in", "burn_in"}
+_TRACK_KEY_SEP = "||"
 
 
 # ── logging inyectable ────────────────────────────────────────────────────────
@@ -48,9 +53,48 @@ def _is_burnin_track(track_name: str) -> bool:
     return track_name.lower().strip() in _BURNIN_TRACK_NAMES
 
 
-def _find_video_track(seq, track_name: str):
-    """Retorna el track de video más alto (top del stack) que coincide con track_name.
-    Hiero devuelve videoTracks() de abajo hacia arriba; reversed() da top-to-bottom."""
+def _parse_track_ref(track_ref):
+    """
+    track_ref puede ser:
+      - "TrackName||<bt_index>"  (preferido, único por instancia de track)
+      - "TrackName"              (legado)
+    Retorna (track_name, bt_index|None).
+    """
+    text = str(track_ref or "")
+    if _TRACK_KEY_SEP in text:
+        name, idx_txt = text.rsplit(_TRACK_KEY_SEP, 1)
+        try:
+            return name, int(idx_txt)
+        except Exception:
+            return name, None
+    return text, None
+
+
+def _find_video_track(seq, track_ref):
+    """
+    Resuelve el track de video destino.
+
+    Si track_ref incluye bt_index ("name||idx"), intenta resolver exactamente
+    esa instancia de track. Si no puede, cae al lookup legacy por nombre.
+    """
+    track_name, bt_index = _parse_track_ref(track_ref)
+    if bt_index is not None:
+        try:
+            tracks_bt = list(seq.videoTracks())  # índice 0 = fondo (bt-order)
+            if 0 <= bt_index < len(tracks_bt):
+                exact_track = tracks_bt[bt_index]
+                if exact_track.name() == track_name:
+                    return exact_track
+                _log(
+                    "_find_video_track: bt_index=%d existe pero nombre difiere ('%s' != '%s')"
+                    % (bt_index, exact_track.name(), track_name),
+                    level="warning",
+                )
+        except Exception as exc:
+            _log("_find_video_track: error resolviendo bt_index → %s" % exc, level="warning")
+
+    # Fallback legacy: track más alto (top del stack) por nombre.
+    # Hiero devuelve videoTracks() de abajo hacia arriba; reversed() da top-to-bottom.
     for track in reversed(list(seq.videoTracks())):
         if track.name() == track_name:
             return track
@@ -216,7 +260,7 @@ def push_clips_right(seq, from_frame: int, amount: int):
     return moved, effective_insert_frame
 
 
-def place_clip_in_timeline(seq, clip, track_name: str,
+def place_clip_in_timeline(seq, clip, track_ref: str,
                             tl_in: int, frame_count: int,
                             shot_name: str):
     """
@@ -229,20 +273,21 @@ def place_clip_in_timeline(seq, clip, track_name: str,
     - Source in/out: 0 .. frame_count-1 (el primer frame EXR mapea a source 0).
     - setVersionLinkedToBin(True) se llama al final, cuando el item ya esta insertado.
     """
-    target_track = _find_video_track(seq, track_name)
+    target_track = _find_video_track(seq, track_ref)
     if target_track is None:
-        msg = "Track no encontrado: '%s'" % track_name
+        msg = "Track no encontrado: '%s'" % track_ref
         _log("place_clip_in_timeline: %s" % msg, level="error")
         return None, msg
 
+    target_track_name = target_track.name()
     tl_out = tl_in + frame_count - 1
     try:
         track_item = target_track.addTrackItem(clip, tl_in)
         track_item.setName(shot_name)
         track_item.setTimes(tl_in, tl_out, 0, frame_count - 1)
         track_item.setVersionLinkedToBin(True)
-        _log("place_clip_in_timeline: '%s' → track='%s' tl=%d-%d (%df)"
-             % (shot_name, track_name, tl_in, tl_out, frame_count))
+        _log("place_clip_in_timeline: '%s' → track='%s' (ref='%s') tl=%d-%d (%df)"
+             % (shot_name, target_track_name, track_ref, tl_in, tl_out, frame_count))
         return track_item, None
     except Exception as exc:
         _log("place_clip_in_timeline: excepcion → %s" % exc, level="error")

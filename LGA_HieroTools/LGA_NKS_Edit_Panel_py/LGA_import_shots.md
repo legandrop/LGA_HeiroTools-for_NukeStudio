@@ -49,6 +49,17 @@ las flechas de navegación.
 
 En la columna **Track**, el valor `— sin track —` se muestra en rojo y bold
 para señalar inmediatamente que ese ítem no será colocado en el timeline.
+Las opciones del dropdown se listan en el mismo orden visual del timeline
+(top→bottom), igual que en Preview. Si existen tracks duplicados por nombre,
+se muestran desambiguados como `Nombre (1)`, `Nombre (2)`, etc.
+Internamente cada elección usa una clave única `track_name||bt_index`, por lo
+que Preview e import real distinguen correctamente tracks homónimos.
+Cuando se asigna un track ya usado por otro ítem, el anterior pasa
+automáticamente a `— sin track —` (nunca quedan dos clips en el mismo track).
+
+El Preview de Bulk ahora incluye la sección **SIN TRACK ASIGNADO** al pie de la
+tabla, equivalente al flujo individual: cada ítem sin track aparece como chip
+en la columna de su shot correspondiente.
 
 Cada `_BulkShotPanel` es técnicamente un `QDialog` embebido para reutilizar los
 métodos de `ImportShotDialog`, pero anula el borde de `_DIALOG_STYLE`. De esta

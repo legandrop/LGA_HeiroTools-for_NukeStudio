@@ -29,6 +29,13 @@ ____________________________________________________________________
          borde derecho cuando no esta seleccionado.
          Import individual: Preview Timeline pasa de boton/sub-vista a tab
          principal PREVIEW, a la derecha de IMPORT.
+         Fix preview/import tracks: dropdown de Track usa orden visual real del
+         timeline (igual al preview), soporta tracks duplicados por nombre con
+         clave unica name||bt_index, fuerza 1 clip por track desasignando el
+         anterior al reusar track, y respeta esa seleccion exacta en preview e
+         import real (single + bulk). Bulk agrega seccion "SIN TRACK ASIGNADO".
+         Agrega variables editables para chips greyed out y color verde de
+         header "Shot Nuevo" (tambien aplicado al bulk).
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -436,6 +443,17 @@ _CLR_STATUS_UPSCALE  = "#a06060" # estado Upscale (bloq) — rojo suave
 # fácilmente por el color que quiera (ej. verde) manteniendo patrón.
 _QUEUE_BTN_BG_NORMAL = "#3a7b91"  # violeta oscuro normal
 _QUEUE_BTN_BG_HOVER  = "#4db4cb"  # violeta claro hover
+
+# ✅✅💾💾 Color de texto para clips de contexto (greyed out) en previews.
+_PREVIEW_GREY_TEXT_COLOR = "#858585"
+# ✅✅💾💾 Color de borde para clips de contexto (greyed out) en previews.
+_PREVIEW_GREY_BORDER_COLOR = "#595959"
+# ✅✅💾💾 Color de fondo para clips de contexto (greyed out) en previews.
+_PREVIEW_GREY_BG_COLOR = "#303030"
+# ✅✅💾💾 Color del título "Shot Nuevo" (single + bulk preview).
+_PREVIEW_NEW_SHOT_HEADER_COLOR = "#6fa96f"
+
+_TRACK_KEY_SEP = "||"
 
 # ── constantes de track ────────────────────────────────────────────
 BURNIN_TRACK_NAMES = {"burnin", "burn in", "burn_in"}
@@ -868,6 +886,70 @@ def _scan_publish_folders(shot_root):
 
 def _is_burnin_track(track_name):
     return track_name.lower().strip() in BURNIN_TRACK_NAMES
+
+
+def _make_track_key(track_name, bt_index):
+    """Clave estable para diferenciar tracks con el mismo nombre."""
+    return "%s%s%d" % (str(track_name), _TRACK_KEY_SEP, int(bt_index))
+
+
+def _parse_track_key(track_ref):
+    """
+    track_ref puede ser:
+      - "TrackName||<bt_index>" (clave única)
+      - "TrackName" (legado)
+    Retorna (track_name, bt_index|None).
+    """
+    text = str(track_ref or "")
+    if _TRACK_KEY_SEP in text:
+        name, idx_txt = text.rsplit(_TRACK_KEY_SEP, 1)
+        try:
+            return name, int(idx_txt)
+        except Exception:
+            return name, None
+    return text, None
+
+
+def _collect_sequence_track_entries(seq):
+    """
+    Lista de tracks en orden visual top→bottom, excluyendo BurnIn.
+    Incluye:
+      - key:      track_name||bt_index (único aunque haya duplicados)
+      - name:     nombre real del track en Hiero
+      - display:  label para UI (si hay duplicados, agrega sufijo (1), (2), ...)
+      - bt_index: índice bt-order en seq.videoTracks()
+    """
+    if not seq:
+        return []
+    try:
+        tracks_bt = list(seq.videoTracks())  # bt-order
+    except Exception:
+        return []
+
+    total_by_name = {}
+    for track in tracks_bt:
+        tname = track.name()
+        if _is_burnin_track(tname):
+            continue
+        total_by_name[tname] = total_by_name.get(tname, 0) + 1
+
+    seen_by_name = {}
+    entries = []
+    for bt_index in range(len(tracks_bt) - 1, -1, -1):  # top→bottom
+        track = tracks_bt[bt_index]
+        tname = track.name()
+        if _is_burnin_track(tname):
+            continue
+        seen_by_name[tname] = seen_by_name.get(tname, 0) + 1
+        occ = seen_by_name[tname]
+        display = tname if total_by_name.get(tname, 0) <= 1 else "%s (%d)" % (tname, occ)
+        entries.append({
+            "key": _make_track_key(tname, bt_index),
+            "name": tname,
+            "display": display,
+            "bt_index": bt_index,
+        })
+    return entries
 
 
 def _get_shot_name_from_folder(folder_path):
@@ -2704,33 +2786,42 @@ class ImportShotDialog(QtWidgets.QDialog):
 
     _CREATE_TRACK_PREFIX = "+ Crear track "
 
+    def _get_seq_track_entries(self):
+        """Tracks del timeline en orden visual (top→bottom), con claves únicas."""
+        return _collect_sequence_track_entries(self.seq)
+
     def _get_seq_track_names(self):
         """
-        Retorna los nombres de los video tracks existentes en self.seq,
-        en orden visual top-to-bottom (= reversed(videoTracks())), excluyendo BurnIn.
-        Se ordena por _IMPORT_TRACK_ORDER; tracks desconocidos van al final.
+        Compatibilidad: lista de nombres reales de track, en el mismo orden
+        visual que el preview (top→bottom, excluyendo BurnIn).
         """
-        if not self.seq:
-            return []
-        try:
-            names = []
-            for track in reversed(list(self.seq.videoTracks())):  # top→bottom visual
-                name = track.name()
-                if not _is_burnin_track(name):
-                    names.append(name)
-            # Ordenar según _IMPORT_TRACK_ORDER (top-to-bottom visual = reversed bt-order)
-            # _IMPORT_TRACK_ORDER está en bt-order (aPlate=abajo, BurnIn=arriba),
-            # así que el orden visual es reversed → _IMPORT_TRACK_ORDER reversed.
-            visual_order = list(reversed(_IMPORT_TRACK_ORDER))
-            def sort_key(n):
-                try:
-                    return visual_order.index(n)
-                except ValueError:
-                    return len(visual_order)
-            names.sort(key=sort_key)
-            return names
-        except Exception:
-            return []
+        return [entry["name"] for entry in self._get_seq_track_entries()]
+
+    def _track_key_for_name(self, track_name, entries=None):
+        """Devuelve la key del primer track (topmost) que coincide con track_name."""
+        if not track_name:
+            return None
+        entries = entries if entries is not None else self._get_seq_track_entries()
+        for entry in entries:
+            if entry["name"] == track_name:
+                return entry["key"]
+        return None
+
+    @staticmethod
+    def _track_name_from_key(track_key):
+        """Nombre real de track a partir de key ('name||bt_index') o nombre legado."""
+        track_name, _bt_idx = _parse_track_key(track_key)
+        return track_name
+
+    def _track_display_from_key(self, track_key, entries=None):
+        """Label UI a partir de key; útil para tracks duplicados por nombre."""
+        if not track_key:
+            return ""
+        entries = entries if entries is not None else self._get_seq_track_entries()
+        for entry in entries:
+            if entry["key"] == track_key:
+                return entry["display"]
+        return self._track_name_from_key(track_key)
 
     def _create_plate_track(self, track_name):
         """
@@ -2836,43 +2927,51 @@ class ImportShotDialog(QtWidgets.QDialog):
             combos que tenían la opción "Crear track <name>" seleccionada
             (caso de navegación por teclado) también se actualizan.
         """
-        new_options = self._get_seq_track_names()
+        new_entries = self._get_seq_track_entries()
+        new_keys = {entry["key"] for entry in new_entries}
+        new_names = {entry["name"] for entry in new_entries}
+        created_track_key = (
+            self._track_key_for_name(created_track_name, new_entries)
+            if created_track_name else None
+        )
 
         for row_id, combo in self._track_combos.items():
-            current_sel = combo.currentText()
+            current_data = combo.currentData(QtCore.Qt.UserRole)
 
-            # Determinar la selección destino
+            # Determinar la selección destino.
             create_opt = self._CREATE_TRACK_PREFIX + (created_track_name or "")
             if created_track_name and row_id == creator_row:
-                # Este combo inició la creación vía botón → asignar el track
-                target_sel = created_track_name
-            elif created_track_name and current_sel == create_opt:
-                # Selección vía teclado: la opción "Crear…" era el valor actual
-                target_sel = created_track_name
+                # Este combo inició la creación vía botón → asignar el track creado.
+                target_data = created_track_key
+            elif created_track_name and current_data == create_opt:
+                # Selección vía teclado: "Crear track X" quedó como valor actual.
+                target_data = created_track_key
             else:
-                target_sel = current_sel
+                target_data = current_data
 
             # Calcular la opción "Crear" para este row (si aplica)
-            row_item = self._table_rows[row_id].get("item", {})
+            row_item = {}
+            if 0 <= row_id < len(self._table_rows):
+                row_item = self._table_rows[row_id].get("item", {})
             auto_track = row_item.get("track") if row_item else None
             create_option = None
             if (auto_track and _is_plate_track(auto_track)
-                    and auto_track not in new_options):
+                    and auto_track not in new_names):
                 create_option = self._CREATE_TRACK_PREFIX + auto_track
-
-            options = ["— sin track —"] + new_options
-            if create_option:
-                options.append(create_option)
 
             combo.blockSignals(True)
             combo.clear()
-            for opt in options:
-                combo.addItem(opt)
+            combo.addItem("— sin track —", None)
+            for entry in new_entries:
+                combo.addItem(entry["display"], entry["key"])
+            if create_option:
+                combo.addItem(create_option, create_option)
 
             # Restaurar selección
-            if target_sel in new_options:
-                combo.setCurrentText(target_sel)
-            elif target_sel == "— sin track —":
+            if target_data in new_keys:
+                idx = combo.findData(target_data, QtCore.Qt.UserRole)
+                combo.setCurrentIndex(idx if idx >= 0 else 0)
+            elif target_data is None:
                 combo.setCurrentIndex(0)
             else:
                 combo.setCurrentIndex(0)
@@ -2898,28 +2997,32 @@ class ImportShotDialog(QtWidgets.QDialog):
               · ítem MOV cede ante cualquier EXR o MOV existente → "— sin track —".
           - El desplazado queda en "— sin track —" automáticamente.
         """
-        current_track = item.get("track")
+        current_track_name = item.get("track")
         # Tratar "?" como sin asignar
-        if current_track == "?":
-            current_track = None
+        if current_track_name == "?":
+            current_track_name = None
         is_exr = (item.get("kind") == "exr_seq")
 
-        existing_tracks = self._get_seq_track_names()
+        track_entries = self._get_seq_track_entries()
+        existing_track_names = [entry["name"] for entry in track_entries]
+        existing_track_keys = {entry["key"] for entry in track_entries}
+        current_track_key = self._track_key_for_name(current_track_name, track_entries)
 
         # Opción "Crear track" si el auto-detectado es plate y no existe aún
         create_option = None
-        if (current_track and _is_plate_track(current_track)
-                and current_track not in existing_tracks):
-            create_option = self._CREATE_TRACK_PREFIX + current_track
+        if (current_track_name and _is_plate_track(current_track_name)
+                and current_track_name not in existing_track_names):
+            create_option = self._CREATE_TRACK_PREFIX + current_track_name
 
         # ── Resolución de conflictos en carga inicial ──────────────────────
-        if current_track and current_track != "— sin track —":
+        if current_track_key:
             for existing_row, existing_combo in list(self._track_combos.items()):
-                if existing_combo.currentText() == current_track:
+                if existing_combo.currentData(QtCore.Qt.UserRole) == current_track_key:
                     existing_item = self._table_rows[existing_row].get("item", {})
                     existing_is_exr = (existing_item.get("kind") == "exr_seq")
                     iname = item.get("name") or item.get("version_name") or "?"
                     ename = existing_item.get("name") or "?"
+                    track_lbl = self._track_display_from_key(current_track_key, track_entries)
 
                     if is_exr and not existing_is_exr:
                         # EXR actual gana sobre MOV existente
@@ -2930,15 +3033,15 @@ class ImportShotDialog(QtWidgets.QDialog):
                         self._track_overrides[existing_row] = "— sin track —"
                         debug_print(
                             "[track_conflict] EXR '%s' desplaza MOV '%s' del track '%s'"
-                            % (iname, ename, current_track)
+                            % (iname, ename, track_lbl)
                         )
                     elif not is_exr and existing_is_exr:
                         # MOV actual cede ante EXR existente
                         debug_print(
                             "[track_conflict] MOV '%s' cede track '%s' (EXR '%s' tiene prioridad)"
-                            % (iname, current_track, ename)
+                            % (iname, track_lbl, ename)
                         )
-                        current_track = None
+                        current_track_key = None
                     else:
                         # Mismo tipo (EXR vs EXR, o MOV vs MOV):
                         # gana la versión más alta; en empate gana el existente.
@@ -2953,22 +3056,22 @@ class ImportShotDialog(QtWidgets.QDialog):
                             self._track_overrides[existing_row] = "— sin track —"
                             debug_print(
                                 "[track_conflict] '%s' (v%d) desplaza '%s' (v%d) del track '%s'"
-                                % (iname, cur_ver, ename, ext_ver, current_track)
+                                % (iname, cur_ver, ename, ext_ver, track_lbl)
                             )
                         else:
                             # Existente es más reciente o igual → actual cede
                             debug_print(
                                 "[track_conflict] '%s' (v%d) cede track '%s' (ya tiene '%s' v%d)"
-                                % (iname, cur_ver, current_track, ename, ext_ver)
+                                % (iname, cur_ver, track_lbl, ename, ext_ver)
                             )
-                            current_track = None
+                            current_track_key = None
                     break
 
         # ── Construir combo ────────────────────────────────────────────────
         # La opción "Crear track" actúa como botón vía _TrackComboListView:
         # el click se consume sin cambiar el valor actual del combo.
         def _on_create_opt(create_text, _rid=row_id):
-            self._on_track_combo_changed(_rid, create_text)
+            self._on_track_combo_changed(_rid, create_text, create_text)
 
         _track_list_view = _TrackComboListView(_on_create_opt)
         _track_delegate  = _TrackComboDelegate(_track_list_view)
@@ -2986,24 +3089,29 @@ class ImportShotDialog(QtWidgets.QDialog):
             "border:1px solid #444444; color:#a7a7a7; "
             "selection-background-color:#272727; selection-color:#a7a7a7; outline:none; }"
         )
-        options = ["— sin track —"] + existing_tracks
+        combo.addItem("— sin track —", None)
+        for entry in track_entries:
+            combo.addItem(entry["display"], entry["key"])
         if create_option:
-            options.append(create_option)
-        for opt in options:
-            combo.addItem(opt)
+            combo.addItem(create_option, create_option)
 
         # Selección inicial: "— sin track —" cuando el track aún no existe.
         # La opción "Crear track" es un botón, nunca el valor seleccionado.
         combo.blockSignals(True)
-        if current_track and current_track in existing_tracks:
-            combo.setCurrentText(current_track)
+        if current_track_key and current_track_key in existing_track_keys:
+            idx = combo.findData(current_track_key, QtCore.Qt.UserRole)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
         else:
             combo.setCurrentIndex(0)  # "— sin track —"
         combo.blockSignals(False)
         self._update_track_combo_warning(combo)
 
-        combo.currentTextChanged.connect(
-            lambda txt, rid=row_id: self._on_track_combo_changed(rid, txt)
+        combo.currentIndexChanged.connect(
+            lambda _idx, rid=row_id, cmb=combo: self._on_track_combo_changed(
+                rid,
+                cmb.currentData(QtCore.Qt.UserRole),
+                cmb.currentText(),
+            )
         )
         return combo
 
@@ -3012,14 +3120,14 @@ class ImportShotDialog(QtWidgets.QDialog):
         """Resalta en rojo el valor visible cuando no hay track asignado."""
         if combo is None:
             return
-        unassigned = (combo.currentText() == "— sin track —")
+        unassigned = (combo.currentData(QtCore.Qt.UserRole) is None)
         combo.setProperty("unassigned", "true" if unassigned else "false")
         style = combo.style()
         style.unpolish(combo)
         style.polish(combo)
         combo.update()
 
-    def _on_track_combo_changed(self, changed_row: int, new_track: str):
+    def _on_track_combo_changed(self, changed_row: int, new_track_key, new_track_text=None):
         """
         Registra el track elegido y desasigna cualquier otro clip que ya
         tuviera ese track asignado.
@@ -3027,11 +3135,12 @@ class ImportShotDialog(QtWidgets.QDialog):
         Si la selección es "Crear track <name>", crea el track en el timeline
         y refresca todos los combos para que usen el nombre real.
         """
-        self._update_track_combo_warning(self._track_combos.get(changed_row))
+        combo_changed = self._track_combos.get(changed_row)
+        self._update_track_combo_warning(combo_changed)
 
         # ── Detectar selección "Crear track" ──────────────────────────────
-        if new_track.startswith(self._CREATE_TRACK_PREFIX):
-            track_to_create = new_track[len(self._CREATE_TRACK_PREFIX):]
+        if isinstance(new_track_key, str) and new_track_key.startswith(self._CREATE_TRACK_PREFIX):
+            track_to_create = new_track_key[len(self._CREATE_TRACK_PREFIX):]
             debug_print("_on_track_combo_changed: creando track '%s'" % track_to_create)
 
             project = None
@@ -3058,7 +3167,10 @@ class ImportShotDialog(QtWidgets.QDialog):
                     created_track_name=track_to_create,
                     creator_row=changed_row,
                 )
-                self._track_overrides[changed_row] = track_to_create
+                self._track_overrides[changed_row] = (
+                    self._track_key_for_name(track_to_create)
+                    or track_to_create
+                )
             else:
                 # Falló la creación: volver a sin track
                 combo = self._track_combos.get(changed_row)
@@ -3073,9 +3185,9 @@ class ImportShotDialog(QtWidgets.QDialog):
             return
 
         # ── Flujo normal ──────────────────────────────────────────────────
-        self._track_overrides[changed_row] = new_track
+        self._track_overrides[changed_row] = new_track_key or "— sin track —"
 
-        if not new_track or new_track == "— sin track —":
+        if not new_track_key:
             self._update_action_btns()
             return
 
@@ -3083,7 +3195,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         for row, combo in list(self._track_combos.items()):
             if row == changed_row:
                 continue
-            if combo.currentText() == new_track:
+            if combo.currentData(QtCore.Qt.UserRole) == new_track_key:
                 combo.blockSignals(True)
                 combo.setCurrentIndex(0)  # "— sin track —"
                 combo.blockSignals(False)
@@ -3094,18 +3206,20 @@ class ImportShotDialog(QtWidgets.QDialog):
 
     def _get_track_for_row(self, row):
         if row in self._track_combos:
-            txt = self._track_combos[row].currentText()
-            if not txt or txt == "— sin track —":
+            track_key = self._track_combos[row].currentData(QtCore.Qt.UserRole)
+            if not track_key:
                 return None
             # Si por algún motivo quedó una opción "Crear track" sin resolver, ignorar
-            if txt.startswith(self._CREATE_TRACK_PREFIX):
+            if isinstance(track_key, str) and track_key.startswith(self._CREATE_TRACK_PREFIX):
                 return None
-            return txt
+            return str(track_key)
         row_data = self._table_rows[row]
         if row_data.get("type") == "section_header":
             return None
         track = row_data["item"].get("track")
-        return track if track and track != "?" else None
+        if not track or track == "?":
+            return None
+        return self._track_key_for_name(track)
 
     def _update_action_btns(self):
         if not hasattr(self, "_checkboxes"):
@@ -4641,11 +4755,11 @@ class ImportShotDialog(QtWidgets.QDialog):
         # col 1: track name   (130 px fijo)
         # col 2: Shot Anterior  — eje temporal del shot previo (stretch igual)
         # col 3: Shot Nuevo     — eje temporal del shot importado (stretch igual)
-        # col 4: Shot Siguiente — eje temporal del shot siguiente (stretch igual)
+        # col 4: Shot Posterior — eje temporal del shot siguiente (stretch igual)
         self._import_table = QtWidgets.QTableWidget()
         self._import_table.setColumnCount(5)
         self._import_table.setHorizontalHeaderLabels(
-            ["", "Track", "Shot Anterior", "Shot Nuevo", "Shot Siguiente"]
+            ["", "Track", "Shot Anterior", "Shot Nuevo", "Shot Posterior"]
         )
         self._import_table.verticalHeader().setVisible(False)
         self._import_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
@@ -4653,9 +4767,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._import_table.setFocusPolicy(QtCore.Qt.NoFocus)
         self._import_table.setShowGrid(False)
         self._import_table.setAlternatingRowColors(False)
-        self._import_table.setStyleSheet(_TABLE_STYLE + """
-            QHeaderView::section:nth-child(4) { color: #9080cc; }
-        """)
+        self._import_table.setStyleSheet(_TABLE_STYLE)
         self._import_table.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
         )
@@ -4669,6 +4781,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         hdr.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         hdr.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
         hdr.setSectionResizeMode(4, QtWidgets.QHeaderView.Stretch)
+        _new_hdr = self._import_table.horizontalHeaderItem(3)
+        if _new_hdr is not None:
+            _new_hdr.setForeground(QtGui.QColor(_PREVIEW_NEW_SHOT_HEADER_COLOR))
 
         layout.addWidget(self._import_table, 1)
 
@@ -4800,6 +4915,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         text: str,
         color: str = "#555555",
         is_new: bool = False,
+        greyed: bool = False,
         duration_text: str = "",
         frames: int = 0,
         fps: float = 24.0,
@@ -4810,22 +4926,29 @@ class ImportShotDialog(QtWidgets.QDialog):
         - El texto del chip es SOLO el nombre (sin duración).
         - La duración y segundos se muestran en el tooltip.
         - El chip puede shrinkear por debajo de su sizeHint: el texto se cropea.
-        - Los clips "new" (a importar) llevan texto en bold; los de contexto en normal.
-        - Todos los chips usan el mismo color derivado del track (is_new solo cambia bold).
+        - Los clips "new" (a importar) llevan texto en bold.
+        - Si greyed=True, el chip usa la paleta fija de contexto (gris configurable).
 
         Args:
             text:          Nombre del clip (puede cropearse si el chip es muy angosto).
             color:         Color del track (hex).
             is_new:        True para clips a importar (bold), False para contexto.
+            greyed:        True para forzar estilo gris de contexto (ignora color track).
             duration_text: Ignorado — se usa "frames" para el tooltip.
             frames:        Duración en frames (para tooltip).
             fps:           FPS del proyecto (para convertir a segundos en tooltip).
         """
-        _BASE  = "#1a1a1a"
-        bg     = mix_colors(color, _BASE, 0.35)
-        border = color
-        clr    = mix_colors(color, "#ffffff", 0.75)
-        weight = "bold" if is_new else "normal"
+        if greyed:
+            bg = _PREVIEW_GREY_BG_COLOR
+            border = _PREVIEW_GREY_BORDER_COLOR
+            clr = _PREVIEW_GREY_TEXT_COLOR
+            weight = "normal"
+        else:
+            _BASE  = "#1a1a1a"
+            bg     = mix_colors(color, _BASE, 0.35)
+            border = color
+            clr    = mix_colors(color, "#ffffff", 0.75)
+            weight = "bold" if is_new else "normal"
 
         lbl = QtWidgets.QLabel(text)
         lbl.setTextFormat(QtCore.Qt.PlainText)
@@ -4892,6 +5015,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             lo.addStretch(offset_K)
         lbl = self._make_chip_label(
             clip_name, chip_color, is_new=False,
+            greyed=True,
             frames=clip_dur, fps=self._fps,
         )
         lo.addWidget(lbl, chip_K)
@@ -4964,10 +5088,10 @@ class ImportShotDialog(QtWidgets.QDialog):
         track_type: str = "other",
     ) -> QtWidgets.QWidget:
         """
-        Celda de Shot Siguiente.
+        Celda de Shot Posterior.
 
         shot_start  = tl_in mínimo entre todos los after clips del timeline.
-        shot_dur    = duración total del shot siguiente (max_tl_out − shot_start + 1).
+        shot_dur    = duración total del shot posterior (max_tl_out − shot_start + 1).
 
         Misma lógica que _build_before_cell pero para el shot posterior.
         """
@@ -5002,6 +5126,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             lo.addStretch(offset_K)
         lbl = self._make_chip_label(
             clip_name, chip_color, is_new=False,
+            greyed=True,
             frames=clip_dur, fps=self._fps,
         )
         lo.addWidget(lbl, chip_K)
@@ -5056,15 +5181,16 @@ class ImportShotDialog(QtWidgets.QDialog):
              for items in items_by_track.values() for item in items),
             default=0,
         )
-        self._handle_info = {}   # {track_name: {handle_in, handle_out, half_frame, ...}}
-        for tname, items in items_by_track.items():
+        self._handle_info = {}   # {track_key: {handle_in, handle_out, half_frame, ...}}
+        for tkey, items in items_by_track.items():
+            tname = self._track_name_from_key(tkey)
             if classify_track_type(tname) == "editref" and items:
                 editref_dur = items[0].get("frame_count") or 0
                 if master_dur > 0 and editref_dur > 0 and editref_dur < master_dur:
                     diff       = master_dur - editref_dur
                     handle_in  = diff // 2
                     handle_out = diff - handle_in
-                    self._handle_info[tname] = {
+                    self._handle_info[tkey] = {
                         "handle_in":   handle_in,
                         "handle_out":  handle_out,
                         "half_frame":  (diff % 2 != 0),
@@ -5074,7 +5200,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                     debug_print(
                         "_update_import_page: handle '%s' master=%d editref=%d "
                         "→ in=%d out=%d%s"
-                        % (tname, master_dur, editref_dur, handle_in, handle_out,
+                        % (self._track_display_from_key(tkey), master_dur, editref_dur, handle_in, handle_out,
                            " (impar)" if diff % 2 != 0 else "")
                     )
         self._update_import_handle_label()
@@ -5116,12 +5242,12 @@ class ImportShotDialog(QtWidgets.QDialog):
         """
         Puebla self._import_table con los datos del preview.
 
-        Columnas: barra(0) · track name(1) · Shot Anterior(2) · Shot Nuevo(3) · Shot Siguiente(4)
+        Columnas: barra(0) · track name(1) · Shot Anterior(2) · Shot Nuevo(3) · Shot Posterior(4)
 
         Cada columna tiene su propio eje temporal (shot_dur) calculado globalmente:
           - Anterior: ventana temporal del shot previo (min tl_in → max tl_out de todos los before clips)
           - Nuevo:    max frame_count de todos los clips nuevos
-          - Siguiente: ventana temporal del shot siguiente (min tl_in → max tl_out de todos los after clips)
+          - Posterior: ventana temporal del shot siguiente (min tl_in → max tl_out de todos los after clips)
 
         Dentro de cada columna el clip más largo = 100 %.
         Clips más cortos o desplazados se posicionan con offset y ancho proporcionales.
@@ -5151,7 +5277,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         )
         new_shot_dur = max(new_shot_dur, 1)
 
-        # Shot Siguiente
+        # Shot Posterior
         all_after = [tdata["after_clip"] for tdata in tracks if tdata.get("after_clip")]
         if all_after:
             after_shot_start = min(c["tl_in"] for c in all_after)
@@ -5177,7 +5303,9 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         row_i = 0
         for tdata in tracks:
+            tkey      = tdata.get("track_key") or tdata.get("track_name")
             tname     = tdata["track_name"]
+            tlabel    = tdata.get("track_label") or tname
             ttype     = tdata["track_type"]
             before    = tdata.get("before_clip")
             new_items = tdata.get("new_items", [])
@@ -5187,7 +5315,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             debug_print(
                 "[populate_import_table] row=%d track='%s' "
                 "before=%s new=%d after=%s"
-                % (row_i, tname, bool(before), len(new_items), bool(after))
+                % (row_i, tlabel, bool(before), len(new_items), bool(after))
             )
 
             # Col 0: barra de color
@@ -5197,7 +5325,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             table.setItem(row_i, 0, bar)
 
             # Col 1: track name
-            name_lbl = QtWidgets.QLabel("  " + tname)
+            name_lbl = QtWidgets.QLabel("  " + tlabel)
             name_lbl.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             name_lbl.setStyleSheet(
                 "color: %s; font-size: 11px; padding: 0px 4px; background: transparent;"
@@ -5223,7 +5351,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             editref_handle_in = 0
             if ttype == "editref":
                 editref_handle_in = getattr(self, "_handle_info", {}).get(
-                    tname, {}
+                    tkey, {}
                 ).get("handle_in", 0)
             table.setCellWidget(row_i, 3, self._build_new_cell(
                 new_items, bar_color, new_shot_dur,
@@ -5231,7 +5359,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                 handle_in=editref_handle_in,
             ))
 
-            # Col 4: Shot Siguiente
+            # Col 4: Shot Posterior
             table.setCellWidget(row_i, 4, self._build_after_cell(
                 after, bar_color, after_shot_start, after_shot_dur,
                 track_type=ttype,
@@ -5332,7 +5460,7 @@ class ImportShotDialog(QtWidgets.QDialog):
           5. Post-import: seleccionar los nuevos clips en el Timeline Editor.
         """
         # ── Recolección de ítems ──────────────────────────────────────────────
-        # items_by_track: {track_name: [(item_dict, hex_color), ...]}
+        # items_by_track: {track_key: [(item_dict, hex_color), ...]}
         items_by_track = {}
         for row, chk in self._checkboxes.items():
             if not chk.isChecked():
@@ -5423,7 +5551,9 @@ class ImportShotDialog(QtWidgets.QDialog):
 
             target_bin = bin_mod.find_or_create_shot_bin(self.seq, self.shot_name)
 
-            for track_name, entries in items_by_track.items():
+            for track_key, entries in items_by_track.items():
+                track_name = self._track_name_from_key(track_key)
+                track_label = self._track_display_from_key(track_key)
                 for item, clip_color in entries:
                     clip_name   = item.get("name", "") or item.get("version_name", "?")
                     frame_count = item.get("frame_count", 0) or 0
@@ -5458,19 +5588,19 @@ class ImportShotDialog(QtWidgets.QDialog):
                     # Aplicar handle offset para editrefs
                     clip_tl_in = effective_insert_frame
                     if classify_track_type(track_name) == "editref":
-                        handle_info = getattr(self, "_handle_info", {}).get(track_name)
+                        handle_info = getattr(self, "_handle_info", {}).get(track_key)
                         if handle_info:
                             clip_tl_in += handle_info["handle_in"]
                             debug_print(
                                 "_do_import: handle editref '%s' → offset +%d → tl_in=%d"
-                                % (track_name, handle_info["handle_in"], clip_tl_in)
+                                % (track_label, handle_info["handle_in"], clip_tl_in)
                             )
 
                     debug_print("_do_import: colocando '%s' en track '%s' tl=%d dur=%d"
-                                % (clip_name, track_name, clip_tl_in, frame_count))
+                                % (clip_name, track_label, clip_tl_in, frame_count))
 
                     ti, err2 = timeline_mod.place_clip_in_timeline(
-                        self.seq, clip, track_name,
+                        self.seq, clip, track_key,
                         clip_tl_in, frame_count, self.shot_name,
                     )
                     if err2:
@@ -5481,7 +5611,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                         placed += 1
                         placed_items.append(ti)
                         debug_print("_do_import: OK — '%s' en track '%s' tl=%d-%d"
-                                    % (clip_name, track_name,
+                                    % (clip_name, track_label,
                                        clip_tl_in,
                                        clip_tl_in + frame_count - 1))
 
@@ -6668,6 +6798,25 @@ class _BulkShotPanel(ImportShotDialog):
                 result.append((track, row_data["item"], self._item_hiero_color(row_data)))
         return result
 
+    def selected_unassigned_items(self):
+        """Items chequeados sin track asignado, con color de sección para preview."""
+        result = []
+        for row, checkbox in self._checkboxes.items():
+            if not checkbox.isChecked():
+                continue
+            row_data = self._table_rows[row]
+            if row_data.get("type") == "section_header":
+                continue
+            if self._get_track_for_row(row):
+                continue
+            item = row_data.get("item")
+            if not item:
+                continue
+            enriched = dict(item)
+            enriched["_color"] = self._item_section_color(row_data)
+            result.append(enriched)
+        return result
+
     def master_duration(self):
         duration = max(
             (it.get("frame_count") or 0 for it in self.input_items
@@ -6878,9 +7027,10 @@ class BulkImportDialog(QtWidgets.QDialog):
         """Clips existentes con geometria relativa para dibujarlos greyed out."""
         result = {}
         shot_ranges = {}
-        for track in self.seq.videoTracks():
+        for bt_index, track in enumerate(self.seq.videoTracks()):
             try:
                 track_name = track.name()
+                track_key = _make_track_key(track_name, bt_index)
             except Exception:
                 continue
             for item in track.items():
@@ -6893,7 +7043,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                     tl_out = int(item.timelineOut())
                 except Exception:
                     continue
-                result.setdefault((shot_name, track_name), []).append({
+                result.setdefault((shot_name, track_key), []).append({
                     "name": clip_name,
                     "tl_in": tl_in,
                     "tl_out": tl_out,
@@ -6934,14 +7084,11 @@ class BulkImportDialog(QtWidgets.QDialog):
         name = clip.get("name") or clip.get("version_name") or "?"
         label = helper._make_chip_label(
             name, color=color, is_new=is_new,
+            greyed=(not is_new),
             frames=duration, fps=helper._fps,
         )
         if not is_new:
             label.setGraphicsEffect(None)
-            label.setStyleSheet(
-                "background:#303030; border:1px solid #595959; color:#858585; "
-                "font-weight:normal; padding:4px 6px; border-radius:3px;"
-            )
         layout.addWidget(label, chip_weight)
         if trail_weight:
             layout.addStretch(trail_weight)
@@ -6955,33 +7102,53 @@ class BulkImportDialog(QtWidgets.QDialog):
         )
         shots = self._preview_shots(layout_data)
         selected = {}
-        track_names = []
-        try:
-            track_names = [t.name() for t in reversed(list(self.seq.videoTracks()))]
-        except Exception:
-            pass
+        unassigned = []
+        track_entries = _collect_sequence_track_entries(self.seq)
+        entries_by_key = {entry["key"]: entry for entry in track_entries}
+
         for panel in self.panels:
-            for track, item, color in panel.selected_items():
-                selected.setdefault((panel.shot_name, track), []).append((item, color))
-                if track not in track_names:
-                    track_names.append(track)
+            for track_key, item, color in panel.selected_items():
+                selected.setdefault((panel.shot_name, track_key), []).append((item, color))
+                if track_key not in entries_by_key:
+                    track_name, _bt_idx = _parse_track_key(track_key)
+                    extra_entry = {
+                        "key": track_key,
+                        "name": track_name,
+                        "display": track_name,
+                        "bt_index": -1,
+                    }
+                    track_entries.append(extra_entry)
+                    entries_by_key[track_key] = extra_entry
+            for item in panel.selected_unassigned_items():
+                unassigned.append({
+                    "shot_name": panel.shot_name,
+                    "item": item,
+                    "color": item.get("_color", "#555555"),
+                })
 
         existing, existing_ranges = self._existing_preview_data()
         table = self.preview_table
         table.clearSpans()
         table.clear()
-        table.setRowCount(len(track_names))
+        total_rows = len(track_entries) + (1 + len(unassigned) if unassigned else 0)
+        table.setRowCount(total_rows)
         table.setColumnCount(len(shots) + 2)
         table.setHorizontalHeaderLabels(["", "Track"] + [s["shot_name"] for s in shots])
+        shot_col_by_name = {shot["shot_name"]: col for col, shot in enumerate(shots, 2)}
         helper = self.panels[0]
-        for row, track_name in enumerate(track_names):
+        row_h = 42
+        row = 0
+        for entry in track_entries:
+            track_key = entry["key"]
+            track_name = entry["name"]
+            track_label = entry["display"]
             track_type = classify_track_type(track_name)
             bar_color = helper._track_bar_color(track_type)
             bar = QtWidgets.QTableWidgetItem()
             bar.setBackground(QtGui.QColor(bar_color))
             bar.setFlags(QtCore.Qt.NoItemFlags)
             table.setItem(row, 0, bar)
-            track_item = QtWidgets.QTableWidgetItem(track_name)
+            track_item = QtWidgets.QTableWidgetItem(track_label)
             track_item.setForeground(QtGui.QColor(mix_colors(bar_color, "#ffffff", 0.58)))
             table.setItem(row, 1, track_item)
 
@@ -6989,11 +7156,12 @@ class BulkImportDialog(QtWidgets.QDialog):
                 if shots:
                     table.setSpan(row, 2, 1, len(shots))
                     table.setCellWidget(row, 2, helper._build_burnin_row())
-                table.setRowHeight(row, 42)
+                table.setRowHeight(row, row_h)
+                row += 1
                 continue
 
             for col, shot in enumerate(shots, 2):
-                key = (shot["shot_name"], track_name)
+                key = (shot["shot_name"], track_key)
                 if shot.get("is_new"):
                     entries = selected.get(key, [])
                     item, item_color = (
@@ -7002,7 +7170,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                     )
                     shot_duration = max(
                         (candidate.get("frame_count") or 0
-                         for (shot_key, _track), values in selected.items()
+                         for (shot_key, _track_key), values in selected.items()
                          if shot_key == shot["shot_name"]
                          for candidate, _candidate_color in values),
                         default=max(1, shot["tl_out"] - shot["tl_in"] + 1),
@@ -7030,7 +7198,75 @@ class BulkImportDialog(QtWidgets.QDialog):
                         "#666666", is_new=False,
                     )
                 table.setCellWidget(row, col, cell_widget)
-            table.setRowHeight(row, 42)
+            table.setRowHeight(row, row_h)
+            row += 1
+
+        # ── Sección sin track asignado ───────────────────────────────────
+        if unassigned:
+            # Header de sección
+            bar_item = QtWidgets.QTableWidgetItem()
+            bar_item.setBackground(QtGui.QColor("#555555"))
+            bar_item.setFlags(QtCore.Qt.NoItemFlags)
+            table.setItem(row, 0, bar_item)
+
+            table.setSpan(row, 1, 1, max(1, len(shots) + 1))
+            hdr_lbl = QtWidgets.QLabel("  SIN TRACK ASIGNADO")
+            hdr_lbl.setStyleSheet(
+                "color: #888888; font-weight: bold; font-size: 11px; "
+                "padding: 3px 8px; background: #313131; letter-spacing: 1px;"
+            )
+            table.setCellWidget(row, 1, hdr_lbl)
+            table.setRowHeight(row, 24)
+            row += 1
+
+            shot_dur_by_name = {
+                panel.shot_name: max(1, int(panel.master_duration() or 1))
+                for panel in self.panels
+            }
+            for unr in unassigned:
+                shot_name = unr["shot_name"]
+                item = unr["item"]
+                item_color = unr["color"]
+                name = item.get("name") or item.get("version_name") or "—"
+                duration = int(item.get("frame_count") or 0)
+
+                bar2 = QtWidgets.QTableWidgetItem()
+                bar2.setBackground(QtGui.QColor(item_color))
+                bar2.setFlags(QtCore.Qt.NoItemFlags)
+                table.setItem(row, 0, bar2)
+
+                # Limpiar columnas no usadas de la fila
+                for empty_col in range(1, len(shots) + 2):
+                    empty_w = QtWidgets.QWidget()
+                    empty_w.setStyleSheet("background: transparent;")
+                    table.setCellWidget(row, empty_col, empty_w)
+
+                target_col = shot_col_by_name.get(shot_name)
+                if target_col is not None:
+                    K = 1000
+                    shot_dur = max(1, shot_dur_by_name.get(shot_name, 1))
+                    chip_K = max(1, int(min(1.0, duration / float(shot_dur)) * K)) if duration > 0 else K
+                    trail_K = max(0, K - chip_K)
+
+                    chip_container = QtWidgets.QWidget()
+                    chip_layout = QtWidgets.QHBoxLayout(chip_container)
+                    chip_layout.setContentsMargins(0, 2, 0, 2)
+                    chip_layout.setSpacing(0)
+                    chip_container.setStyleSheet("background: transparent;")
+
+                    lbl = helper._make_chip_label(
+                        name, color=item_color, is_new=False, greyed=False,
+                        frames=duration, fps=helper._fps,
+                    )
+                    chip_layout.addWidget(lbl, chip_K)
+                    if trail_K > 0:
+                        chip_layout.addStretch(trail_K)
+
+                    table.setCellWidget(row, target_col, chip_container)
+
+                table.setRowHeight(row, row_h)
+                row += 1
+
         header = table.horizontalHeader()
         header.setMinimumSectionSize(1)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
@@ -7042,7 +7278,7 @@ class BulkImportDialog(QtWidgets.QDialog):
             table.setColumnWidth(col, 220)
             header_item = table.horizontalHeaderItem(col)
             header_item.setForeground(QtGui.QColor(
-                "#a88ee0" if shot.get("is_new") else "#686868"
+                _PREVIEW_NEW_SHOT_HEADER_COLOR if shot.get("is_new") else "#686868"
             ))
 
     @staticmethod
@@ -7087,7 +7323,9 @@ class BulkImportDialog(QtWidgets.QDialog):
                         self.seq, insert_frame, frames_to_push
                     )
                 target_bin = bin_mod.find_or_create_shot_bin(self.seq, panel.shot_name)
-                for track_name, item, color in selected_items:
+                for track_key, item, color in selected_items:
+                    track_name, _bt_idx = _parse_track_key(track_key)
+                    track_label = panel._track_display_from_key(track_key)
                     clip_name = item.get("name") or item.get("version_name") or "?"
                     clip, error = bin_mod.import_item_to_bin(item, target_bin)
                     if error:
@@ -7108,11 +7346,11 @@ class BulkImportDialog(QtWidgets.QDialog):
                         track_name, item, selected_master
                     )
                     timeline_item, error = timeline_mod.place_clip_in_timeline(
-                        self.seq, clip, track_name, clip_in, frame_count, panel.shot_name
+                        self.seq, clip, track_key, clip_in, frame_count, panel.shot_name
                     )
                     if error:
-                        errors.append("%s / %s (timeline): %s" %
-                                      (panel.shot_name, clip_name, error))
+                        errors.append("%s / %s (%s): %s" %
+                                      (panel.shot_name, clip_name, track_label, error))
                     elif timeline_item is not None:
                         placed_items.append(timeline_item)
             if placed_items:
