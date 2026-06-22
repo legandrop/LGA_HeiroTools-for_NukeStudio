@@ -24,6 +24,22 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - Push además valida `Flow.Url`, `Flow.Login`, `Flow.Password`.
 - En client no se debe caer en DB studio como fallback funcional.
 - El switch Studio/Client actualiza INI y fuerza recarga del Projects Panel.
+- Scope de tasks por contexto:
+  - `studio`: tasks `comp`, `roto`, `cleanup`.
+  - `client`: solo task `comp` (no se consideran `roto`/`cleanup`).
+
+## Impacto en herramientas de Edit
+
+- `Create v000`:
+  - En `client` la UI muestra únicamente el botón `comp`.
+  - El chequeo de solape/versions en timeline para elegibilidad de shot se hace
+    solo sobre el track de `comp`.
+  - Un shot se considera completo en `client` cuando `comp` ya tiene clip
+    superpuesto en el rango del shot.
+- `Import Shot`:
+  - El import mantiene su comportamiento general.
+  - En `client`, el flujo post-import `Create v000` hereda el scope de tasks
+    del contexto (solo `comp`).
 
 ## Archivos adaptados (confirmados)
 
@@ -55,6 +71,11 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - `LGA_HieroTools/LGA_NKS_Projects_Panel.py`
 - `LGA_HieroTools/LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py`
 - `LGA_HieroTools/LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py`
+
+### Edit / CreateV000
+
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py`
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_import_shots.py` (flujo post-import hacia CreateV000)
 
 ## Archivos revisados que siguen parciales o con deuda
 

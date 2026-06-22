@@ -9,7 +9,10 @@ Herramienta para crear una secuencia EXR negra `v000` para uno o varios shots en
 
 Abre un dialogo desde el Edit Panel o desde Import Shot y construye contexto por shot (secuencia, tracks, rango de frames y resolucion). La UI es unificada: siempre usa tabs por shot (single = 1 tab, bulk = N tabs) y permite crear v000 en lote para todos los tabs elegibles.
 
-La herramienta crea archivos en disco, importa la v000 al bin correcto del proyecto y la coloca en el timeline cuando el rango destino está disponible. Las tasks `comp`, `roto` y `cleanup` se deshabilitan automáticamente si ya existen clips superpuestos en su track para el rango del shot.
+La herramienta crea archivos en disco, importa la v000 al bin correcto del proyecto y la coloca en el timeline cuando el rango destino está disponible. El set de tasks es context-aware:
+- `studio`: `comp`, `roto`, `cleanup`.
+- `client`: solo `comp`.
+Las tasks activas se deshabilitan automáticamente si ya existen clips superpuestos en su track para el rango del shot.
 
 ## Archivos principales
 
@@ -52,7 +55,7 @@ Modo con parámetros (`open_create_v000_dialog(shot_targets=[...])`):
 - Cada target debe poder resolverse contra tracks `editref`/`plate` de la sequence.
 - Debe existir al menos un `plate` para derivar path/resolución.
 
-Si un shot ya tiene sus 3 tasks ocupadas en timeline (solape en `_comp_`, `_roto_`, `_cleanup_`), ese shot no genera tab.
+Si un shot ya tiene ocupadas todas las tasks activas del contexto, ese shot no genera tab.
 
 ### Flujo principal
 
@@ -106,7 +109,8 @@ FRAME RANGE                         RESOLUTION
                                     ( ) cPlate     WxH
 
 HANDLE                              TASK
-[ ▼ ][ 4 ][ ▲ ]                    [ comp ] [ roto ] [ cleanup ]
+[ ▼ ][ 4 ][ ▲ ]                    [ comp ] [ roto ] [ cleanup ]  (studio)
+[ ▼ ][ 4 ][ ▲ ]                    [ comp ]                        (client)
 
 [ ] Create folder structure for selected tasks if missing
 
@@ -245,13 +249,15 @@ El boton se deshabilita cuando el dialogo no tiene parametros validos (por ejemp
 
 ## Seccion: Task
 
-Botones toggle independientes para las tres tasks disponibles:
+Botones toggle para las tasks activas del contexto:
+- `studio`: `comp`, `roto`, `cleanup`.
+- `client`: solo `comp`.
 
-| Task      | Track destino | Carpeta de salida |
-|-----------|---------------|-------------------|
-| `comp`    | `_comp_`      | `Comp`            |
-| `roto`    | `_roto_`      | `Roto`            |
-| `cleanup` | `_cleanup_`   | `Cleanup`         |
+| Task      | Track destino | Carpeta de salida | Contexto |
+|-----------|---------------|-------------------|----------|
+| `comp`    | `_comp_`      | `Comp`            | studio/client |
+| `roto`    | `_roto_`      | `Roto`            | solo studio |
+| `cleanup` | `_cleanup_`   | `Cleanup`         | solo studio |
 
 **Reglas:**
 
@@ -259,8 +265,8 @@ Botones toggle independientes para las tres tasks disponibles:
 - Se puede seleccionar una o varias tasks al mismo tiempo.
 - Si no hay ninguna task seleccionada, el boton `Create v000` queda deshabilitado.
 - Si ya existe cualquier clip superpuesto al rango del shot en el track de la task, esa task queda deshabilitada (greyed out).
-- Si las 3 tasks están bloqueadas (`comp`, `roto`, `cleanup`), el shot no se muestra como tab elegible.
-- Al confirmar multiples tasks, se procesan secuencialmente en el orden `comp`, `roto`, `cleanup`.
+- Si todas las tasks activas están bloqueadas, el shot no se muestra como tab elegible.
+- Al confirmar múltiples tasks, se procesan secuencialmente en el orden de tasks activas (`comp, roto, cleanup` en studio; solo `comp` en client).
 - Si el usuario cancela una comprobacion de una task, solo se saltea esa task y el proceso continua con la siguiente task seleccionada.
 
 Los conflictos de timeline se validan en dos etapas:
@@ -283,6 +289,14 @@ BurnIn
 _comp_
 _roto_
 _cleanup_
+(tracks de plates)
+```
+
+En contexto `client`, el orden efectivo se reduce a:
+
+```
+BurnIn
+_comp_
 (tracks de plates)
 ```
 
@@ -561,7 +575,7 @@ El dialogo bloquea `Create v000` y muestra un warning si:
 | No hay tracks editref/plate para el shot              | `_collect_context_for_target()` / `_collect_context_from_playhead()` |
 | No hay track plate (no se puede derivar path/resol.)   | `_build_context_from_sources()` |
 | No se detecta shot code                                | `_build_context_from_sources()` |
-| Todas las tasks del shot ya tienen solape en timeline  | filtro `_context_has_available_tasks()` |
+| Todas las tasks activas del shot ya tienen solape en timeline  | filtro `_context_has_available_tasks()` |
 | No hay fuente de frame range seleccionada              | `_build_output()`          |
 | No hay task seleccionada                               | `_build_outputs()`         |
 | No se puede derivar shot root desde `_input`           | `_build_output()`          |
@@ -579,6 +593,7 @@ El dialogo bloquea `Create v000` y muestra un warning si:
 | `LGA_NKS_Flow_NamingUtils`          | `clean_base_name()`, `extract_project_name()`, `extract_shot_code()` |
 | `LGA_NKS_TaskSelectionDialog`       | `track_for_task()` para mapear task a nombre de track               |
 | `LGA_NKS_Flow_Task_Config`          | `get_task_color()` para colores de botones de task                  |
+| `LGA_NKS_ContextProfile`            | `is_client_context()` para definir scope de tasks activas por contexto |
 | `oiiotool.exe` (vendorizado)        | Creacion del primer frame EXR negro                                 |
 | `shutil.copyfile`                   | Duplicacion del primer frame para el resto de la secuencia          |
 
@@ -684,7 +699,7 @@ C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\+Building_Blocks\Hiero\Time
 
 | Archivo | Funciones / clases clave |
 |---------|--------------------------|
-| `LGA_NKS_Edit_Panel_py\LGA_NKS_CreateV000.py` | `open_create_v000_dialog(shot_targets=...)`, `_collect_dialog_contexts()`, `_selected_shot_targets()`, `_collect_context_for_target()`, `_collect_context_from_playhead()`, `_task_overlap_state()`, `_context_has_available_tasks()`, `CreateV000TabsDialog`, `CreateV000Dialog`, `_create_all_tabs()`, `_build_outputs()`, `_preview_in_out()`, `_preflight_and_create_exr()`, `_hiero_import_for_params()`, `_create_black_exr_sequence()`, `_insert_task_track()` |
+| `LGA_NKS_Edit_Panel_py\LGA_NKS_CreateV000.py` | `open_create_v000_dialog(shot_targets=...)`, `_resolve_active_tasks()`, `_collect_dialog_contexts()`, `_selected_shot_targets()`, `_collect_context_for_target()`, `_collect_context_from_playhead()`, `_task_overlap_state()`, `_context_has_available_tasks()`, `CreateV000TabsDialog`, `CreateV000Dialog`, `_create_all_tabs()`, `_build_outputs()`, `_preview_in_out()`, `_preflight_and_create_exr()`, `_hiero_import_for_params()`, `_create_black_exr_sequence()`, `_insert_task_track()` |
 | `+Building_Blocks\Hiero\LGA_H-Tracks-InsertTest.py` | Referencia del workaround remove-all/re-add para insertar tracks en posicion especifica |
 | `docs\Docu_Logging_System.md` | Valores por defecto y patron de `QueueHandler` / `QueueListener` |
 | `LGA_NKS_ViewerTL_Panel_py\LGA_NKS_InOut_Editref.py` | Referencia para `seq.setInTime()` y `seq.setOutTime()` |

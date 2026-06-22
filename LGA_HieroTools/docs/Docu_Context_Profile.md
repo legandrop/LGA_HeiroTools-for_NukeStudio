@@ -33,6 +33,9 @@ Valores válidos:
 - Fallback de escaneo base en panel de proyectos:
   - `T:\` en studio
   - `N:\` en client (si no hay `AltTPath`)
+- Scope de tasks en herramientas de edición:
+  - `studio`: `comp`, `roto`, `cleanup`
+  - `client`: solo `comp` (aplica a Create v000 y su flujo post-import desde Import Shot)
 
 ## Módulos clave
 

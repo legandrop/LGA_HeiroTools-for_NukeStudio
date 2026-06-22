@@ -1,11 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.09 | Lega
+  LGA_NKS_CreateV000 v1.10 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
-  tasks destino (comp, roto, cleanup), procesadas en orden.
+  tasks destino (comp siempre; roto/cleanup solo en contexto studio),
+  procesadas en orden.
 
   La v000 se importa al bin del shot, se colorea como v_00, y si se coloca en
   timeline queda deshabilitada. Tambien permite previsualizar el rango con
@@ -15,6 +16,10 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.10: Context-aware tasks por perfil Studio/Client. En contexto client la
+         herramienta trabaja solo con task comp: UI muestra únicamente comp,
+         el chequeo de solape/bloqueo se hace solo sobre _comp_ y la elegibilidad
+         de shots ignora roto/cleanup.
   v1.09: Create v000 unificado para single/bulk con tabs por shot (mismo shell visual
          que Import Shot), detección de shots desde selección de timeline o targets
          explícitos, y filtro por task: comp/roto/cleanup se deshabilitan si ya
@@ -77,7 +82,30 @@ CONFIG_SECTION = "Settings"
 CONFIG_HANDLE_KEY = "handle"
 CONFIG_CREATE_FOLDERS_KEY = "create_folders"
 BURNIN_TRACK_NAME = "BurnIn"
-TASKS = ("comp", "roto", "cleanup")
+ALL_TASKS = ("comp", "roto", "cleanup")
+
+
+def _resolve_active_tasks():
+    """Define las tasks activas según contexto Studio/Client."""
+    try:
+        if is_client_context():
+            return ("comp",)
+    except Exception:
+        pass
+    return ALL_TASKS
+
+
+TASKS = ALL_TASKS
+
+
+def _tasks_human_list():
+    if not TASKS:
+        return ""
+    if len(TASKS) == 1:
+        return TASKS[0]
+    return ", ".join(TASKS[:-1]) + " y " + TASKS[-1]
+
+
 TASK_FOLDER = {
     "comp": "Comp",
     "roto": "Roto",
@@ -128,6 +156,13 @@ from LGA_NKS_Flow_NamingUtils import (
 )
 from LGA_NKS_TaskSelectionDialog import track_for_task
 from LGA_NKS_Flow_Task_Config import get_task_color
+try:
+    from LGA_NKS_ContextProfile import is_client_context
+except Exception:
+    def is_client_context():
+        return False
+
+TASKS = _resolve_active_tasks()
 
 
 # Variables globales de logging (valores por defecto)
@@ -3211,10 +3246,11 @@ def open_create_v000_dialog(shot_targets=None):
     )
     if not contexts:
         if skipped_full and len(skipped_full) == 1 and not skipped_errors:
+            tasks_text = _tasks_human_list()
             message = (
-                "El shot '%s' ya tiene versiones en timeline para las 3 tasks:\n"
-                "comp, roto y cleanup."
-            ) % skipped_full[0]
+                "El shot '%s' ya tiene versiones en timeline para las tasks activas:\n"
+                "%s."
+            ) % (skipped_full[0], tasks_text)
         elif skipped_full and not skipped_errors:
             message = (
                 "Todos los shots están completos para Create v000.\n\n"

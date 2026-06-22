@@ -642,6 +642,7 @@ El tab Preview tiene sus propios botones de acción:
 | Import and Create V000 | primario violeta `#443a91` | hay al menos 1 ítem con track asignado | ejecuta `_do_import_and_v000()` → import + abre CreateV000 al cerrar |
 
 En el flujo single, el post-import hacia CreateV000 ahora pasa contexto explícito del shot (`shot_root`, `shot_code`, `timeline_in/out`) para evitar depender del playhead.
+En contexto `client`, ese flujo abre CreateV000 con scope de task reducido a `comp` (sin `roto`/`cleanup`).
 
 #### Botones del footer Bulk Import
 
@@ -653,6 +654,7 @@ En el flujo single, el post-import hacia CreateV000 ahora pasa contexto explíci
 Notas:
 - El botón `Cancel` ya no se muestra en el footer Bulk (cancelar = cerrar ventana).
 - El payload hacia CreateV000 se arma por shot importado con `shot_root`, `shot_code` y rango timeline real colocado.
+- En contexto `client`, CreateV000 procesa solo task `comp` también en este flujo bulk.
 
 ### Logica de Import (comportamiento previsto)
 
