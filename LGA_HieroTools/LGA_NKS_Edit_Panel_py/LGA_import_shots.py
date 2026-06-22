@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.28 | Lega
+  LGA_import_shots v1.29 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.29: La columna Track usa los mismos colores que los nombres de track del
+         Preview; versiones viejas conservan el tono pero quedan desaturadas.
   v1.28: Preview V000 conserva fondo/texto V000 pero usa el borde de la
          task correspondiente (comp, roto, cleanup, dmp, etc.).
   v1.27: Bulk Import con seleccion multiple de carpetas, tabs editables por
@@ -2879,7 +2881,12 @@ class ImportShotDialog(QtWidgets.QDialog):
         else:
             track_str = item.get("track") or "—"
             lbl = QtWidgets.QLabel(track_str)
-            lbl.setStyleSheet("color:#888888; padding:2px 6px;")
+            track_color = self._preview_track_label_color(
+                track_str, greyed=not is_latest
+            )
+            lbl.setStyleSheet(
+                "color:%s; padding:2px 6px;" % track_color
+            )
             table.setCellWidget(row_i, 8, lbl)
 
     # ── helpers de tracks del timeline ───────────────────────────────────────
@@ -3061,7 +3068,7 @@ class ImportShotDialog(QtWidgets.QDialog):
 
             combo.blockSignals(True)
             combo.clear()
-            combo.addItem("— sin track —", None)
+            combo.addItem("sin track", None)
             for entry in new_entries:
                 combo.addItem(entry["display"], entry["key"])
             if create_option:
@@ -3086,7 +3093,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         Construye el combo de track para un ítem de input (exr_seq o mov).
 
         Opciones:
-          - "— sin track —"
+          - "sin track"
           - Tracks existentes en self.seq (visual top-to-bottom, sin BurnIn)
           - "＋ Crear track <name>" al final, solo si el track auto-detectado
             es un *plate y no existe todavía en el timeline.
@@ -3094,8 +3101,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         Reglas de conflicto (un solo clip por track):
           - Si el track auto-detectado ya está asignado a otro row:
               · ítem EXR desplaza a cualquier MOV existente en ese track.
-              · ítem MOV cede ante cualquier EXR o MOV existente → "— sin track —".
-          - El desplazado queda en "— sin track —" automáticamente.
+              · ítem MOV cede ante cualquier EXR o MOV existente → "sin track".
+          - El desplazado queda en "sin track" automáticamente.
         """
         current_track_name = item.get("track")
         # Tratar "?" como sin asignar
@@ -3179,17 +3186,8 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         combo = _ArrowComboBox()
         combo.setView(_track_list_view)
-        combo.setStyleSheet(
-            "QComboBox { background-color:#272727; border:0px; "
-            "color:#a7a7a7; padding:1px 4px; }"
-            "QComboBox[unassigned=\"true\"] { color:#e05b5b; font-weight:bold; }"
-            "QComboBox::drop-down { border:0px; width:14px; }"
-            "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
-            "QComboBox QAbstractItemView { background-color:#2B2B2B; "
-            "border:1px solid #444444; color:#a7a7a7; "
-            "selection-background-color:#272727; selection-color:#a7a7a7; outline:none; }"
-        )
-        combo.addItem("— sin track —", None)
+        combo.setProperty("media_row", row_id)
+        combo.addItem("sin track", None)
         for entry in track_entries:
             combo.addItem(entry["display"], entry["key"])
         if create_option:
@@ -3215,17 +3213,42 @@ class ImportShotDialog(QtWidgets.QDialog):
         )
         return combo
 
-    @staticmethod
-    def _update_track_combo_warning(combo):
-        """Resalta en rojo el valor visible cuando no hay track asignado."""
+    def _update_track_combo_warning(self, combo):
+        """Colorea el valor visible según track, versión o falta de asignación."""
         if combo is None:
             return
         unassigned = (combo.currentData(QtCore.Qt.UserRole) is None)
         combo.setProperty("unassigned", "true" if unassigned else "false")
-        style = combo.style()
-        style.unpolish(combo)
-        style.polish(combo)
-        combo.update()
+        text_color = "#e05b5b" if unassigned else "#a7a7a7"
+        font_weight = "bold" if unassigned else "normal"
+
+        if not unassigned:
+            track_key = combo.currentData(QtCore.Qt.UserRole)
+            if (isinstance(track_key, str)
+                    and not track_key.startswith(self._CREATE_TRACK_PREFIX)):
+                track_name = self._track_name_from_key(track_key)
+                row_id = combo.property("media_row")
+                greyed = False
+                try:
+                    row_data = self._table_rows[int(row_id)]
+                    greyed = not row_data.get("item", {}).get("is_latest", True)
+                except Exception:
+                    pass
+                text_color = self._preview_track_label_color(
+                    track_name, greyed=greyed
+                )
+
+        combo.setStyleSheet(
+            "QComboBox { background-color:#272727; border:0px; "
+            "color:%s; font-weight:%s; padding:1px 4px; }"
+            "QComboBox::drop-down { border:0px; width:14px; }"
+            "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
+            "QComboBox QAbstractItemView { background-color:#2B2B2B; "
+            "border:1px solid #444444; color:#a7a7a7; font-weight:normal; "
+            "selection-background-color:#272727; selection-color:#a7a7a7; "
+            "outline:none; }"
+            % (text_color, font_weight)
+        )
 
     def _on_track_combo_changed(self, changed_row: int, new_track_key, new_track_text=None):
         """
@@ -4936,6 +4959,18 @@ class ImportShotDialog(QtWidgets.QDialog):
             "dmp":     _CLR_DMP,
         }.get(track_type, "#555555")
 
+    def _preview_track_label_color(self, track_name: str, greyed: bool = False):
+        """Color compartido por nombres de track en Preview y columna Track."""
+        track_type = classify_track_type(track_name)
+        if track_type == "other":
+            return "#888888" if not greyed else "#5f5f5f"
+        color = mix_colors(
+            self._track_bar_color(track_type), "#ffffff", 0.55
+        )
+        if greyed:
+            color = mix_colors(color, "#272727", 0.55)
+        return color
+
     def _item_section_color(self, row_data: dict) -> str:
         """Devuelve el color de barra correspondiente al ítem según su sección."""
         section = row_data.get("section", "")
@@ -5493,7 +5528,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             name_lbl.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             name_lbl.setStyleSheet(
                 "color: %s; font-size: 11px; padding: 0px 4px; background: transparent;"
-                % mix_colors(bar_color, "#ffffff", 0.55)
+                % self._preview_track_label_color(tname)
             )
             table.setCellWidget(row_i, 1, name_lbl)
 
@@ -7332,7 +7367,9 @@ class BulkImportDialog(QtWidgets.QDialog):
             bar.setFlags(QtCore.Qt.NoItemFlags)
             table.setItem(row, 0, bar)
             track_item = QtWidgets.QTableWidgetItem(track_label)
-            track_item.setForeground(QtGui.QColor(mix_colors(bar_color, "#ffffff", 0.58)))
+            track_item.setForeground(QtGui.QColor(
+                helper._preview_track_label_color(track_name)
+            ))
             table.setItem(row, 1, track_item)
 
             if helper._is_burnin_track(track_name):
