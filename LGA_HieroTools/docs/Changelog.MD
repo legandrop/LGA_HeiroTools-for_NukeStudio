@@ -1,3 +1,6 @@
+v3.77:
+        - Shot Info ahora lee y muestra los replies de `version_note_replies` como hilos anidados debajo de cada comentario. Se corrigio el estilo para que la linea vertical izquierda pertenezca solo al contenedor del hilo, sin pequenas lineas adicionales delante del autor ni del texto. [ Shot Info - Mostrar hilos y corregir linea vertical ]
+
 v3.76:
         - Create v000 selecciona `comp` por defecto en contexto client, reemplaza `Create v000 (All tabs)` por un contador dinámico `Create v000 (X shots)`, y muestra `ShotName | TASK` con colores de shot/task en el aviso de V000 ya existente, recalculando su ancho mínimo. Import Shot y Create v000 agregan además la variable `ANCHO_TAB_EXRA = 15`, marcada con `✅✅📛📛`, para sumar margen configurable a ambos lados de todos los tabs. [ Create V000 - Mejorar defaults, contador, avisos y ancho de tabs ]
         - Contexto client: Create v000 ahora restringe tasks a `comp` (sin `roto`/`cleanup`). La UI muestra solo el botón de comp y el filtro de elegibilidad/solape en timeline se calcula únicamente sobre el track `_comp_`. El flujo post-import de Import Shot (single + bulk) hereda esta regla automáticamente al abrir Create v000 con contextos explícitos por shot. [ Contexto Client - Create V000 solo comp ]

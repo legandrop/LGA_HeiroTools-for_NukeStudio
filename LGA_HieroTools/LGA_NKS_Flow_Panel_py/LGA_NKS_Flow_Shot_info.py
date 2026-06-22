@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.91 | Lega
+  LGA_NKS_Flow_Shot_info v1.93 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.93: Muestra replies de notas como hilos anidados y limita la linea vertical
+         al contenedor exterior, sin bordes extra en autor ni contenido.
   v1.92: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
          Corrige proyectos como MORLASP cuyos shots tienen prefijo MOR en el filename.
@@ -296,6 +298,10 @@ QWidget#flowVersionCommentsContainer {
     background-color: transparent; border-radius: 4px;
 }
 QWidget#flowVersionComment { background-color: transparent; }
+QWidget#flowVersionCommentReply {
+    border-left: 2px solid #555555;
+    background-color: transparent;
+}
 QFrame#flowCommentSeparator {
     color: %(border_principal)s;
     background-color: %(border_principal)s;
@@ -823,6 +829,17 @@ class ShotGridManager:
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
+        self._has_version_note_replies_table = self._table_exists(
+            "version_note_replies"
+        )
+
+    def _table_exists(self, table_name):
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        )
+        return cur.fetchone() is not None
 
     def find_project(self, project_name):
         cur = self.conn.cursor()
@@ -900,7 +917,7 @@ class ShotGridManager:
             for v in versions:
                 # Obtener comentarios/notas de la version con información de attachments
                 cur.execute(
-                    "SELECT content, created_by, created_on, local_attachment_paths, "
+                    "SELECT id, content, created_by, created_on, local_attachment_paths, "
                     "attachment_info, from_playlist, playlist_name "
                     "FROM version_notes WHERE version_id = ? ORDER BY created_on ASC",
                     (v["id"],),
@@ -939,6 +956,26 @@ class ShotGridManager:
                             if path and os.path.exists(path):
                                 attachment_paths.append(path)
 
+                    # Cargar replies asociados a esta nota.
+                    replies_rows = []
+                    if self._has_version_note_replies_table:
+                        cur.execute(
+                            "SELECT content, created_by, created_on "
+                            "FROM version_note_replies "
+                            "WHERE version_note_id = ? "
+                            "ORDER BY created_on ASC",
+                            (n["id"],),
+                        )
+                        replies_rows = cur.fetchall()
+                    replies = [
+                        {
+                            "user": reply_row["created_by"] or "",
+                            "text": reply_row["content"] or "",
+                            "date": reply_row["created_on"],
+                        }
+                        for reply_row in replies_rows
+                    ]
+
                     comments.append(
                         {
                             "user": n["created_by"] or "",
@@ -948,6 +985,7 @@ class ShotGridManager:
                             "attachment_info": n["attachment_info"] or "",
                             "from_playlist": bool(n["from_playlist"] or 0),
                             "playlist_name": n["playlist_name"] or "",
+                            "replies": replies,
                         }
                     )
                 version_dict = {
@@ -1432,7 +1470,42 @@ class GUIWindow(QWidget):
         if attachments:
             wl.addWidget(self.create_thumbnails_widget(attachments, frame_texts))
 
+        for reply in comment.get("replies", []) or []:
+            wl.addWidget(self.create_reply_widget(reply))
+
         return w
+
+    def create_reply_widget(self, reply):
+        reply_widget = QWidget()
+        reply_widget.setObjectName("flowVersionCommentReply")
+        reply_layout = QVBoxLayout(reply_widget)
+        reply_layout.setSpacing(4)
+        reply_layout.setContentsMargins(30, 4, 0, 4)
+
+        author = (reply.get("user") or "").strip()
+        r_dt = _parse_pipesync_datetime(reply.get("date"))
+        date_str = _format_friendly_date(r_dt, include_time=True)
+
+        header_html = (
+            f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 14px; font-weight: 700;'>"
+            f"{_user_name_span(author)}</span>"
+            f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 13px;'>&nbsp;{_html_escape(date_str)}</span>"
+        )
+        header_label = QLabel(header_html)
+        header_label.setTextFormat(Qt.RichText)
+        header_label.setWordWrap(True)
+        reply_layout.addWidget(header_label)
+
+        text = (reply.get("text") or "").strip()
+        if text:
+            esc = _html_escape(text).replace("\n", "<br/>")
+            content_label = QLabel(f"<span style='color: {COLORS['txt_body']};'>{esc}</span>")
+            content_label.setTextFormat(Qt.RichText)
+            content_label.setWordWrap(True)
+            content_label.setContentsMargins(12, 0, 0, 0)
+            reply_layout.addWidget(content_label)
+
+        return reply_widget
 
     @staticmethod
     def _frame_texts_from_attachment_info(attachment_info):
