@@ -109,6 +109,10 @@ chips usan fondo y texto de la paleta V000, pero conservan como borde el color
 `_chip_color()` se mantiene para usos que
 solo admiten un color, como el BinItem.
 
+Si el chip pertenece al contexto (`greyed=True`), la paleta greyed tiene
+prioridad incluso cuando el nombre es V000. Por lo tanto los shots existentes,
+anteriores y posteriores permanecen grises en todos los tracks.
+
 ### Shrink y text crop
 
 Los chips pueden shrinkear por debajo de su `sizeHint`:

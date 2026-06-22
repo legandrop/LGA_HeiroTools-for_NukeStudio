@@ -5092,16 +5092,18 @@ class ImportShotDialog(QtWidgets.QDialog):
         is_v000 = bool(re.search(
             r'[._]v0{2,}(?:\b|_|$)', str(text or ""), re.IGNORECASE
         ))
-        if is_v000:
-            bg = _PREVIEW_V000_BG_COLOR
-            border = task_border_color or color or _PREVIEW_V000_BORDER_COLOR
-            clr = _PREVIEW_V000_TEXT_COLOR
-            weight = "bold" if is_new else "normal"
-        elif greyed:
+        # El contexto greyed tiene prioridad absoluta, incluso si el clip es
+        # V000. La mezcla V000 + borde de task aplica solo a clips no-greyed.
+        if greyed:
             bg = _PREVIEW_GREY_BG_COLOR
             border = _PREVIEW_GREY_BORDER_COLOR
             clr = _PREVIEW_GREY_TEXT_COLOR
             weight = "normal"
+        elif is_v000:
+            bg = _PREVIEW_V000_BG_COLOR
+            border = task_border_color or color or _PREVIEW_V000_BORDER_COLOR
+            clr = _PREVIEW_V000_TEXT_COLOR
+            weight = "bold" if is_new else "normal"
         else:
             bg, border, clr = self._preview_chip_palette(color)
             weight = "bold" if is_new else "normal"
