@@ -44,6 +44,9 @@ una política horizontal `Expanding`, mientras sus tabs mantienen
 `setExpanding(False)`: el bar consume todo el ancho disponible antes de activar
 las flechas de navegación.
 
+En la columna **Track**, el valor `— sin track —` se muestra en rojo y bold
+para señalar inmediatamente que ese ítem no será colocado en el timeline.
+
 La posicion de insercion en el timeline se calcula automaticamente escaneando
 los shots existentes y determinando la posicion alfabeticamente correcta,
 sin depender del playhead.

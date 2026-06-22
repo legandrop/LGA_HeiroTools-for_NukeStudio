@@ -22,6 +22,7 @@ ____________________________________________________________________
          registra alturas reales/sugeridas del tab bar, header y cada tab.
          Fix layout header Bulk: deja 2px sobre los tabs y permite que el
          tab bar use todo el ancho libre antes de mostrar flechas de scroll.
+         Ajuste Track: el valor "sin track" se muestra en rojo y bold.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -2847,6 +2848,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                 combo.setCurrentIndex(0)
 
             combo.blockSignals(False)
+            self._update_track_combo_warning(combo)
 
     # ── construcción de combo de track ───────────────────────────────────────
 
@@ -2894,6 +2896,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                         existing_combo.blockSignals(True)
                         existing_combo.setCurrentIndex(0)  # "— sin track —"
                         existing_combo.blockSignals(False)
+                        self._update_track_combo_warning(existing_combo)
                         self._track_overrides[existing_row] = "— sin track —"
                         debug_print(
                             "[track_conflict] EXR '%s' desplaza MOV '%s' del track '%s'"
@@ -2916,6 +2919,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                             existing_combo.blockSignals(True)
                             existing_combo.setCurrentIndex(0)
                             existing_combo.blockSignals(False)
+                            self._update_track_combo_warning(existing_combo)
                             self._track_overrides[existing_row] = "— sin track —"
                             debug_print(
                                 "[track_conflict] '%s' (v%d) desplaza '%s' (v%d) del track '%s'"
@@ -2945,6 +2949,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         combo.setStyleSheet(
             "QComboBox { background-color:#272727; border:0px; "
             "color:#a7a7a7; padding:1px 4px; }"
+            "QComboBox[unassigned=\"true\"] { color:#e05b5b; font-weight:bold; }"
             "QComboBox::drop-down { border:0px; width:14px; }"
             "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
             "QComboBox QAbstractItemView { background-color:#2B2B2B; "
@@ -2965,11 +2970,24 @@ class ImportShotDialog(QtWidgets.QDialog):
         else:
             combo.setCurrentIndex(0)  # "— sin track —"
         combo.blockSignals(False)
+        self._update_track_combo_warning(combo)
 
         combo.currentTextChanged.connect(
             lambda txt, rid=row_id: self._on_track_combo_changed(rid, txt)
         )
         return combo
+
+    @staticmethod
+    def _update_track_combo_warning(combo):
+        """Resalta en rojo el valor visible cuando no hay track asignado."""
+        if combo is None:
+            return
+        unassigned = (combo.currentText() == "— sin track —")
+        combo.setProperty("unassigned", "true" if unassigned else "false")
+        style = combo.style()
+        style.unpolish(combo)
+        style.polish(combo)
+        combo.update()
 
     def _on_track_combo_changed(self, changed_row: int, new_track: str):
         """
@@ -2979,6 +2997,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         Si la selección es "Crear track <name>", crea el track en el timeline
         y refresca todos los combos para que usen el nombre real.
         """
+        self._update_track_combo_warning(self._track_combos.get(changed_row))
+
         # ── Detectar selección "Crear track" ──────────────────────────────
         if new_track.startswith(self._CREATE_TRACK_PREFIX):
             track_to_create = new_track[len(self._CREATE_TRACK_PREFIX):]
@@ -3016,6 +3036,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                     combo.blockSignals(True)
                     combo.setCurrentIndex(0)
                     combo.blockSignals(False)
+                    self._update_track_combo_warning(combo)
                 self._track_overrides[changed_row] = "— sin track —"
 
             self._update_action_btns()
@@ -3036,6 +3057,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                 combo.blockSignals(True)
                 combo.setCurrentIndex(0)  # "— sin track —"
                 combo.blockSignals(False)
+                self._update_track_combo_warning(combo)
                 self._track_overrides[row] = "— sin track —"
 
         self._update_action_btns()
