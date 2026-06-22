@@ -1487,7 +1487,7 @@ class GUIWindow(QWidget):
         date_str = _format_friendly_date(r_dt, include_time=True)
 
         header_html = (
-            f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 14px; font-weight: 700;'>"
+            f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 14px;'>"
             f"{_user_name_span(author)}</span>"
             f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 13px;'>&nbsp;{_html_escape(date_str)}</span>"
         )
