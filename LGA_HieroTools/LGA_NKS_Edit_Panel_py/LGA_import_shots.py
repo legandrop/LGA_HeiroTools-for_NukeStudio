@@ -27,6 +27,8 @@ ____________________________________________________________________
          separa con linea oscura los tabs no seleccionados adyacentes.
          Los separadores inactivos cubren todo el alto y el ultimo tab suma
          borde derecho cuando no esta seleccionado.
+         Import individual: Preview Timeline pasa de boton/sub-vista a tab
+         principal PREVIEW, a la derecha de IMPORT.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -1838,8 +1840,7 @@ class ImportShotDialog(QtWidgets.QDialog):
     TAB_RENAME    = 0
     TAB_TRANSCODE = 1
     TAB_IMPORT    = 2
-    IMPORT_MAIN    = 0
-    IMPORT_PREVIEW = 1
+    TAB_PREVIEW   = 3
 
     _TAB_H_PAD_EXTRA = 14  # px adicionales a cada lado de todos los tabs — ajustar a mano
 
@@ -1978,6 +1979,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._tab_bar.addTab("RENAME")
         self._tab_bar.addTab("TRANSCODE PLATES")
         self._tab_bar.addTab("IMPORT")
+        self._tab_bar.addTab("PREVIEW")
         _hdr_lay.addWidget(self._tab_bar, 0, QtCore.Qt.AlignBottom)
         _hdr_lay.addStretch(1)
 
@@ -2019,10 +2021,12 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._page_rename  = self._build_page_rename()
         self._page_convert = self._build_page_convert()
         self._page_import  = self._build_tab_import()
+        self._page_import_preview = self._build_import_preview()
 
         self._tab_widget.addWidget(self._page_rename)
         self._tab_widget.addWidget(self._page_convert)
         self._tab_widget.addWidget(self._page_import)
+        self._tab_widget.addWidget(self._page_import_preview)
 
         self._tab_bar.currentChanged.connect(self._tab_widget.setCurrentIndex)
         self._tab_bar.currentChanged.connect(self._on_tab_changed)
@@ -2256,24 +2260,18 @@ class ImportShotDialog(QtWidgets.QDialog):
     # ── navegación entre páginas ─────────────────────────────────
 
     # ══════════════════════════════════════════════════════════
-    #  TAB IMPORT: sub-vistas (main table + preview)
+    #  TAB IMPORT
     # ══════════════════════════════════════════════════════════
 
     def _build_tab_import(self):
-        """Contenedor del tab Import con QStackedWidget interno."""
+        """Contenedor del tab Import."""
         container = QtWidgets.QWidget()
         vbox = QtWidgets.QVBoxLayout(container)
         vbox.setContentsMargins(0, 0, 0, 0)
         vbox.setSpacing(0)
 
-        self._import_inner_stack = QtWidgets.QStackedWidget()
-        self._import_main_page    = self._build_import_main()
-        self._import_preview_page = self._build_import_preview()
-        self._import_inner_stack.addWidget(self._import_main_page)
-        self._import_inner_stack.addWidget(self._import_preview_page)
-        self._import_inner_stack.setCurrentIndex(self.IMPORT_MAIN)
-
-        vbox.addWidget(self._import_inner_stack)
+        self._import_main_page = self._build_import_main()
+        vbox.addWidget(self._import_main_page)
         return container
 
     def _build_import_main(self):
@@ -2311,14 +2309,6 @@ class ImportShotDialog(QtWidgets.QDialog):
         btn_row.addWidget(_oq_btn)
         btn_row.addSpacing(8)
         btn_row.addWidget(_status_lbl, 1)
-
-        self._preview_btn = QtWidgets.QPushButton("Preview Timeline")
-        self._preview_btn.setStyleSheet(_BTN_SECONDARY)
-        self._preview_btn.setToolTip("Previsualizar la disposición en el timeline antes de importar")
-        self._preview_btn.clicked.connect(self._go_to_import_preview)
-        btn_row.addWidget(self._preview_btn)
-
-        btn_row.addSpacing(6)
 
         self._import_now_btn = QtWidgets.QPushButton("Import Now")
         self._import_now_btn.setStyleSheet(_BTN_PRIMARY)
@@ -3127,8 +3117,8 @@ class ImportShotDialog(QtWidgets.QDialog):
             if self._table_rows[row].get("type") != "section_header"
         ) if hasattr(self, "_table_rows") else False
 
-        if hasattr(self, "_preview_btn"):
-            self._preview_btn.setEnabled(any_checked)
+        if hasattr(self, "_tab_bar") and self._tab_bar.count() > self.TAB_PREVIEW:
+            self._tab_bar.setTabEnabled(self.TAB_PREVIEW, any_checked)
         if hasattr(self, "_import_now_btn"):
             self._import_now_btn.setEnabled(has_track_assigned)
         if hasattr(self, "_import_v000_btn"):
@@ -3139,9 +3129,8 @@ class ImportShotDialog(QtWidgets.QDialog):
             self._preview_import_v000_btn.setEnabled(has_track_assigned)
 
     def _go_to_import_preview(self):
-        """Cambia a la sub-vista de preview dentro del tab Import."""
-        self._update_import_page()
-        self._import_inner_stack.setCurrentIndex(self.IMPORT_PREVIEW)
+        """Compatibilidad: abre el tab principal PREVIEW."""
+        self._tab_bar.setCurrentIndex(self.TAB_PREVIEW)
 
     def _on_tab_changed(self, index):
         """Manejador de cambio de tab. Ejecuta refresh si el tab necesita uno."""
@@ -3149,6 +3138,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             self.TAB_RENAME:    "rename",
             self.TAB_TRANSCODE: "transcode",
             self.TAB_IMPORT:    "import",
+            self.TAB_PREVIEW:   "preview",
         }
         tab_name = tab_map.get(index)
         if tab_name and tab_name in self._needs_refresh:
@@ -3168,9 +3158,9 @@ class ImportShotDialog(QtWidgets.QDialog):
                             saved_chk[path] = chk.isChecked()
             self._update_convert_page(saved_chk=saved_chk)
         elif index == self.TAB_IMPORT:
-            # Vuelve a la vista principal al entrar al tab
-            if hasattr(self, "_import_inner_stack"):
-                self._import_inner_stack.setCurrentIndex(self.IMPORT_MAIN)
+            pass
+        elif index == self.TAB_PREVIEW:
+            self._update_import_page()
 
     # ── selección rápida ─────────────────────────────────────────
 
@@ -4635,7 +4625,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         return page
 
     # ══════════════════════════════════════════════════════════════
-    #  PÁGINA: Import Preview (sub-vista del tab Import)
+    #  TAB PREVIEW
     # ══════════════════════════════════════════════════════════════
 
     def _build_import_preview(self):
@@ -4702,7 +4692,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._preview_back_btn = QtWidgets.QPushButton("← Go Back")
         self._preview_back_btn.setStyleSheet(_BTN_SECONDARY)
         self._preview_back_btn.clicked.connect(
-            lambda: self._import_inner_stack.setCurrentIndex(self.IMPORT_MAIN)
+            lambda: self._tab_bar.setCurrentIndex(self.TAB_IMPORT)
         )
         btn_row.addWidget(self._preview_back_btn)
 
@@ -6300,6 +6290,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._start_transcode_btn.setEnabled(False)
         self._tab_bar.setTabEnabled(self.TAB_RENAME, False)
         self._tab_bar.setTabEnabled(self.TAB_IMPORT, False)
+        self._tab_bar.setTabEnabled(self.TAB_PREVIEW, False)
         self._convert_log.clear()
 
         self._transcode_results_all = []
@@ -6577,6 +6568,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._start_transcode_btn.setEnabled(True)
         self._tab_bar.setTabEnabled(self.TAB_RENAME, True)
         self._tab_bar.setTabEnabled(self.TAB_IMPORT, True)
+        self._update_action_btns()
         self._needs_refresh.update({"rename", "import"})
         self._update_transcode_btn_state()
         debug_print("Transcode all_done — %d/%d OK" % (ok_count, total))

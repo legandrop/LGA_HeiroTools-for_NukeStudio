@@ -3,7 +3,7 @@
 
 # LGA_import_shots — Sección Import Preview
 
-Subsección de la herramienta `LGA_import_shots`.
+Tab principal `PREVIEW` de la herramienta `LGA_import_shots`.
 
 Muestra una preview visual tipo timeline de cómo quedará el timeline de Nuke Studio una vez que se importen los ítems seleccionados.
 
@@ -15,21 +15,22 @@ Antes de ejecutar la importación real, el usuario puede revisar:
 - Qué clips existen actualmente a la izquierda y a la derecha del punto de inserción en cada track.
 - Qué ítems no tienen track asignado y quedarán fuera del timeline.
 
-Esta página es la pantalla final del flujo de importación. Desde aquí se ejecuta la importación real.
+Desde este tab también se puede ejecutar la importación real.
 
 ---
 
 ## Flujo de navegación
 
 ```
-Página Media (PAGE_MEDIA)
-  └─ click "Import"
-       └─ Página Import Preview (PAGE_IMPORT)
-            ├─ click "← Go Back"  →  Página Media
+Tab IMPORT
+  └─ click tab PREVIEW
+       └─ Tab PREVIEW
+            ├─ click "← Go Back"  →  tab IMPORT
             └─ click "Import Now" →  _do_import() → cierra el diálogo
 ```
 
-El botón "Import" en la página Media llama a `_go_to_import()`.
+El tab se habilita cuando existe al menos un ítem marcado. Al seleccionarlo,
+`_on_tab_changed()` llama a `_update_import_page()`.
 
 ---
 

@@ -6,14 +6,15 @@
 Subsección de la herramienta `LGA_import_shots`.
 
 Ejecuta la importación física de los ítems seleccionados al bin de Hiero y al timeline.
-Se activa al pulsar "Import Now" en la página de Import Preview (PAGE_IMPORT).
+Se activa al pulsar `Import Now` tanto en el tab `IMPORT` como en el tab
+`PREVIEW`.
 
 ---
 
 ## Flujo de navegación
 
 ```
-Página Import Preview (PAGE_IMPORT)
+Tab IMPORT o tab PREVIEW
   └─ click "Import Now"
        └─ ImportShotDialog._do_import()
             ├─ [dentro del bloque beginUndo]
