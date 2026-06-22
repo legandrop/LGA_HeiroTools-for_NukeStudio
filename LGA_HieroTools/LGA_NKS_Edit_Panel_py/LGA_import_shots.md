@@ -37,7 +37,8 @@ patrón del flujo individual (`_ImportShotTabBar` + `_HeaderSeparator` +
 `QStackedWidget`) para respetar el ancho real del shot name, habilitar scroll
 cuando no entran todos y mantener el gap visual del separador bajo el tab
 activo. El logger escribe trazas `Bulk tabs [...]` con geometría/ancho de tabs
-en `debugPy_ImportShots.log` para facilitar debugging.
+en `debugPy_ImportShots.log` para facilitar debugging. También registra las
+alturas reales y sugeridas del tab bar, header y cada tab.
 
 La posicion de insercion en el timeline se calcula automaticamente escaneando
 los shots existentes y determinando la posicion alfabeticamente correcta,
@@ -132,7 +133,7 @@ visual y geométrico:
 ```
 QWidget (objectName "LGA_ImportShotHeader")  ← fondo #232323, WA_StyledBackground
 └── QHBoxLayout (margins 0, spacing 0)
-    ├── QTabBar  ← subclase _ImportShotTabBar (tabSizeHint con +24px para letter-spacing)
+    ├── QTabBar  ← _ImportShotTabBar (tabSizeHint: +24px ancho, mínimo 48px alto)
     │      tabs: RENAME / TRANSCODE PLATES / IMPORT
     │      RENAME y TRANSCODE PLATES se ocultan si el setting de UI esta apagado
     │      AlignBottom para que las solapas queden pegadas al separador
@@ -150,15 +151,18 @@ un `QStackedWidget` (atributo `self._tab_widget` por compatibilidad con código
 existente) que aloja las tres páginas. El `QTabBar.currentChanged` está
 conectado a `QStackedWidget.setCurrentIndex` y a `_on_tab_changed`.
 
-El padding vertical del header se controla en `QTabBar::tab { padding: ... }`
-(actualmente `13px 14px`); el QLabel del shotname se centra verticalmente
-dentro de la altura que dictan los tabs.
+El padding del tab se controla en `QTabBar::tab { padding: ... }` (actualmente
+`16px 14px`). Además, `_ImportShotTabBar.MIN_HEIGHT = 48` fuerza esa altura
+mínima desde `tabSizeHint()` para evitar que el header custom comprima los
+labels verticalmente.
 
 Detalles técnicos relevantes para tocar el header:
 
 - **`tabSizeHint` ampliado** (`_ImportShotTabBar.EXTRA_WIDTH = 24`) compensa
   el `letter-spacing: 1px` del QSS, que Qt no contempla en su cálculo de ancho
   → sin esto el texto de los tabs se cropea en los extremos.
+- **Altura mínima natural** (`_ImportShotTabBar.MIN_HEIGHT = 48`) forma parte
+  del `sizeHint` del tab y obliga al layout a reservar espacio vertical.
 - **`WA_StyledBackground`** en el wrapper del header: sin este flag, un
   `QWidget` plano no pinta el background definido por stylesheet.
 - **Root layout `setContentsMargins(0, 0, 0, 0)`**: margins en cero para que

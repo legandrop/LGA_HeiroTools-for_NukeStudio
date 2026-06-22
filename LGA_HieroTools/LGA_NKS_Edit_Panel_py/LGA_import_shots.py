@@ -18,6 +18,8 @@ ____________________________________________________________________
          Fix follow-up: evita refresh del header en _BulkShotPanel (no tiene
          _tab_bar propio), corrige ancho visible del tab bar del Bulk y guarda
          la ultima carpeta navegada del browser (no el shot seleccionado).
+         Fix altura tabs: tabSizeHint impone minimo de 48px y el log Bulk
+         registra alturas reales/sugeridas del tab bar, header y cada tab.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -1767,18 +1769,24 @@ class _HeaderSeparator(QtWidgets.QWidget):
 
 
 class _ImportShotTabBar(QtWidgets.QTabBar):
-    """QTabBar con tabSizeHint ampliado.
+    """QTabBar con tabSizeHint ampliado en ancho y altura minima.
 
     Qt calcula el ancho de cada tab usando QFontMetrics sobre el texto crudo,
     sin contemplar `letter-spacing` del QSS. Como aquí el CSS aplica
     letter-spacing 1px, el texto pintado termina siendo más ancho que la
     celda y se cropea en los extremos. Compensamos sumando un margen extra.
+
+    En algunos contextos Qt devuelve un alto insuficiente para el padding
+    vertical del QSS. El minimo explicito evita que el layout comprima los
+    labels en Y.
     """
     EXTRA_WIDTH = 24  # px adicionales por tab — cubre letter-spacing + aire
+    MIN_HEIGHT = 48   # 12px fuente + 16px arriba/abajo + bordes
 
     def tabSizeHint(self, index):
         s = super(_ImportShotTabBar, self).tabSizeHint(index)
         s.setWidth(s.width() + self.EXTRA_WIDTH)
+        s.setHeight(max(s.height(), self.MIN_HEIGHT))
         return s
 
 
@@ -6706,19 +6714,33 @@ class BulkImportDialog(QtWidgets.QDialog):
             metrics = []
             for idx in range(bar.count()):
                 rect = bar.tabRect(idx)
+                hint = bar.tabSizeHint(idx)
                 metrics.append(
-                    "%d:%s(x=%d,w=%d)" % (
+                    "%d:%s(x=%d,w=%d,h=%d hint=%dx%d)" % (
                         idx,
                         bar.tabText(idx),
                         int(rect.x()),
                         int(rect.width()),
+                        int(rect.height()),
+                        int(hint.width()),
+                        int(hint.height()),
                     )
                 )
+            header = getattr(self, "_header", None)
+            header_h = int(header.height()) if header is not None else -1
+            header_hint_h = int(header.sizeHint().height()) if header is not None else -1
+            bar_hint = bar.sizeHint()
             debug_print(
-                "Bulk tabs [%s] bar_w=%d count=%d current=%d usesScrollButtons=%s :: %s"
+                "Bulk tabs [%s] bar=%dx%d bar_hint=%dx%d header_h=%d "
+                "header_hint_h=%d count=%d current=%d usesScrollButtons=%s :: %s"
                 % (
                     reason,
                     int(bar.width()),
+                    int(bar.height()),
+                    int(bar_hint.width()),
+                    int(bar_hint.height()),
+                    header_h,
+                    header_hint_h,
                     int(bar.count()),
                     int(bar.currentIndex()),
                     bool(bar.usesScrollButtons()),
