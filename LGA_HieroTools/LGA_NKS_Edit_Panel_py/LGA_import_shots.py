@@ -10,7 +10,8 @@ ____________________________________________________________________
 
   v1.27: Bulk Import con seleccion multiple de carpetas, tabs editables por
          shot, preview grafico combinado con chips proporcionales y colores,
-         y ejecucion en un unico undo.
+         tabs de ancho natural, resumen compacto de omitidos y ejecucion en
+         un unico undo. Rename/Transcode quedan controlados por flag global.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -125,6 +126,11 @@ else:
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
+
+
+# Flag temporal de feature: con False, Rename/Transcode y Open Queue no se
+# construyen como opciones habilitables para el usuario.
+RENAME_TRANSCODE_TABS = False
 
 
 def _has_visible_import_shot_dialogs():
@@ -1894,7 +1900,6 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         self._status_labels = []
         self._open_queue_buttons = []
-        self._advanced_tabs_checkboxes = []
 
         # ── Tab Header ────────────────────────────────────────────
         # Wrapper QWidget que contiene tabs + stretch + shotname como
@@ -2009,14 +2014,6 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._open_queue_buttons.append(open_queue_btn)
 
         buttons_row.addWidget(open_queue_btn)
-        advanced_chk = QtWidgets.QCheckBox("Shot Rename and Transcode tabs")
-        advanced_chk.setStyleSheet(_CHECKBOX_STYLE)
-        advanced_chk.setFocusPolicy(QtCore.Qt.NoFocus)
-        advanced_chk.setChecked(self._advanced_tabs_enabled())
-        advanced_chk.stateChanged.connect(self._on_advanced_tabs_toggled)
-        self._advanced_tabs_checkboxes.append(advanced_chk)
-        buttons_row.addWidget(advanced_chk)
-
         box = QtWidgets.QWidget()
         box.setStyleSheet("QWidget { background: transparent; }")
         row = QtWidgets.QHBoxLayout(box)
@@ -2061,22 +2058,10 @@ class ImportShotDialog(QtWidgets.QDialog):
         return buttons, box
 
     def _advanced_tabs_enabled(self):
-        ui = self._imp_settings.get("ui", {})
-        return str(ui.get("advanced_tabs", "false")).lower() == "true"
-
-    def _on_advanced_tabs_toggled(self, state):
-        enabled = (state == QtCore.Qt.Checked)
-        self._imp_settings.setdefault("ui", {})["advanced_tabs"] = (
-            "true" if enabled else "false"
-        )
-        self._apply_advanced_tabs_visibility(save=True)
+        return bool(RENAME_TRANSCODE_TABS)
 
     def _apply_advanced_tabs_visibility(self, save=False):
         enabled = self._advanced_tabs_enabled()
-        for chk in getattr(self, "_advanced_tabs_checkboxes", []):
-            chk.blockSignals(True)
-            chk.setChecked(enabled)
-            chk.blockSignals(False)
 
         for idx in (self.TAB_RENAME, self.TAB_TRANSCODE):
             try:
@@ -2092,8 +2077,6 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         self._refresh_header_layout()
         self._refresh_footer_controls()
-        if save:
-            self._save_ui_settings()
 
     def _refresh_header_layout(self):
         # Si una versión previa forzó min/max width del tabbar, lo reseteamos.
@@ -6631,6 +6614,10 @@ class BulkImportDialog(QtWidgets.QDialog):
         root = QtWidgets.QVBoxLayout(self)
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setStyleSheet(ImportShotDialog._TAB_STYLE)
+        tab_bar = self.tabs.tabBar()
+        tab_bar.setExpanding(False)
+        tab_bar.setElideMode(QtCore.Qt.ElideNone)
+        tab_bar.setUsesScrollButtons(True)
         for entry in entries:
             panel = _BulkShotPanel(entry, seq, self)
             self.panels.append(panel)
@@ -6642,10 +6629,10 @@ class BulkImportDialog(QtWidgets.QDialog):
 
         footer = QtWidgets.QHBoxLayout()
         if self.skipped:
-            skipped_text = "Omitidos (ya existen o repetidos): %s" % ", ".join(self.skipped)
-            label = QtWidgets.QLabel(skipped_text)
+            skipped_tooltip = "Shots omitidos:\n%s" % "\n".join(self.skipped)
+            label = QtWidgets.QLabel("%d Shots omitidos" % len(self.skipped))
             label.setStyleSheet("color:#c69a58;")
-            label.setToolTip(skipped_text)
+            label.setToolTip(skipped_tooltip)
             footer.addWidget(label, 1)
         else:
             footer.addStretch(1)

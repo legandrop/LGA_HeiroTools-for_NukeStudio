@@ -27,8 +27,14 @@ informan en la ventana. El batch se ejecuta en orden alfabetico y dentro de un
 unico bloque de undo.
 
 En el flujo individual presenta una ventana que siempre abre en el tab **Import**. Por defecto solo se muestra
-ese tab; desde el checkbox persistente **Shot Rename and Transcode tabs** se
-habilitan tambien **Rename**, **Transcode Plates** y el boton **Open Queue**.
+ese tab. Los tabs **Rename**, **Transcode Plates** y el boton **Open Queue**
+estan temporalmente controlados por el flag global `RENAME_TRANSCODE_TABS`,
+definido en `False`; no se muestra un checkbox para habilitarlos.
+
+En Bulk Import, el footer muestra solamente `N Shots omitidos`; la lista de
+nombres queda disponible en el tooltip. Los tabs usan el ancho natural del
+shot name y habilitan botones de scroll cuando el total excede la ventana, sin
+recortar los labels ni la palabra `PREVIEW`.
 
 La posicion de insercion en el timeline se calcula automaticamente escaneando
 los shots existentes y determinando la posicion alfabeticamente correcta,
