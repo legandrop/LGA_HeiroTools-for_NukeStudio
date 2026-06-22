@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.02 | Lega
+  LGA_NKS_UIManager v1.03 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.03: Corregida la inicializacion para usuarios sin acceso al toggle Studio/Client:
+         setup_connections() ahora conecta sus señales solo cuando ambos botones fueron creados.
   v1.02: El switch Studio/Client pasa a ser un toggle pill (_build_context_toggle) ubicado a la
          derecha del info_label, en vez del botón en la columna derecha. Conecta ctx_client_btn /
          ctx_studio_btn a panel.set_context_mode() en setup_connections().
@@ -242,9 +244,11 @@ class UIManager:
             panel.settings_button.clicked.connect(panel.show_settings_view)
         if REIMPORT_BUTTON and hasattr(panel, 'reimport_button'):
             panel.reimport_button.clicked.connect(panel.reimport_panel)
-        if hasattr(panel, 'ctx_client_btn') and hasattr(panel, 'ctx_studio_btn'):
-            panel.ctx_client_btn.clicked.connect(lambda: panel.set_context_mode("client"))
-            panel.ctx_studio_btn.clicked.connect(lambda: panel.set_context_mode("studio"))
+        ctx_client_btn = getattr(panel, "ctx_client_btn", None)
+        ctx_studio_btn = getattr(panel, "ctx_studio_btn", None)
+        if ctx_client_btn is not None and ctx_studio_btn is not None:
+            ctx_client_btn.clicked.connect(lambda: panel.set_context_mode("client"))
+            ctx_studio_btn.clicked.connect(lambda: panel.set_context_mode("studio"))
 
     @staticmethod
     def eventFilter(panel, obj, event):

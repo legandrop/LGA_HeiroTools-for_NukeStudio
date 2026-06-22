@@ -17,6 +17,8 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - Preflight bloqueante en Pull/Push con mensajes UI cuando faltan prerequisitos.
 - Projects Panel con switch Studio/Client visible solo para `lega@wanka.tv`
   (leyendo PipeSync normal).
+- Para los demás usuarios, el Projects Panel no crea ni conecta los botones del
+  switch; el panel inicia normalmente y usa el contexto configurado.
 
 ## Reglas operativas
 

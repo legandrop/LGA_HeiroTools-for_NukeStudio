@@ -1,3 +1,6 @@
+v3.78:
+        - Projects Panel corrige el inicio para usuarios que no tienen permitido ver el toggle Studio/Client. Los atributos de los botones se inicializaban en `None`, pero `setup_connections()` intentaba acceder igualmente a `.clicked` porque solo verificaba que los atributos existieran, provocando `AttributeError` durante la carga. Ahora las señales se conectan únicamente cuando ambos botones fueron creados. [ Projects Panel - Corregir inicio sin toggle de contexto ]
+
 v3.77:
         - Shot Info ahora lee y muestra los replies de `version_note_replies` como hilos anidados debajo de cada comentario. Se corrigio el estilo para que la linea vertical izquierda pertenezca solo al contenedor del hilo, sin pequenas lineas adicionales delante del autor ni del texto. [ Shot Info - Mostrar hilos y corregir linea vertical ]
 
