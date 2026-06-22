@@ -53,6 +53,9 @@ Los tracks con tipo visual conocido usan el mismo color que su nombre en
 Preview: Plate, EditRef, Comp, Roto, Cleanup y DMP. Cuando la fila corresponde
 a una versión vieja (`is_latest=False`), conserva el tono de la task pero
 mezclado hacia gris oscuro. Los tracks no reconocidos mantienen color gris.
+El popup del dropdown usa exactamente la misma regla para cada opción:
+`sin track` rojo, tracks reconocidos con color Preview y, si la fila es una
+versión vieja, sus variantes greyed. `+ Crear track` conserva su estilo verde.
 
 Los headers de shots nuevos usan
 `_PREVIEW_NEW_SHOT_HEADER_COLOR = "#6fa96f"` (marcada con `✅✅💾💾` junto a
@@ -125,7 +128,7 @@ un track secundario no puede acortar el rango master del shot.
 
 ## Archivos principales
 
-- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.29)
+- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.30)
 - **Boton:** Edit Panel → "Import shot" (verde `#2a4d3a`)
 - **Plan de desarrollo:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\docs\LGA_import_shots_PLAN.md`
 

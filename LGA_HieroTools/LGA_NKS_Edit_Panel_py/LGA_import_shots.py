@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.29 | Lega
+  LGA_import_shots v1.30 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.30: Las opciones del dropdown Track usan los colores del Preview,
+         incluyendo variante greyed para filas de versiones viejas.
   v1.29: La columna Track usa los mismos colores que los nombres de track del
          Preview; versiones viejas conservan el tono pero quedan desaturadas.
   v1.28: Preview V000 conserva fondo/texto V000 pero usa el borde de la
@@ -1824,9 +1826,11 @@ class _TrackComboDelegate(QtWidgets.QStyledItemDelegate):
     _CLR_CREATE_BG   = "#1a2a1a"   # fondo verde muy oscuro
     _CLR_CREATE_HOV  = "#253525"   # hover: verde oscuro un poco más claro
 
-    def __init__(self, list_view, parent=None):
+    def __init__(self, list_view, color_resolver=None, greyed=False, parent=None):
         super(_TrackComboDelegate, self).__init__(parent)
         self._view = list_view
+        self._color_resolver = color_resolver
+        self._greyed = bool(greyed)
 
     @staticmethod
     def _is_create_option(text):
@@ -1835,6 +1839,7 @@ class _TrackComboDelegate(QtWidgets.QStyledItemDelegate):
     def paint(self, painter, option, index):
         painter.save()
         text = index.data() or ""
+        track_key = index.data(QtCore.Qt.UserRole)
         is_create = self._is_create_option(text)
 
         if is_create:
@@ -1848,7 +1853,15 @@ class _TrackComboDelegate(QtWidgets.QStyledItemDelegate):
         painter.fillRect(option.rect, bg)
 
         text_rect = option.rect.adjusted(6, 0, -4, 0)
-        clr = self._CLR_CREATE_TEXT if is_create else self._CLR_TEXT
+        if is_create:
+            clr = self._CLR_CREATE_TEXT
+        elif track_key is None:
+            clr = "#e05b5b"
+        elif self._color_resolver:
+            track_name, _bt_idx = _parse_track_key(track_key)
+            clr = self._color_resolver(track_name, self._greyed)
+        else:
+            clr = self._CLR_TEXT
         painter.setPen(QtGui.QColor(clr))
         painter.drawText(text_rect,
                          QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft, text)
@@ -3181,7 +3194,11 @@ class ImportShotDialog(QtWidgets.QDialog):
             self._on_track_combo_changed(_rid, create_text, create_text)
 
         _track_list_view = _TrackComboListView(_on_create_opt)
-        _track_delegate  = _TrackComboDelegate(_track_list_view)
+        _track_delegate = _TrackComboDelegate(
+            _track_list_view,
+            color_resolver=self._preview_track_label_color,
+            greyed=not item.get("is_latest", True),
+        )
         _track_list_view.setItemDelegate(_track_delegate)
 
         combo = _ArrowComboBox()
