@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_bulk v1.00 | Lega
+  LGA_import_shots_bulk v1.02 | Lega
 
   Bulk Import: importar varios shots al timeline en una sola operacion,
   en orden alfabetico, como si se importaran uno por uno.
 
+  v1.02: Sidebar muestra rutas T:/VFX-* y N:/VFX-*; columnas Type y Date
+         Modified ajustan ancho por contenido con mínimos configurables.
+  v1.01: Browser mas grande, seleccion gris configurable y sidebar ampliado
+         con accesos VFX-* detectados en las raices T: y N:.
   v1.00: Browser Qt con seleccion multiple de carpetas y simulacion del
          layout final para el preview combinado del Bulk Import.
          Fix follow-up: expone la carpeta actual del browser al confirmar para
@@ -28,6 +32,22 @@ ____________________________________________________________________
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
 
 
+# ✅✅💾⚠️ Color de selección de carpetas en el browser.
+SHOT_BROWSER_SELECTION_BG_COLOR = "#b4b4b4"
+SHOT_BROWSER_SELECTION_TEXT_COLOR = "#202020"
+
+# ✅✅💾⚠️ Tamaño inicial del browser de selección.
+SHOT_BROWSER_WIDTH = 900
+SHOT_BROWSER_HEIGHT = 760
+
+# ✅✅💾⚠️ Ancho fijo del panel izquierdo de shortcuts.
+SHOT_BROWSER_SIDEBAR_WIDTH = 175
+
+# ✅✅💾⚠️ Anchos mínimos de columnas del browser.
+SHOT_BROWSER_TYPE_COLUMN_MIN_WIDTH = 130
+SHOT_BROWSER_DATE_COLUMN_MIN_WIDTH = 175
+
+
 # ── Logger inyectable (mismo patron que los demas modulos auxiliares) ──────────
 def _default_print(*args, **kwargs):
     pass
@@ -48,6 +68,135 @@ def get_last_browser_directory():
     return _last_browser_directory
 
 
+class _ShotBrowserSidebarDelegate(QtWidgets.QStyledItemDelegate):
+    """Conserva iconos y muestra shortcuts VFX como `T:/VFX-MOR`."""
+
+    def __init__(self, labels_by_path, parent=None):
+        super(_ShotBrowserSidebarDelegate, self).__init__(parent)
+        self._labels_by_path = labels_by_path
+
+    @staticmethod
+    def _index_url(index):
+        # QUrlModel usa Qt.UserRole + 1 para la URL en QFileDialog no nativo.
+        value = index.data(QtCore.Qt.UserRole + 1)
+        if isinstance(value, QtCore.QUrl):
+            return value
+        if value:
+            try:
+                return QtCore.QUrl(value)
+            except Exception:
+                pass
+        return None
+
+    def initStyleOption(self, option, index):
+        super(_ShotBrowserSidebarDelegate, self).initStyleOption(option, index)
+        url = self._index_url(index)
+        if url is None:
+            return
+        path = url.toLocalFile().replace("\\", "/").rstrip("/").lower()
+        label = self._labels_by_path.get(path)
+        if label:
+            option.text = label
+
+
+def _discover_vfx_sidebar_urls():
+    """Retorna (urls, labels) para carpetas VFX-* de T:/ y N:/."""
+    urls = []
+    labels = {}
+    for drive in ("T:", "N:"):
+        root_path = drive + "/"
+        root_info = QtCore.QFileInfo(root_path)
+        if not root_info.exists() or not root_info.isDir():
+            debug_print("Shot browser sidebar: drive %s no disponible" % drive)
+            continue
+        root = QtCore.QDir(root_path)
+        infos = root.entryInfoList(
+            ["VFX-*"],
+            QtCore.QDir.Dirs | QtCore.QDir.NoDotAndDotDot,
+            QtCore.QDir.Name | QtCore.QDir.IgnoreCase,
+        )
+        for info in infos:
+            path = info.absoluteFilePath().replace("\\", "/").rstrip("/")
+            url = QtCore.QUrl.fromLocalFile(path)
+            urls.append(url)
+            labels[path.lower()] = "%s/%s" % (drive, info.fileName())
+    return urls, labels
+
+
+def _configure_shot_browser_sidebar(dlg, labels_by_path):
+    """Aplica el ancho fijo configurable al sidebar de shortcuts."""
+    sidebar = dlg.findChild(QtWidgets.QListView, "sidebar")
+    if sidebar is None:
+        debug_print("Shot browser sidebar: QListView 'sidebar' no encontrado",
+                    level="warning")
+        return
+
+    current_width = max(1, int(sidebar.width()))
+    target_width = max(1, int(SHOT_BROWSER_SIDEBAR_WIDTH))
+    sidebar.setMinimumWidth(target_width)
+    sidebar.setMaximumWidth(target_width)
+    delegate = _ShotBrowserSidebarDelegate(labels_by_path, sidebar)
+    sidebar.setItemDelegate(delegate)
+    # Mantener referencia explícita por compatibilidad con bindings viejos.
+    sidebar._lga_sidebar_delegate = delegate
+    debug_print(
+        "Shot browser sidebar: current_w=%d configured_w=%d shortcuts=%d"
+        % (current_width, target_width, len(labels_by_path))
+    )
+
+
+def _configure_shot_browser_columns(dlg):
+    """Autoajusta Type/Date Modified y aplica mínimos para evitar recortes."""
+    tree = dlg.findChild(QtWidgets.QTreeView, "treeView")
+    if tree is None:
+        # Fallback: el tree principal suele ser el único con varias columnas.
+        for candidate in dlg.findChildren(QtWidgets.QTreeView):
+            if candidate.model() is not None and candidate.model().columnCount() > 1:
+                tree = candidate
+                break
+    if tree is None or tree.model() is None:
+        debug_print("Shot browser columns: treeView no encontrado", level="warning")
+        return
+
+    model = tree.model()
+    configured = []
+    for column in range(model.columnCount()):
+        header_text = str(
+            model.headerData(column, QtCore.Qt.Horizontal, QtCore.Qt.DisplayRole)
+            or ""
+        ).strip()
+        normalized = header_text.lower()
+        minimum = None
+        if normalized in ("type", "tipo"):
+            minimum = SHOT_BROWSER_TYPE_COLUMN_MIN_WIDTH
+        elif (
+            "date modified" in normalized
+            or "modified" in normalized
+            or "fecha de modificación" in normalized
+            or "fecha de modificacion" in normalized
+        ):
+            minimum = SHOT_BROWSER_DATE_COLUMN_MIN_WIDTH
+        if minimum is None:
+            continue
+
+        tree.resizeColumnToContents(column)
+        content_width = int(tree.columnWidth(column))
+        header_width = int(
+            tree.fontMetrics().horizontalAdvance(header_text)
+        ) + 28
+        target = max(minimum, content_width, header_width)
+        tree.setColumnWidth(column, target)
+        configured.append(
+            "%s[col=%d content=%d header=%d min=%d target=%d]"
+            % (header_text, column, content_width, header_width, minimum, target)
+        )
+
+    debug_print(
+        "Shot browser columns: %s"
+        % (" | ".join(configured) if configured else "Type/Date no detectadas")
+    )
+
+
 # ══════════════════════════════════════════════════════════════════
 #  Browser multi-select de carpetas
 # ══════════════════════════════════════════════════════════════════
@@ -66,8 +215,68 @@ def pick_shot_folders(initial_dir="", parent=None):
     dlg.setFileMode(QtWidgets.QFileDialog.Directory)
     dlg.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, True)
     dlg.setOption(QtWidgets.QFileDialog.ShowDirsOnly, True)
+    dlg.resize(SHOT_BROWSER_WIDTH, SHOT_BROWSER_HEIGHT)
+    dlg.setStyleSheet(
+        dlg.styleSheet()
+        + """
+        QListView::item:selected,
+        QTreeView::item:selected {
+            background-color: %s;
+            color: %s;
+        }
+        QListView::item:selected:!active,
+        QTreeView::item:selected:!active {
+            background-color: %s;
+            color: %s;
+        }
+        """
+        % (
+            SHOT_BROWSER_SELECTION_BG_COLOR,
+            SHOT_BROWSER_SELECTION_TEXT_COLOR,
+            SHOT_BROWSER_SELECTION_BG_COLOR,
+            SHOT_BROWSER_SELECTION_TEXT_COLOR,
+        )
+    )
     if initial_dir:
         dlg.setDirectory(initial_dir)
+
+    # Mantener los shortcuts estándar y sumar proyectos VFX de T:/ y N:/.
+    vfx_urls, sidebar_labels = _discover_vfx_sidebar_urls()
+    sidebar_urls = list(dlg.sidebarUrls())
+    seen_urls = {
+        url.toString().lower()
+        for url in sidebar_urls
+    }
+    for url in vfx_urls:
+        key = url.toString().lower()
+        if key not in seen_urls:
+            sidebar_urls.append(url)
+            seen_urls.add(key)
+    dlg.setSidebarUrls(sidebar_urls)
+
+    # El ancho real del sidebar solo está disponible después del primer layout.
+    QtCore.QTimer.singleShot(
+        0, lambda: _configure_shot_browser_sidebar(dlg, sidebar_labels)
+    )
+    # Primer layout + carga inicial del QFileSystemModel. Dos pasadas cubren
+    # tanto el header inmediato como contenido que aparece de forma asíncrona.
+    QtCore.QTimer.singleShot(0, lambda: _configure_shot_browser_columns(dlg))
+    QtCore.QTimer.singleShot(350, lambda: _configure_shot_browser_columns(dlg))
+    debug_print(
+        "Shot browser: requested_size=%dx%d selection_bg=%s selection_text=%s "
+        "sidebar_urls=%d vfx_shortcuts=%d labels=%s type_min=%d date_min=%d"
+        % (
+            SHOT_BROWSER_WIDTH,
+            SHOT_BROWSER_HEIGHT,
+            SHOT_BROWSER_SELECTION_BG_COLOR,
+            SHOT_BROWSER_SELECTION_TEXT_COLOR,
+            len(sidebar_urls),
+            len(vfx_urls),
+            sorted(sidebar_labels.values()),
+            SHOT_BROWSER_TYPE_COLUMN_MIN_WIDTH,
+            SHOT_BROWSER_DATE_COLUMN_MIN_WIDTH,
+        )
+    )
 
     # Forzar multi-seleccion en las vistas internas del dialogo Qt.
     try:

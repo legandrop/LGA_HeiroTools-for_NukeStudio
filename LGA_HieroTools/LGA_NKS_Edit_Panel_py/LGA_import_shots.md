@@ -26,6 +26,23 @@ existentes se muestran desaturados en gris. Los shots existentes o repetidos se 
 informan en la ventana. El batch se ejecuta en orden alfabetico y dentro de un
 unico bloque de undo.
 
+El browser usa constantes editables marcadas con `✅✅💾⚠️` en
+`LGA_import_shots_bulk.py`:
+
+- `SHOT_BROWSER_SELECTION_BG_COLOR` y
+  `SHOT_BROWSER_SELECTION_TEXT_COLOR`: selección gris/blanca.
+- `SHOT_BROWSER_WIDTH` y `SHOT_BROWSER_HEIGHT`: tamaño inicial.
+- `SHOT_BROWSER_SIDEBAR_WIDTH`: ancho fijo del sidebar, independiente del
+  ancho total de la ventana.
+- `SHOT_BROWSER_TYPE_COLUMN_MIN_WIDTH` y
+  `SHOT_BROWSER_DATE_COLUMN_MIN_WIDTH`: mínimos para Type y Date Modified.
+
+El sidebar conserva sus shortcuts estándar y agrega automáticamente todas las
+carpetas `VFX-*` encontradas en las raíces `T:/` y `N:/`, si esos drives
+existen. Los labels muestran la ruta abreviada, por ejemplo `T:/VFX-MOR`.
+Las columnas Type y Date Modified se autoajustan por contenido/header y luego
+respetan sus mínimos configurables para evitar títulos recortados.
+
 En el flujo individual presenta una ventana que siempre abre en el tab
 **Import**. A su derecha aparece el tab **Preview**, que reemplaza al antiguo
 botón `Preview Timeline` y reutiliza la misma vista gráfica. Preview se habilita
