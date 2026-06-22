@@ -76,6 +76,14 @@ fondo (`BG`), borde (`BORDER`) y texto (`TEXT`):
 BurnIn usa `_PREVIEW_BURNIN_COLOR`, porque no es un chip sino tres tiras del
 mismo color. `_preview_chip_palette()` selecciona estas paletas para single y
 bulk. Sus valores iniciales reproducen exactamente los colores anteriores.
+
+Los clips V000 son una composición especial: usan
+`_PREVIEW_V000_BG_COLOR` y `_PREVIEW_V000_TEXT_COLOR`, pero su borde conserva
+el color definido específicamente en `_PREVIEW_<TASK>_BORDER_COLOR`
+(`_PREVIEW_COMP_BORDER_COLOR`, `_PREVIEW_ROTO_BORDER_COLOR`,
+`_PREVIEW_CLEANUP_BORDER_COLOR`, `_PREVIEW_DMP_BORDER_COLOR`, etc.), no el
+color base `_CLR_*` de la tabla. El helper
+`classify_track_type()` reconoce también `_dmp_` como tipo `dmp`.
 Las opciones del dropdown se listan en el mismo orden visual del timeline
 (top→bottom), igual que en Preview. Si existen tracks duplicados por nombre,
 se muestran desambiguados como `Nombre (1)`, `Nombre (2)`, etc.
@@ -106,7 +114,7 @@ un track secundario no puede acortar el rango master del shot.
 
 ## Archivos principales
 
-- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.27)
+- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel_py\LGA_import_shots.py` (v1.28)
 - **Boton:** Edit Panel → "Import shot" (verde `#2a4d3a`)
 - **Plan de desarrollo:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\docs\LGA_import_shots_PLAN.md`
 

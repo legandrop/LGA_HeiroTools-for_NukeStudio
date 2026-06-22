@@ -102,7 +102,12 @@ El color de TODOS los chips se deriva del `track_color`:
 - `weight = "bold"` para clips nuevos (a importar), `"normal"` para contexto.
 
 **Excepción — color v000 (#474747):**
-`_chip_color(clip_name, bar_color, track_type)` aplica la regla: si el track es `comp`, `roto` o `cleanup` Y el nombre del clip contiene una versión `v000`, `v00`, etc. (regex `[._]v0{2,}(?:\b|_|$)`), el color del chip es `#474747` (gris oscuro) en lugar del color del track. Esto indica que el clip es una versión base/cero, aún no trabajada.
+`_chip_color(clip_name, bar_color, track_type)` detecta versiones `v000`,
+`v00`, etc. en tracks `comp`, `roto`, `cleanup` o `dmp`. En Preview, esos
+chips usan fondo y texto de la paleta V000, pero conservan como borde el color
+`_PREVIEW_<TASK>_BORDER_COLOR` de su task. El color único gris de
+`_chip_color()` se mantiene para usos que
+solo admiten un color, como el BinItem.
 
 ### Shrink y text crop
 
@@ -333,7 +338,7 @@ def build_import_preview_data(
   "tracks": [
     {
       "track_name": str,
-      "track_type": "plate" | "editref" | "comp" | "roto" | "cleanup" | "other",
+      "track_type": "plate" | "editref" | "comp" | "roto" | "cleanup" | "dmp" | "other",
       "before_clip": {"name": str, "tl_in": int, "tl_out": int, "duration": int} | None,
       "new_items":   [item_dict],
       "after_clip":  {"name": str, "tl_in": int, "tl_out": int, "duration": int} | None,

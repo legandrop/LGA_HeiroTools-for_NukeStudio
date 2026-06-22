@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_preview v1.01 | Lega
+  LGA_import_shots_preview v1.02 | Lega
 
   Logica de datos para la pagina Import Preview de LGA_import_shots.
 
+  v1.02: classify_track_type reconoce tracks _dmp_ como tipo "dmp".
   v1.01: Soporte de track keys unicas (name||bt_index) para distinguir tracks
          duplicados por nombre en preview/import. Expone track_key y
          track_label (con sufijo "(2)" cuando aplica), manteniendo
@@ -75,7 +76,7 @@ def classify_track_type(track_name: str) -> str:
     """
     Clasifica el tipo de track por su nombre.
 
-    Retorna uno de: "plate" | "editref" | "comp" | "roto" | "cleanup" | "other"
+    Retorna: "plate" | "editref" | "comp" | "roto" | "cleanup" | "dmp" | "other"
     """
     lower = str(track_name).strip().lower()
     if lower.endswith("plate"):
@@ -88,6 +89,8 @@ def classify_track_type(track_name: str) -> str:
         return "roto"
     if lower == "_cleanup_" or lower.startswith("_cleanup_"):
         return "cleanup"
+    if lower == "_dmp_" or lower.startswith("_dmp_"):
+        return "dmp"
     return "other"
 
 

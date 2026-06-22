@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.27 | Lega
+  LGA_import_shots v1.28 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.28: Preview V000 conserva fondo/texto V000 pero usa el borde de la
+         task correspondiente (comp, roto, cleanup, dmp, etc.).
   v1.27: Bulk Import con seleccion multiple de carpetas, tabs editables por
          shot, preview grafico combinado con chips proporcionales y colores,
          tabs de ancho natural, resumen compacto de omitidos y ejecucion en
@@ -489,9 +491,9 @@ _PREVIEW_OTHER_BG_COLOR = "#2e2e2e"
 _PREVIEW_OTHER_BORDER_COLOR = "#2e2e2e"
 _PREVIEW_OTHER_TEXT_COLOR = "#7f7f7f"
 
-_PREVIEW_V000_BG_COLOR = "#292929"
-_PREVIEW_V000_BORDER_COLOR = "#292929"
-_PREVIEW_V000_TEXT_COLOR = "#757575"
+_PREVIEW_V000_BG_COLOR = "#363636"
+_PREVIEW_V000_BORDER_COLOR = "#363636"
+_PREVIEW_V000_TEXT_COLOR = "#8E8E8E"
 
 # ✅✅💾💾 BurnIn no usa chip: son tres tiras del mismo color.
 _PREVIEW_BURNIN_COLOR = "#c0c0c0"
@@ -4931,6 +4933,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             "comp":    _CLR_COMP,
             "roto":    _CLR_ROTO,
             "cleanup": _CLR_CLEANUP,
+            "dmp":     _CLR_DMP,
         }.get(track_type, "#555555")
 
     def _item_section_color(self, row_data: dict) -> str:
@@ -4968,7 +4971,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         contiene una versión v000, v00, v0000, etc., el color es #474747 (gris oscuro).
         Esto indica que es una versión cero/base, aún no trabajada.
         """
-        if track_type in ("comp", "roto", "cleanup"):
+        if track_type in ("comp", "roto", "cleanup", "dmp"):
             if re.search(r'[._]v0{2,}(?:\b|_|$)', clip_name, re.IGNORECASE):
                 return "#474747"
         return bar_color
@@ -5059,6 +5062,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self,
         text: str,
         color: str = "#555555",
+        task_border_color: str = None,
         is_new: bool = False,
         greyed: bool = False,
         duration_text: str = "",
@@ -5077,13 +5081,23 @@ class ImportShotDialog(QtWidgets.QDialog):
         Args:
             text:          Nombre del clip (puede cropearse si el chip es muy angosto).
             color:         Color del track (hex).
+            task_border_color: Color base de la task/track. En V000 se usa
+                               como borde aunque fondo/texto sean V000.
             is_new:        True para clips a importar (bold), False para contexto.
             greyed:        True para forzar estilo gris de contexto (ignora color track).
             duration_text: Ignorado — se usa "frames" para el tooltip.
             frames:        Duración en frames (para tooltip).
             fps:           FPS del proyecto (para convertir a segundos en tooltip).
         """
-        if greyed:
+        is_v000 = bool(re.search(
+            r'[._]v0{2,}(?:\b|_|$)', str(text or ""), re.IGNORECASE
+        ))
+        if is_v000:
+            bg = _PREVIEW_V000_BG_COLOR
+            border = task_border_color or color or _PREVIEW_V000_BORDER_COLOR
+            clr = _PREVIEW_V000_TEXT_COLOR
+            weight = "bold" if is_new else "normal"
+        elif greyed:
             bg = _PREVIEW_GREY_BG_COLOR
             border = _PREVIEW_GREY_BORDER_COLOR
             clr = _PREVIEW_GREY_TEXT_COLOR
@@ -5156,7 +5170,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         if offset_K > 0:
             lo.addStretch(offset_K)
         lbl = self._make_chip_label(
-            clip_name, chip_color, is_new=False,
+            clip_name, chip_color,
+            task_border_color=self._preview_chip_palette(bar_color)[1],
+            is_new=False,
             greyed=True,
             frames=clip_dur, fps=self._fps,
         )
@@ -5216,7 +5232,9 @@ class ImportShotDialog(QtWidgets.QDialog):
             lo.addStretch(offset_K)
         if chip_K > 0:
             lbl = self._make_chip_label(
-                new_name, chip_color, is_new=True,
+                new_name, chip_color,
+                task_border_color=self._preview_chip_palette(bar_color)[1],
+                is_new=True,
                 frames=clip_dur, fps=self._fps,
             )
             lo.addWidget(lbl, chip_K)
@@ -5267,7 +5285,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         if offset_K > 0:
             lo.addStretch(offset_K)
         lbl = self._make_chip_label(
-            clip_name, chip_color, is_new=False,
+            clip_name, chip_color,
+            task_border_color=self._preview_chip_palette(bar_color)[1],
+            is_new=False,
             greyed=True,
             frames=clip_dur, fps=self._fps,
         )
@@ -5558,7 +5578,9 @@ class ImportShotDialog(QtWidgets.QDialog):
                 chip_container.setStyleSheet("background: transparent;")
 
                 lbl = self._make_chip_label(
-                    iname, color=icolor, is_new=False,
+                    iname, color=icolor,
+                    task_border_color=self._preview_chip_palette(icolor)[1],
+                    is_new=False,
                     frames=dur_v, fps=self._fps,
                 )
                 chip_layout.addWidget(lbl, chip_K)
@@ -7200,7 +7222,8 @@ class BulkImportDialog(QtWidgets.QDialog):
         return result, shot_ranges
 
     def _build_bulk_timeline_cell(self, clip, shot_start, shot_duration,
-                                  color, is_new=False, offset_frames=None):
+                                  color, task_border_color=None,
+                                  is_new=False, offset_frames=None):
         """Bloque grafico proporcional, equivalente a las celdas del preview original."""
         helper = self.panels[0]
         widget = QtWidgets.QWidget()
@@ -7228,7 +7251,12 @@ class BulkImportDialog(QtWidgets.QDialog):
             layout.addStretch(offset_weight)
         name = clip.get("name") or clip.get("version_name") or "?"
         label = helper._make_chip_label(
-            name, color=color, is_new=is_new,
+            name, color=color,
+            task_border_color=(
+                task_border_color
+                or helper._preview_chip_palette(color)[1]
+            ),
+            is_new=is_new,
             greyed=(not is_new),
             frames=duration, fps=helper._fps,
         )
@@ -7331,6 +7359,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                         helper._chip_color(
                             (clip or {}).get("name", ""), item_color, track_type
                         ),
+                        task_border_color=helper._preview_chip_palette(item_color)[1],
                         is_new=True, offset_frames=offset,
                     )
                 else:
@@ -7340,7 +7369,9 @@ class BulkImportDialog(QtWidgets.QDialog):
                     shot_duration = max(1, bounds[1] - bounds[0] + 1)
                     cell_widget = self._build_bulk_timeline_cell(
                         clip, bounds[0], shot_duration,
-                        "#666666", is_new=False,
+                        "#666666",
+                        task_border_color=helper._preview_chip_palette(bar_color)[1],
+                        is_new=False,
                     )
                 table.setCellWidget(row, col, cell_widget)
             table.setRowHeight(row, row_h)
@@ -7400,7 +7431,9 @@ class BulkImportDialog(QtWidgets.QDialog):
                     chip_container.setStyleSheet("background: transparent;")
 
                     lbl = helper._make_chip_label(
-                        name, color=item_color, is_new=False, greyed=False,
+                        name, color=item_color,
+                        task_border_color=helper._preview_chip_palette(item_color)[1],
+                        is_new=False, greyed=False,
                         frames=duration, fps=helper._fps,
                     )
                     chip_layout.addWidget(lbl, chip_K)
