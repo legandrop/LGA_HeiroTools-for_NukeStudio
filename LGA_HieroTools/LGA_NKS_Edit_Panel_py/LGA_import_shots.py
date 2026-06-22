@@ -38,6 +38,8 @@ ____________________________________________________________________
          header "Shot Nuevo" (tambien aplicado al bulk).
          Fix color header preview: QSS pisaba ForegroundRole; nuevo
          _PreviewHeaderView pinta por seccion y aplica el verde realmente.
+         Centraliza fondo/borde/texto de chips Preview para plate, editref,
+         comp, roto, cleanup, dmp, other y v000. Elimina Go Back de Preview.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -452,6 +454,48 @@ _PREVIEW_GREY_TEXT_COLOR = "#565656"
 _PREVIEW_GREY_BORDER_COLOR = "#191919"
 # ✅✅💾💾 Color de fondo para clips de contexto (greyed out) en previews.
 _PREVIEW_GREY_BG_COLOR = "#191919"
+
+# ✅✅💾💾 Paletas de chips nuevos/no-greyed en Preview.
+# Cada tipo expone sus 3 colores: fondo, borde y texto.
+# Los valores reproducen exactamente el cálculo histórico:
+#   fondo = 35% color base + 65% #1a1a1a
+#   borde = color base
+#   texto = 75% color base + 25% blanco
+_PREVIEW_PLATE_BG_COLOR = "#283237"
+_PREVIEW_PLATE_BORDER_COLOR = "#42616d"
+_PREVIEW_PLATE_TEXT_COLOR = "#718891"
+
+_PREVIEW_EDITREF_BG_COLOR = "#4c482e"
+_PREVIEW_EDITREF_BORDER_COLOR = "#aa9e54"
+_PREVIEW_EDITREF_TEXT_COLOR = "#bfb67e"
+
+_PREVIEW_COMP_BG_COLOR = "#223e5f"
+_PREVIEW_COMP_BORDER_COLOR = "#3381e0"
+_PREVIEW_COMP_TEXT_COLOR = "#66a0e7"
+
+_PREVIEW_ROTO_BG_COLOR = "#1f533d"
+_PREVIEW_ROTO_BORDER_COLOR = "#2abf7e"
+_PREVIEW_ROTO_TEXT_COLOR = "#5fcf9e"
+
+_PREVIEW_CLEANUP_BG_COLOR = "#1e5655"
+_PREVIEW_CLEANUP_BORDER_COLOR = "#27c8c3"
+_PREVIEW_CLEANUP_TEXT_COLOR = "#5dd5d2"
+
+_PREVIEW_DMP_BG_COLOR = "#5f3d22"
+_PREVIEW_DMP_BORDER_COLOR = "#e08033"
+_PREVIEW_DMP_TEXT_COLOR = "#e79f66"
+
+_PREVIEW_OTHER_BG_COLOR = "#2e2e2e"
+_PREVIEW_OTHER_BORDER_COLOR = "#555555"
+_PREVIEW_OTHER_TEXT_COLOR = "#7f7f7f"
+
+_PREVIEW_V000_BG_COLOR = "#292929"
+_PREVIEW_V000_BORDER_COLOR = "#474747"
+_PREVIEW_V000_TEXT_COLOR = "#757575"
+
+# ✅✅💾💾 BurnIn no usa chip: son tres tiras del mismo color.
+_PREVIEW_BURNIN_COLOR = "#c0c0c0"
+
 # ✅✅💾💾 Color del título "Shot Nuevo" (single + bulk preview).
 _PREVIEW_NEW_SHOT_HEADER_COLOR = "#6fa96f"
 # ✅✅💾💾 Color del título de shots existentes en el bulk preview.
@@ -3296,10 +3340,6 @@ class ImportShotDialog(QtWidgets.QDialog):
         if hasattr(self, "_preview_import_v000_btn"):
             self._preview_import_v000_btn.setEnabled(has_track_assigned)
 
-    def _go_to_import_preview(self):
-        """Compatibilidad: abre el tab principal PREVIEW."""
-        self._tab_bar.setCurrentIndex(self.TAB_PREVIEW)
-
     def _on_tab_changed(self, index):
         """Manejador de cambio de tab. Ejecuta refresh si el tab necesita uno."""
         tab_map = {
@@ -4863,15 +4903,6 @@ class ImportShotDialog(QtWidgets.QDialog):
         btn_row.addSpacing(8)
         btn_row.addWidget(_status_lbl, 1)
 
-        self._preview_back_btn = QtWidgets.QPushButton("← Go Back")
-        self._preview_back_btn.setStyleSheet(_BTN_SECONDARY)
-        self._preview_back_btn.clicked.connect(
-            lambda: self._tab_bar.setCurrentIndex(self.TAB_IMPORT)
-        )
-        btn_row.addWidget(self._preview_back_btn)
-
-        btn_row.addSpacing(6)
-
         self._preview_import_now_btn = QtWidgets.QPushButton("Import Now")
         self._preview_import_now_btn.setStyleSheet(_BTN_PRIMARY)
         self._preview_import_now_btn.setToolTip("Importar al bin y colocar en el timeline")
@@ -4942,6 +4973,62 @@ class ImportShotDialog(QtWidgets.QDialog):
                 return "#474747"
         return bar_color
 
+    @staticmethod
+    def _preview_chip_palette(border_color: str):
+        """Retorna (background, border, text) centralizado para un chip."""
+        palettes = {
+            _CLR_PLATES.lower(): (
+                _PREVIEW_PLATE_BG_COLOR,
+                _PREVIEW_PLATE_BORDER_COLOR,
+                _PREVIEW_PLATE_TEXT_COLOR,
+            ),
+            _CLR_REFS.lower(): (
+                _PREVIEW_EDITREF_BG_COLOR,
+                _PREVIEW_EDITREF_BORDER_COLOR,
+                _PREVIEW_EDITREF_TEXT_COLOR,
+            ),
+            _CLR_COMP.lower(): (
+                _PREVIEW_COMP_BG_COLOR,
+                _PREVIEW_COMP_BORDER_COLOR,
+                _PREVIEW_COMP_TEXT_COLOR,
+            ),
+            _CLR_ROTO.lower(): (
+                _PREVIEW_ROTO_BG_COLOR,
+                _PREVIEW_ROTO_BORDER_COLOR,
+                _PREVIEW_ROTO_TEXT_COLOR,
+            ),
+            _CLR_CLEANUP.lower(): (
+                _PREVIEW_CLEANUP_BG_COLOR,
+                _PREVIEW_CLEANUP_BORDER_COLOR,
+                _PREVIEW_CLEANUP_TEXT_COLOR,
+            ),
+            _CLR_DMP.lower(): (
+                _PREVIEW_DMP_BG_COLOR,
+                _PREVIEW_DMP_BORDER_COLOR,
+                _PREVIEW_DMP_TEXT_COLOR,
+            ),
+            "#555555": (
+                _PREVIEW_OTHER_BG_COLOR,
+                _PREVIEW_OTHER_BORDER_COLOR,
+                _PREVIEW_OTHER_TEXT_COLOR,
+            ),
+            "#474747": (
+                _PREVIEW_V000_BG_COLOR,
+                _PREVIEW_V000_BORDER_COLOR,
+                _PREVIEW_V000_TEXT_COLOR,
+            ),
+        }
+        key = str(border_color or "#555555").lower()
+        if key in palettes:
+            return palettes[key]
+
+        # Fallback para colores externos/custom: conserva el cálculo histórico.
+        return (
+            mix_colors(key, "#1a1a1a", 0.35),
+            key,
+            mix_colors(key, "#ffffff", 0.75),
+        )
+
     def _build_burnin_row(self) -> QtWidgets.QWidget:
         """
         Widget que ocupa las 3 columnas del track BurnIn.
@@ -4951,7 +5038,6 @@ class ImportShotDialog(QtWidgets.QDialog):
         Representa gráficamente el burn-in gráfico que cubre todo el timeline.
         Sin tooltips ni interacción.
         """
-        COLOR = "#c0c0c0"
         w  = QtWidgets.QWidget()
         lo = QtWidgets.QVBoxLayout(w)
         lo.setContentsMargins(4, 4, 4, 4)
@@ -4960,7 +5046,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         for _ in range(3):
             bar = QtWidgets.QWidget()
             bar.setStyleSheet(
-                "background: %s; border-radius: 2px;" % COLOR
+                "background: %s; border-radius: 2px;" % _PREVIEW_BURNIN_COLOR
             )
             bar.setSizePolicy(
                 QtWidgets.QSizePolicy.Expanding,
@@ -5003,10 +5089,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             clr = _PREVIEW_GREY_TEXT_COLOR
             weight = "normal"
         else:
-            _BASE  = "#1a1a1a"
-            bg     = mix_colors(color, _BASE, 0.35)
-            border = color
-            clr    = mix_colors(color, "#ffffff", 0.75)
+            bg, border, clr = self._preview_chip_palette(color)
             weight = "bold" if is_new else "normal"
 
         lbl = QtWidgets.QLabel(text)

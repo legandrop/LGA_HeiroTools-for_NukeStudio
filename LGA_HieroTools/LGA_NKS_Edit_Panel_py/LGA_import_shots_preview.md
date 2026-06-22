@@ -25,7 +25,6 @@ Desde este tab también se puede ejecutar la importación real.
 Tab IMPORT
   └─ click tab PREVIEW
        └─ Tab PREVIEW
-            ├─ click "← Go Back"  →  tab IMPORT
             └─ click "Import Now" →  _do_import() → cierra el diálogo
 ```
 

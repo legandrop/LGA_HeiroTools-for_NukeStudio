@@ -29,7 +29,7 @@ unico bloque de undo.
 En el flujo individual presenta una ventana que siempre abre en el tab
 **Import**. A su derecha aparece el tab **Preview**, que reemplaza al antiguo
 botón `Preview Timeline` y reutiliza la misma vista gráfica. Preview se habilita
-cuando existe al menos un ítem marcado; su botón `Go Back` vuelve a **Import**.
+cuando existe al menos un ítem marcado.
 Los tabs **Rename**, **Transcode Plates** y el boton **Open Queue**
 estan temporalmente controlados por el flag global `RENAME_TRANSCODE_TABS`,
 definido en `False`; no se muestra un checkbox para habilitarlos.
@@ -57,6 +57,25 @@ aplica al nombre de cada shot nuevo y los existentes usan
 `_PREVIEW_EXISTING_SHOT_HEADER_COLOR`. Se usa `_PreviewHeaderView`, que pinta
 cada sección directamente porque el `color` de `QHeaderView::section` del QSS
 pisaba el `ForegroundRole` de los items y hacía que el verde no se viera.
+
+### Paletas centralizadas de chips Preview
+
+Cada tipo de chip tiene tres variables editables marcadas con `✅✅💾💾`:
+fondo (`BG`), borde (`BORDER`) y texto (`TEXT`):
+
+- `_PREVIEW_PLATE_*`
+- `_PREVIEW_EDITREF_*`
+- `_PREVIEW_COMP_*`
+- `_PREVIEW_ROTO_*`
+- `_PREVIEW_CLEANUP_*`
+- `_PREVIEW_DMP_*`
+- `_PREVIEW_OTHER_*`
+- `_PREVIEW_V000_*`
+- `_PREVIEW_GREY_*` para clips de contexto
+
+BurnIn usa `_PREVIEW_BURNIN_COLOR`, porque no es un chip sino tres tiras del
+mismo color. `_preview_chip_palette()` selecciona estas paletas para single y
+bulk. Sus valores iniciales reproducen exactamente los colores anteriores.
 Las opciones del dropdown se listan en el mismo orden visual del timeline
 (top→bottom), igual que en Preview. Si existen tracks duplicados por nombre,
 se muestran desambiguados como `Nombre (1)`, `Nombre (2)`, etc.
@@ -338,7 +357,7 @@ main()
             │      ├── [Import Now]    -> _do_import() directo
             │      └── [Import V000]   -> _do_import_and_v000() directo
             └── [Tab Preview]          -> tabla gráfica de chips de timeline
-                                          botones: ← Go Back / Import Now / Import V000
+                                          botones: Import Now / Import V000
 ```
 
 ---
@@ -569,8 +588,8 @@ Los botones de accion operan sobre los items que tienen el checkbox marcado.
 | Transcode Plates | secundario `#3a3a3a` | hay al menos 1 EXR seq de input marcado | abre sub-vista de conversion |
 | Import | primario `#2a4d3a` | hay al menos 1 item marcado | ejecuta import (ver logica abajo) |
 
-> En Preview, `← Go Back` vuelve al tab Import. En la sub-vista Convert el
-> botón cambia a `"Transcoding, wait..."` mientras hay jobs activos o en cola.
+> En la sub-vista Convert el botón cambia a `"Transcoding, wait..."` mientras
+> hay jobs activos o en cola.
 
 #### Botones del tab Preview
 
@@ -578,7 +597,6 @@ El tab Preview tiene sus propios botones de acción:
 
 | Boton | Color | Habilitado cuando | Accion |
 |-------|-------|-------------------|--------|
-| ← Go Back | secundario | siempre | vuelve a PAGE_MEDIA |
 | Import Now | primario violeta `#443a91` | hay al menos 1 ítem con track asignado | ejecuta `_do_import()` |
 | Import and Create V000 | primario violeta `#443a91` | hay al menos 1 ítem con track asignado | ejecuta `_do_import_and_v000()` → import + abre CreateV000 al cerrar |
 
