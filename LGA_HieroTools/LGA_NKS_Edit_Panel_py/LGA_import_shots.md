@@ -49,6 +49,14 @@ las flechas de navegación.
 
 En la columna **Track**, el valor `— sin track —` se muestra en rojo y bold
 para señalar inmediatamente que ese ítem no será colocado en el timeline.
+
+Los headers de shots nuevos usan
+`_PREVIEW_NEW_SHOT_HEADER_COLOR = "#6fa96f"` (marcada con `✅✅💾💾` junto a
+las variables editables). En single se aplica a `Shot Nuevo`; en Bulk se
+aplica al nombre de cada shot nuevo y los existentes usan
+`_PREVIEW_EXISTING_SHOT_HEADER_COLOR`. Se usa `_PreviewHeaderView`, que pinta
+cada sección directamente porque el `color` de `QHeaderView::section` del QSS
+pisaba el `ForegroundRole` de los items y hacía que el verde no se viera.
 Las opciones del dropdown se listan en el mismo orden visual del timeline
 (top→bottom), igual que en Preview. Si existen tracks duplicados por nombre,
 se muestran desambiguados como `Nombre (1)`, `Nombre (2)`, etc.

@@ -36,6 +36,8 @@ ____________________________________________________________________
          import real (single + bulk). Bulk agrega seccion "SIN TRACK ASIGNADO".
          Agrega variables editables para chips greyed out y color verde de
          header "Shot Nuevo" (tambien aplicado al bulk).
+         Fix color header preview: QSS pisaba ForegroundRole; nuevo
+         _PreviewHeaderView pinta por seccion y aplica el verde realmente.
   v1.26: El browser de seleccion de shot abre en la ultima carpeta elegida,
          guardada persistentemente en ImportShots.ini.
   v1.25: Fix tabs avanzados: no forzar ancho de QTabBar (evita header
@@ -445,13 +447,15 @@ _QUEUE_BTN_BG_NORMAL = "#3a7b91"  # violeta oscuro normal
 _QUEUE_BTN_BG_HOVER  = "#4db4cb"  # violeta claro hover
 
 # ✅✅💾💾 Color de texto para clips de contexto (greyed out) en previews.
-_PREVIEW_GREY_TEXT_COLOR = "#858585"
+_PREVIEW_GREY_TEXT_COLOR = "#565656"
 # ✅✅💾💾 Color de borde para clips de contexto (greyed out) en previews.
-_PREVIEW_GREY_BORDER_COLOR = "#595959"
+_PREVIEW_GREY_BORDER_COLOR = "#191919"
 # ✅✅💾💾 Color de fondo para clips de contexto (greyed out) en previews.
-_PREVIEW_GREY_BG_COLOR = "#303030"
+_PREVIEW_GREY_BG_COLOR = "#191919"
 # ✅✅💾💾 Color del título "Shot Nuevo" (single + bulk preview).
 _PREVIEW_NEW_SHOT_HEADER_COLOR = "#6fa96f"
+# ✅✅💾💾 Color del título de shots existentes en el bulk preview.
+_PREVIEW_EXISTING_SHOT_HEADER_COLOR = "#686868"
 
 _TRACK_KEY_SEP = "||"
 
@@ -1857,6 +1861,56 @@ class _HeaderSeparator(QtWidgets.QWidget):
         top_left_global = self._tab_bar.mapToGlobal(rect.topLeft())
         x = self.mapFromGlobal(top_left_global).x()
         p.fillRect(x, 0, rect.width(), self.height(), self.GAP_COLOR)
+
+
+class _PreviewHeaderView(QtWidgets.QHeaderView):
+    """Header de preview con color configurable por columna.
+
+    QHeaderView::section del stylesheet fuerza un único color y en Hiero pisa
+    el ForegroundRole de cada QTableWidgetItem. Este header pinta las secciones
+    directamente para que los shots nuevos sean realmente verdes.
+    """
+
+    DEFAULT_TEXT_COLOR = "#999999"
+    BACKGROUND_COLOR = "#2B2B2B"
+    BOTTOM_BORDER_COLOR = "#444444"
+
+    def __init__(self, orientation, parent=None):
+        super(_PreviewHeaderView, self).__init__(orientation, parent)
+        self._section_text_colors = {}
+
+    def setSectionTextColor(self, logical_index, color):
+        self._section_text_colors[int(logical_index)] = QtGui.QColor(color)
+        self.updateSection(int(logical_index))
+
+    def clearSectionTextColors(self):
+        self._section_text_colors.clear()
+        self.viewport().update()
+
+    def paintSection(self, painter, rect, logical_index):
+        if not rect.isValid():
+            return
+        painter.save()
+        painter.fillRect(rect, QtGui.QColor(self.BACKGROUND_COLOR))
+        painter.setPen(QtGui.QColor(self.BOTTOM_BORDER_COLOR))
+        painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
+
+        text = self.model().headerData(
+            logical_index, self.orientation(), QtCore.Qt.DisplayRole
+        )
+        color = self._section_text_colors.get(
+            logical_index, QtGui.QColor(self.DEFAULT_TEXT_COLOR)
+        )
+        painter.setPen(color)
+        font = painter.font()
+        font.setBold(True)
+        painter.setFont(font)
+        text_rect = rect.adjusted(8, 0, -8, -1)
+        elided = painter.fontMetrics().elidedText(
+            str(text or ""), QtCore.Qt.ElideRight, max(0, text_rect.width())
+        )
+        painter.drawText(text_rect, QtCore.Qt.AlignCenter, elided)
+        painter.restore()
 
 
 class _ImportShotTabBar(QtWidgets.QTabBar):
@@ -4757,6 +4811,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         # col 3: Shot Nuevo     — eje temporal del shot importado (stretch igual)
         # col 4: Shot Posterior — eje temporal del shot siguiente (stretch igual)
         self._import_table = QtWidgets.QTableWidget()
+        self._import_table.setHorizontalHeader(
+            _PreviewHeaderView(QtCore.Qt.Horizontal, self._import_table)
+        )
         self._import_table.setColumnCount(5)
         self._import_table.setHorizontalHeaderLabels(
             ["", "Track", "Shot Anterior", "Shot Nuevo", "Shot Posterior"]
@@ -4781,9 +4838,11 @@ class ImportShotDialog(QtWidgets.QDialog):
         hdr.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         hdr.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
         hdr.setSectionResizeMode(4, QtWidgets.QHeaderView.Stretch)
-        _new_hdr = self._import_table.horizontalHeaderItem(3)
-        if _new_hdr is not None:
-            _new_hdr.setForeground(QtGui.QColor(_PREVIEW_NEW_SHOT_HEADER_COLOR))
+        hdr.setSectionTextColor(3, _PREVIEW_NEW_SHOT_HEADER_COLOR)
+        debug_print(
+            "Single preview header: section=3 text='Shot Nuevo' color=%s"
+            % _PREVIEW_NEW_SHOT_HEADER_COLOR
+        )
 
         layout.addWidget(self._import_table, 1)
 
@@ -6996,6 +7055,9 @@ class BulkImportDialog(QtWidgets.QDialog):
         note.setStyleSheet("color:#999999; padding:3px;")
         layout.addWidget(note)
         self.preview_table = QtWidgets.QTableWidget()
+        self.preview_table.setHorizontalHeader(
+            _PreviewHeaderView(QtCore.Qt.Horizontal, self.preview_table)
+        )
         self.preview_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.preview_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.preview_table.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -7268,6 +7330,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                 row += 1
 
         header = table.horizontalHeader()
+        header.clearSectionTextColors()
         header.setMinimumSectionSize(1)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
         table.setColumnWidth(0, 5)
@@ -7276,10 +7339,23 @@ class BulkImportDialog(QtWidgets.QDialog):
         for col, shot in enumerate(shots, 2):
             header.setSectionResizeMode(col, QtWidgets.QHeaderView.Interactive)
             table.setColumnWidth(col, 220)
-            header_item = table.horizontalHeaderItem(col)
-            header_item.setForeground(QtGui.QColor(
-                _PREVIEW_NEW_SHOT_HEADER_COLOR if shot.get("is_new") else "#686868"
-            ))
+            header.setSectionTextColor(
+                col,
+                _PREVIEW_NEW_SHOT_HEADER_COLOR
+                if shot.get("is_new")
+                else _PREVIEW_EXISTING_SHOT_HEADER_COLOR,
+            )
+            debug_print(
+                "Bulk preview header: col=%d shot='%s' is_new=%s color=%s"
+                % (
+                    col,
+                    shot.get("shot_name", ""),
+                    bool(shot.get("is_new")),
+                    _PREVIEW_NEW_SHOT_HEADER_COLOR
+                    if shot.get("is_new")
+                    else _PREVIEW_EXISTING_SHOT_HEADER_COLOR,
+                )
+            )
 
     @staticmethod
     def _editref_offset(track_name, item, master_duration):
