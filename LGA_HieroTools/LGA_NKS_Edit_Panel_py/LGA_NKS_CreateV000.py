@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.08 | Lega
+  LGA_NKS_CreateV000 v1.09 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -15,6 +15,13 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.09: Create v000 unificado para single/bulk con tabs por shot (mismo shell visual
+         que Import Shot), detección de shots desde selección de timeline o targets
+         explícitos, y filtro por task: comp/roto/cleanup se deshabilitan si ya
+         existen clips solapados en su track para el rango del shot. Cuando un shot
+         está completo, se omite del tabulado; si todos están completos se informa.
+         Nuevo API: open_create_v000_dialog(shot_targets=[...]) para integraciones
+         desde Import Shot single/bulk.
   v1.08: project_name se extrae del segmento "VFX-NOMBRE" de la ruta del plate
          (extract_project_name_from_path); fallback al primer bloque del filename.
          Ver docs/Docu_ProjectName_Extraction.md.
@@ -243,6 +250,180 @@ except Exception:
 
 
 debug_print("Iniciando LGA_NKS_CreateV000.py...")
+
+
+_DIALOG_STYLE = """
+QDialog {
+    background-color: #2B2B2B;
+    border: 1px solid #555555;
+}
+QLabel {
+    color: #CCCCCC;
+}
+QLineEdit, QComboBox, QTableWidget, QTextEdit, QListWidget {
+    background-color: #272727;
+    border: 1px solid #333333;
+    color: #a7a7a7;
+}
+QTableWidget::item:selected {
+    background-color: #cfcfcf;
+    color: #2B2B2B;
+}
+QHeaderView::section {
+    background-color: #2B2B2B;
+    color: #999999;
+    border: 0px;
+    border-bottom: 1px solid #444444;
+    padding: 4px;
+    font-weight: bold;
+}
+"""
+
+_BTN_PRIMARY = """
+QPushButton {
+    background-color: #443a91;
+    color: #b2b2b2;
+    padding: 8px 15px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #774dcb;
+    color: #CCCCCC;
+}
+QPushButton:disabled {
+    background-color: #2f2a5e;
+    color: #6a6a6a;
+}
+"""
+
+_BTN_SECONDARY = """
+QPushButton {
+    background-color: #555555;
+    border: 1px solid #666666;
+    color: #CCCCCC;
+    padding: 8px 15px;
+    border-radius: 3px;
+}
+QPushButton:hover { background-color: #666666; }
+"""
+
+_TAB_H_PAD_EXTRA = 14
+_TAB_STYLE = (
+    """
+    QWidget#LGA_ImportShotHeader {
+        background: #232323;
+    }
+    QTabBar {
+        background: #232323;
+        qproperty-drawBase: 0;
+    }
+    QTabBar::tab {
+        background: #232323;
+        color: #777777;
+        padding: 16px %dpx;
+        border: 1px solid transparent;
+        font-weight: bold;
+        font-size: 12px;
+        letter-spacing: 1px;
+    }
+    QTabBar::tab:selected {
+        background: #2b2b2b;
+        color: #774dcb;
+        border-top-color: #4a4a4a;
+        border-left-color: #4a4a4a;
+        border-right-color: #4a4a4a;
+    }
+    QTabBar::tab:hover:!selected { color: #AAAAAA; background: #272727; }
+    QTabBar::tab:disabled { color: #444444; background: #232323; }
+"""
+    % _TAB_H_PAD_EXTRA
+)
+
+
+class _HeaderSeparator(QtWidgets.QWidget):
+    """Línea de 1px debajo del tab header."""
+
+    LINE_COLOR = QtGui.QColor("#4a4a4a")
+    GAP_COLOR = QtGui.QColor("#2b2b2b")
+
+    def __init__(self, tab_bar, parent=None):
+        super(_HeaderSeparator, self).__init__(parent)
+        self._tab_bar = tab_bar
+        self.setFixedHeight(1)
+        tab_bar.currentChanged.connect(self.update)
+        tab_bar.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj is self._tab_bar:
+            etype = event.type()
+            if etype in (
+                QtCore.QEvent.Resize,
+                QtCore.QEvent.Move,
+                QtCore.QEvent.LayoutRequest,
+                QtCore.QEvent.Show,
+                QtCore.QEvent.Hide,
+                QtCore.QEvent.StyleChange,
+            ):
+                self.update()
+        return super(_HeaderSeparator, self).eventFilter(obj, event)
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), self.LINE_COLOR)
+        idx = self._tab_bar.currentIndex()
+        if idx < 0:
+            return
+        rect = self._tab_bar.tabRect(idx)
+        if rect.isEmpty():
+            return
+        top_left_global = self._tab_bar.mapToGlobal(rect.topLeft())
+        x = self.mapFromGlobal(top_left_global).x()
+        painter.fillRect(x, 0, rect.width(), self.height(), self.GAP_COLOR)
+
+
+class _ImportShotTabBar(QtWidgets.QTabBar):
+    """QTabBar con ancho extra para compensar letter-spacing."""
+
+    EXTRA_WIDTH = 24
+    MIN_HEIGHT = 48
+    INACTIVE_SEPARATOR_COLOR = QtGui.QColor("#424242")
+
+    def tabSizeHint(self, index):
+        size = super(_ImportShotTabBar, self).tabSizeHint(index)
+        size.setWidth(size.width() + self.EXTRA_WIDTH)
+        size.setHeight(max(size.height(), self.MIN_HEIGHT))
+        return size
+
+    def paintEvent(self, event):
+        super(_ImportShotTabBar, self).paintEvent(event)
+        current = self.currentIndex()
+        painter = QtGui.QPainter(self)
+        painter.setPen(self.INACTIVE_SEPARATOR_COLOR)
+        for right_index in range(1, self.count()):
+            left_index = right_index - 1
+            if current in (left_index, right_index):
+                continue
+            left_rect = self.tabRect(left_index)
+            right_rect = self.tabRect(right_index)
+            if left_rect.isEmpty() or right_rect.isEmpty():
+                continue
+            x = right_rect.left()
+            top = max(left_rect.top(), right_rect.top())
+            bottom = min(left_rect.bottom(), right_rect.bottom())
+            if bottom >= top:
+                painter.drawLine(x, top, x, bottom)
+
+        last_index = self.count() - 1
+        if last_index >= 0 and current != last_index:
+            last_rect = self.tabRect(last_index)
+            if not last_rect.isEmpty():
+                painter.drawLine(
+                    last_rect.right(),
+                    last_rect.top(),
+                    last_rect.right(),
+                    last_rect.bottom(),
+                )
 
 
 def _user_config_root():
@@ -1310,30 +1491,58 @@ def _create_black_exr_sequence(params, replace=False):
     return True, "created", "Created %d EXR frames in %s" % (frame_count, output_dir)
 
 
-def _collect_context():
-    seq = hiero.ui.activeSequence()
-    if not seq:
-        return None, "No active sequence."
+def _range_bounds(range_sources):
+    if not range_sources:
+        return None, None
+    return (
+        min(int(source["timeline_in"]) for source in range_sources),
+        max(int(source["timeline_out"]) for source in range_sources),
+    )
 
-    current_time = _current_time()
-    if current_time is None:
-        return None, "No active viewer/playhead."
 
-    range_sources, plates = _collect_range_sources(seq, current_time)
+def _task_overlap_state(seq, timeline_in, timeline_out):
+    """Retorna overlaps por task usando criterio de solape en rango de shot."""
+    state = {}
+    for task in TASKS:
+        track_name = track_for_task(task)
+        track = _find_video_track(seq, track_name) if track_name else None
+        overlaps = (
+            _timeline_overlaps(track, timeline_in, timeline_out)
+            if track is not None
+            else []
+        )
+        state[task] = {
+            "blocked": bool(overlaps),
+            "overlap_count": len(overlaps),
+            "track_name": track_name,
+        }
+    return state
+
+
+def _context_has_available_tasks(context):
+    task_state = context.get("task_state") or {}
+    return any(not task_state.get(task, {}).get("blocked") for task in TASKS)
+
+
+def _build_context_from_sources(
+    seq,
+    range_sources,
+    plates,
+    shot_root_hint=None,
+    shot_code_hint=None,
+):
     if not range_sources:
         return None, "No editref or plate tracks found."
     if not plates:
         return None, "No plate tracks found."
 
     default_plate = plates[0]
-    shot_root = _derive_shot_root(default_plate["media_path"])
-    shot_code = _derive_shot_code(default_plate["clip"], shot_root)
+    shot_root = shot_root_hint or _derive_shot_root(default_plate["media_path"])
+    shot_code = shot_code_hint or _derive_shot_code(default_plate["clip"], shot_root)
     if not shot_code:
         return None, "Could not detect shot."
 
     width, height = _timeline_resolution(seq)
-    # Extraer project_name desde el segmento "VFX-NOMBRE" de la ruta del plate.
-    # Fallback: primer bloque del filename (comportamiento anterior).
     try:
         project_name = extract_project_name_from_path(default_plate["media_path"]) or ""
         if not project_name:
@@ -1345,6 +1554,12 @@ def _collect_context():
             )
     except Exception:
         project_name = ""
+
+    timeline_in, timeline_out = _range_bounds(range_sources)
+    if timeline_in is None or timeline_out is None:
+        return None, "Invalid timeline range for shot."
+
+    task_state = _task_overlap_state(seq, timeline_in, timeline_out)
     return {
         "sequence": seq,
         "shot_code": shot_code,
@@ -1353,32 +1568,279 @@ def _collect_context():
         "range_sources": range_sources,
         "plates": plates,
         "timeline_resolution": (width, height),
+        "shot_timeline_in": int(timeline_in),
+        "shot_timeline_out": int(timeline_out),
+        "task_state": task_state,
     }, None
 
 
+def _collect_context_from_playhead(seq=None):
+    seq = seq or hiero.ui.activeSequence()
+    if not seq:
+        return None, "No active sequence."
+
+    current_time = _current_time()
+    if current_time is None:
+        return None, "No active viewer/playhead."
+
+    range_sources, plates = _collect_range_sources(seq, current_time)
+    return _build_context_from_sources(seq, range_sources, plates)
+
+
+def _target_identity_matches(clip, shot_root_hint, shot_code_hint):
+    candidate = _clip_shot_identity(clip)
+    root_match = bool(
+        shot_root_hint
+        and _paths_share_shot_root(candidate.get("media_path"), shot_root_hint)
+    )
+    shot_code_match = bool(
+        shot_code_hint
+        and candidate.get("shot_code")
+        and str(candidate["shot_code"]).lower() == str(shot_code_hint).lower()
+    )
+    return root_match or shot_code_match, candidate
+
+
+def _collect_sources_for_target(
+    seq,
+    shot_root_hint=None,
+    shot_code_hint=None,
+    timeline_in_hint=None,
+    timeline_out_hint=None,
+):
+    entries = _range_track_entries(seq)
+    accepted = {}
+    for entry in entries:
+        for clip in entry["track"].items():
+            if isinstance(clip, hiero.core.EffectTrackItem):
+                continue
+            try:
+                clip_in = int(clip.timelineIn())
+                clip_out = int(clip.timelineOut())
+            except Exception:
+                continue
+
+            if timeline_in_hint is not None and timeline_out_hint is not None:
+                if not _timeline_ranges_overlap(
+                    clip_in,
+                    clip_out,
+                    int(timeline_in_hint),
+                    int(timeline_out_hint),
+                ):
+                    continue
+
+            matches, _candidate = _target_identity_matches(
+                clip, shot_root_hint, shot_code_hint
+            )
+            if not matches:
+                continue
+
+            key = _entry_clip_key(entry, clip)
+            if key in accepted:
+                continue
+            accepted[key] = _range_source_from_clip(
+                entry["track_name"],
+                entry["track_index"],
+                clip,
+                entry["source_type"],
+            )
+
+    if (
+        not accepted
+        and timeline_in_hint is not None
+        and timeline_out_hint is not None
+        and (shot_root_hint or shot_code_hint)
+    ):
+        # Fallback: si no se encontró nada con el hint de rango, reintentar por identidad.
+        return _collect_sources_for_target(
+            seq,
+            shot_root_hint=shot_root_hint,
+            shot_code_hint=shot_code_hint,
+            timeline_in_hint=None,
+            timeline_out_hint=None,
+        )
+
+    range_sources = []
+    plates = []
+    for source in accepted.values():
+        if source["source_type"] == RANGE_SOURCE_EDITREF:
+            range_sources.append(source)
+        else:
+            plates.append(source)
+            range_sources.append(source)
+    return range_sources, plates
+
+
+def _collect_context_for_target(seq, target):
+    shot_root_hint = (target.get("shot_root_path") or "").replace("\\", "/") or None
+    shot_code_hint = (
+        target.get("shot_code")
+        or target.get("shot_name")
+        or target.get("shot")
+        or None
+    )
+    timeline_in_hint = target.get("timeline_in")
+    timeline_out_hint = target.get("timeline_out")
+
+    range_sources, plates = _collect_sources_for_target(
+        seq,
+        shot_root_hint=shot_root_hint,
+        shot_code_hint=shot_code_hint,
+        timeline_in_hint=timeline_in_hint,
+        timeline_out_hint=timeline_out_hint,
+    )
+    context, error = _build_context_from_sources(
+        seq,
+        range_sources,
+        plates,
+        shot_root_hint=shot_root_hint,
+        shot_code_hint=shot_code_hint,
+    )
+    if error:
+        return None, error
+    if timeline_in_hint is not None and timeline_out_hint is not None:
+        context["requested_timeline_in"] = int(timeline_in_hint)
+        context["requested_timeline_out"] = int(timeline_out_hint)
+    return context, None
+
+
+def _selected_shot_targets(seq):
+    try:
+        timeline_editor = hiero.ui.getTimelineEditor(seq)
+        selection = list(timeline_editor.selection())
+    except Exception:
+        selection = []
+
+    by_key = {}
+    for item in selection:
+        if isinstance(item, hiero.core.EffectTrackItem):
+            continue
+        if not (hasattr(item, "timelineIn") and hasattr(item, "timelineOut")):
+            continue
+        identity = _clip_shot_identity(item)
+        shot_root = identity.get("shot_root")
+        shot_code = identity.get("shot_code")
+        if not shot_code:
+            shot_code = _derive_shot_code(item, shot_root)
+        if not shot_root and not shot_code:
+            continue
+
+        key = (
+            (shot_root or "").lower().replace("\\", "/"),
+            (shot_code or "").lower(),
+        )
+        item_in = int(item.timelineIn())
+        item_out = int(item.timelineOut())
+        if key not in by_key:
+            by_key[key] = {
+                "shot_root_path": shot_root,
+                "shot_code": shot_code,
+                "timeline_in": item_in,
+                "timeline_out": item_out,
+            }
+        else:
+            by_key[key]["timeline_in"] = min(by_key[key]["timeline_in"], item_in)
+            by_key[key]["timeline_out"] = max(by_key[key]["timeline_out"], item_out)
+
+    targets = list(by_key.values())
+    targets.sort(key=lambda t: str(t.get("shot_code") or "").lower())
+    return targets
+
+
+def _collect_dialog_contexts(shot_targets=None):
+    contexts = []
+    skipped_errors = []
+    if shot_targets:
+        for target in shot_targets:
+            seq = target.get("sequence") or hiero.ui.activeSequence()
+            if not seq:
+                skipped_errors.append(
+                    "%s: No active sequence."
+                    % (target.get("shot_code") or target.get("shot_name") or "?")
+                )
+                continue
+            context, error = _collect_context_for_target(seq, target)
+            if error:
+                skipped_errors.append(
+                    "%s: %s"
+                    % (target.get("shot_code") or target.get("shot_name") or "Shot", error)
+                )
+                continue
+            contexts.append(context)
+    else:
+        seq = hiero.ui.activeSequence()
+        if not seq:
+            return [], [], ["No active sequence."]
+        selected_targets = _selected_shot_targets(seq)
+        if selected_targets:
+            for target in selected_targets:
+                context, error = _collect_context_for_target(seq, target)
+                if error:
+                    skipped_errors.append(
+                        "%s: %s" % (target.get("shot_code") or "Shot", error)
+                    )
+                    continue
+                contexts.append(context)
+        else:
+            context, error = _collect_context_from_playhead(seq)
+            if error:
+                return [], [], [error]
+            contexts.append(context)
+
+    unique = {}
+    for context in contexts:
+        key = (
+            str(context.get("shot_root_path") or "").lower(),
+            str(context.get("shot_code") or "").lower(),
+            id(context.get("sequence")),
+        )
+        if key not in unique:
+            unique[key] = context
+    contexts = list(unique.values())
+    contexts.sort(key=lambda c: str(c.get("shot_code") or "").lower())
+
+    eligible = []
+    skipped_full = []
+    for context in contexts:
+        if _context_has_available_tasks(context):
+            eligible.append(context)
+        else:
+            skipped_full.append(str(context.get("shot_code") or "Shot"))
+    return eligible, skipped_full, skipped_errors
+
+
+def _collect_context():
+    """Compatibilidad: mantiene el contrato single-shot histórico."""
+    return _collect_context_from_playhead()
+
+
 class CreateV000Dialog(QtWidgets.QDialog):
-    def __init__(self, context, parent=None):
+    def __init__(self, context, parent=None, embedded=False):
         super(CreateV000Dialog, self).__init__(parent)
         self.context = context
+        self._embedded = bool(embedded)
         self.plate_checks = []
         self._syncing_range_checks = False
         self.resolution_buttons = {}
         self.task_buttons = {}
         self.saved_handle_value = _read_handle_setting()
 
-        self.setWindowTitle("Create v000 - %s" % context["shot_code"])
-        self.setObjectName("LGA_NKS_CreateV000Dialog")
-        self.setModal(False)
-        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
+        if self._embedded:
+            self.setWindowFlags(QtCore.Qt.Widget)
+            self.setObjectName("LGA_NKS_CreateV000Panel")
+        else:
+            self.setWindowTitle("Create v000 - %s" % context["shot_code"])
+            self.setObjectName("LGA_NKS_CreateV000Dialog")
+            self.setModal(False)
+            self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
         self.setMinimumWidth(720)
-        self.setStyleSheet(
-            """
-            QDialog {
-                background-color: #2B2B2B;
-                border: 1px solid #555555;
-            }
-            """
-        )
+        if self._embedded:
+            self.setStyleSheet(
+                _DIALOG_STYLE
+                + "\nQDialog { border: 0px; background-color: #2B2B2B; }\n"
+            )
+        else:
+            self.setStyleSheet(_DIALOG_STYLE)
         self._build_ui()
         self._update_state()
 
@@ -1505,38 +1967,18 @@ class CreateV000Dialog(QtWidgets.QDialog):
         )
         buttons.addWidget(self.preview_in_out_btn)
         buttons.addStretch()
-        cancel_btn = QtWidgets.QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        cancel_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #555555;
-                border: 1px solid #666666;
-                color: #CCCCCC;
-                padding: 8px 15px;
-                border-radius: 3px;
-            }
-            QPushButton:hover { background-color: #666666; }
-            """
-        )
+        self.cancel_btn = QtWidgets.QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        self.cancel_btn.setStyleSheet(_BTN_SECONDARY)
         self.create_btn = QtWidgets.QPushButton("Create v000")
         self.create_btn.clicked.connect(self._create_v000)
-        self.create_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #443a91;
-                color: #b2b2b2;
-                padding: 8px 15px;
-                border-radius: 3px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #774dcb; color: #CCCCCC; }
-            QPushButton:disabled { background-color: #2f2a5e; color: #6a6a6a; }
-            """
-        )
-        buttons.addWidget(cancel_btn)
+        self.create_btn.setStyleSheet(_BTN_PRIMARY)
+        buttons.addWidget(self.cancel_btn)
         buttons.addSpacing(10)
         buttons.addWidget(self.create_btn)
+        if self._embedded:
+            self.cancel_btn.setVisible(False)
+            self.create_btn.setVisible(False)
         layout.addLayout(buttons)
 
     def _section_label(self, text):
@@ -1802,6 +2244,13 @@ class CreateV000Dialog(QtWidgets.QDialog):
                 """
                 % {"color": task_color}
             )
+            task_state = (self.context.get("task_state") or {}).get(task, {})
+            if task_state.get("blocked"):
+                btn.setEnabled(False)
+                btn.setToolTip(
+                    "Ya existen clips en timeline para '%s' (%s)"
+                    % (task, task_state.get("track_name") or "track")
+                )
             btn.toggled.connect(self._update_state)
             self.task_buttons[task] = btn
             layout.addWidget(btn)
@@ -1877,6 +2326,13 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
     def _selected_tasks(self):
         return [task for task in TASKS if self.task_buttons[task].isChecked()]
+
+    def has_selected_tasks(self):
+        return bool(self._selected_tasks())
+
+    def available_task_count(self):
+        state = self.context.get("task_state") or {}
+        return sum(1 for task in TASKS if not state.get(task, {}).get("blocked"))
 
     def _selected_resolution_info(self):
         for btn, info in self.resolution_buttons.items():
@@ -2106,7 +2562,8 @@ class CreateV000Dialog(QtWidgets.QDialog):
                 created_count = 0
 
         if created_count:
-            self.accept()
+            if not self._embedded:
+                self.accept()
         else:
             self._update_state()
 
@@ -2474,6 +2931,245 @@ class CreateV000Dialog(QtWidgets.QDialog):
         debug_print(import_message.strip())
 
 
+class CreateV000TabsDialog(QtWidgets.QDialog):
+    """Shell de tabs multi-shot para Create v000."""
+
+    def __init__(self, contexts, skipped_full=None, skipped_errors=None, parent=None):
+        super(CreateV000TabsDialog, self).__init__(parent)
+        self.contexts = contexts
+        self.skipped_full = skipped_full or []
+        self.skipped_errors = skipped_errors or []
+        self.panels = []
+
+        self.setObjectName("LGA_NKS_CreateV000Dialog")
+        self.setWindowTitle("Create v000 — %d shot(s)" % len(contexts))
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
+        self.setMinimumSize(980, 700)
+        self.setStyleSheet(_DIALOG_STYLE + _TAB_STYLE)
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        self._header = QtWidgets.QWidget()
+        self._header.setObjectName("LGA_ImportShotHeader")
+        self._header.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        header_layout = QtWidgets.QHBoxLayout(self._header)
+        header_layout.setContentsMargins(0, 2, 9, 0)
+        header_layout.setSpacing(0)
+
+        self._tab_bar = _ImportShotTabBar()
+        self._tab_bar.setExpanding(False)
+        self._tab_bar.setDrawBase(False)
+        self._tab_bar.setElideMode(QtCore.Qt.ElideNone)
+        self._tab_bar.setUsesScrollButtons(True)
+        self._tab_bar.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Preferred,
+        )
+        header_layout.addWidget(self._tab_bar, 1, QtCore.Qt.AlignBottom)
+        root.addWidget(self._header)
+        self._header_sep = _HeaderSeparator(self._tab_bar)
+        root.addWidget(self._header_sep)
+
+        body = QtWidgets.QWidget()
+        body_layout = QtWidgets.QVBoxLayout(body)
+        body_layout.setContentsMargins(9, 10, 9, 9)
+        body_layout.setSpacing(6)
+
+        self._tab_widget = QtWidgets.QStackedWidget()
+        body_layout.addWidget(self._tab_widget, 1)
+
+        for context in contexts:
+            panel = CreateV000Dialog(context, self, embedded=True)
+            self.panels.append(panel)
+            self._tab_widget.addWidget(panel)
+            self._tab_bar.addTab(str(context.get("shot_code") or "Shot"))
+
+        self._tab_bar.currentChanged.connect(self._tab_widget.setCurrentIndex)
+        self._tab_bar.currentChanged.connect(self._on_tab_changed)
+        root.addWidget(body, 1)
+
+        footer = QtWidgets.QHBoxLayout()
+        summary_parts = []
+        if self.skipped_full:
+            summary_parts.append(
+                "%d shot(s) omitidos (todas las tasks ya tienen versiones)"
+                % len(self.skipped_full)
+            )
+        if self.skipped_errors:
+            summary_parts.append("%d shot(s) con errores de contexto" % len(self.skipped_errors))
+        if summary_parts:
+            summary_label = QtWidgets.QLabel(" | ".join(summary_parts))
+            summary_label.setStyleSheet("color:#c69a58;")
+            tooltip_lines = []
+            if self.skipped_full:
+                tooltip_lines.append("Completos:\n%s" % "\n".join(self.skipped_full))
+            if self.skipped_errors:
+                tooltip_lines.append("Errores:\n%s" % "\n".join(self.skipped_errors))
+            summary_label.setToolTip("\n\n".join(tooltip_lines))
+            footer.addWidget(summary_label, 1)
+        else:
+            footer.addStretch(1)
+
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.setStyleSheet(_BTN_SECONDARY)
+        cancel_btn.clicked.connect(self.reject)
+        footer.addWidget(cancel_btn)
+
+        self.create_all_btn = QtWidgets.QPushButton("Create v000 (All tabs)")
+        self.create_all_btn.setStyleSheet(_BTN_PRIMARY)
+        self.create_all_btn.clicked.connect(self._create_all_tabs)
+        footer.addWidget(self.create_all_btn)
+        body_layout.addLayout(footer)
+
+        if self._tab_bar.count() > 0:
+            self._tab_bar.setCurrentIndex(0)
+            self._tab_widget.setCurrentIndex(0)
+
+    def _on_tab_changed(self, index):
+        panel = (
+            self._tab_widget.widget(index)
+            if 0 <= index < self._tab_widget.count()
+            else None
+        )
+        if panel and hasattr(panel, "_update_state"):
+            panel._update_state()
+
+    def _create_all_tabs(self):
+        preflight_payloads = []
+        collected_errors = []
+        shots_without_task = []
+
+        for panel in self.panels:
+            shot_code = str(panel.context.get("shot_code") or "Shot")
+            params_list, warning = panel._build_outputs()
+            if warning:
+                if warning == "Select at least one task.":
+                    shots_without_task.append(shot_code)
+                    continue
+                collected_errors.append("%s: %s" % (shot_code, warning))
+                continue
+
+            seq = panel.context["sequence"]
+            for params in params_list:
+                result = panel._preflight_and_create_exr(seq, params)
+                if result is None:
+                    continue
+                preflight_payloads.append(
+                    {
+                        "panel": panel,
+                        "seq": seq,
+                        "params": result["params"],
+                        "integration_mode": result["integration_mode"],
+                    }
+                )
+
+        if not preflight_payloads:
+            if collected_errors:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Create v000",
+                    "No se pudo preparar ninguna task:\n\n%s"
+                    % "\n".join(collected_errors),
+                )
+            elif shots_without_task:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Create v000",
+                    "No hay tasks seleccionadas en los tabs.\n\n"
+                    "Seleccioná al menos una task en uno o más shots.",
+                )
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Create v000",
+                    "No se creó ninguna v000.",
+                )
+            return
+
+        created_count = len(preflight_payloads)
+        hiero_payloads = [
+            payload
+            for payload in preflight_payloads
+            if payload["integration_mode"] != "exrs_only"
+        ]
+
+        grouped = {}
+        for payload in hiero_payloads:
+            seq = payload["seq"]
+            project = _active_project_for_sequence(seq)
+            if not project:
+                collected_errors.append(
+                    "%s / %s: No active project found."
+                    % (
+                        payload["panel"].context.get("shot_code") or "Shot",
+                        payload["params"].get("task") or "?",
+                    )
+                )
+                continue
+            project_key = id(project)
+            if project_key not in grouped:
+                grouped[project_key] = {"project": project, "items": []}
+            grouped[project_key]["items"].append(payload)
+
+        if hiero_payloads and not grouped:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Create v000",
+                "No active project found for selected shots.",
+            )
+            return
+
+        import_errors = []
+        self.create_all_btn.setEnabled(False)
+        try:
+            for group in grouped.values():
+                project = group["project"]
+                try:
+                    with project.beginUndo("Create v000"):
+                        for payload in group["items"]:
+                            panel = payload["panel"]
+                            seq = payload["seq"]
+                            params = payload["params"]
+                            try:
+                                panel._hiero_import_for_params(
+                                    seq,
+                                    project,
+                                    params,
+                                    payload["integration_mode"],
+                                )
+                            except Exception as exc:
+                                import_errors.append(
+                                    "%s / %s: %s"
+                                    % (
+                                        panel.context.get("shot_code") or "Shot",
+                                        params.get("task") or "?",
+                                        exc,
+                                    )
+                                )
+                except Exception as exc:
+                    import_errors.append("Undo block failed: %s" % exc)
+        finally:
+            self.create_all_btn.setEnabled(True)
+
+        if import_errors or collected_errors:
+            detail_lines = []
+            if collected_errors:
+                detail_lines.append("Preflight:\n%s" % "\n".join(collected_errors))
+            if import_errors:
+                detail_lines.append("Import/Timeline:\n%s" % "\n".join(import_errors))
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Create v000 — errores parciales",
+                "Se crearon %d task(s).\n\n%s"
+                % (created_count, "\n\n".join(detail_lines)),
+            )
+
+        if created_count:
+            self.accept()
+
+
 def _clear_create_v000_dialog_instance(*args):
     global _create_v000_dialog_instance
     _create_v000_dialog_instance = None
@@ -2496,7 +3192,7 @@ def _visible_create_v000_dialog():
     return None
 
 
-def open_create_v000_dialog():
+def open_create_v000_dialog(shot_targets=None):
     global _create_v000_dialog_instance
 
     existing_dialog = _visible_create_v000_dialog()
@@ -2510,13 +3206,33 @@ def open_create_v000_dialog():
         _create_v000_dialog_instance.activateWindow()
         return _create_v000_dialog_instance
 
-    context, error = _collect_context()
-    if error:
-        QtWidgets.QMessageBox.warning(None, "Create v000", error)
-        debug_print(error)
+    contexts, skipped_full, skipped_errors = _collect_dialog_contexts(
+        shot_targets=shot_targets
+    )
+    if not contexts:
+        if skipped_full and len(skipped_full) == 1 and not skipped_errors:
+            message = (
+                "El shot '%s' ya tiene versiones en timeline para las 3 tasks:\n"
+                "comp, roto y cleanup."
+            ) % skipped_full[0]
+        elif skipped_full and not skipped_errors:
+            message = (
+                "Todos los shots están completos para Create v000.\n\n"
+                "No hay tasks disponibles."
+            )
+        else:
+            message = "No se pudo abrir Create v000."
+            if skipped_errors:
+                message += "\n\n" + "\n".join(skipped_errors)
+        QtWidgets.QMessageBox.warning(None, "Create v000", message)
+        debug_print(message)
         return None
 
-    dialog = CreateV000Dialog(context)
+    dialog = CreateV000TabsDialog(
+        contexts,
+        skipped_full=skipped_full,
+        skipped_errors=skipped_errors,
+    )
     dialog.finished.connect(_clear_create_v000_dialog_instance)
     dialog.destroyed.connect(_clear_create_v000_dialog_instance)
     _create_v000_dialog_instance = dialog

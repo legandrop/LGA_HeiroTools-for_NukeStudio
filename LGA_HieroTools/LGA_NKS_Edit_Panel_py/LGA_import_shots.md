@@ -639,6 +639,19 @@ El tab Preview tiene sus propios botones de acción:
 | Import Now | primario violeta `#443a91` | hay al menos 1 ítem con track asignado | ejecuta `_do_import()` |
 | Import and Create V000 | primario violeta `#443a91` | hay al menos 1 ítem con track asignado | ejecuta `_do_import_and_v000()` → import + abre CreateV000 al cerrar |
 
+En el flujo single, el post-import hacia CreateV000 ahora pasa contexto explícito del shot (`shot_root`, `shot_code`, `timeline_in/out`) para evitar depender del playhead.
+
+#### Botones del footer Bulk Import
+
+| Boton | Estado actual | Accion |
+|-------|---------------|--------|
+| Import All (N shots) | visible | ejecuta `_do_bulk_import()` |
+| Import All (N shots) and Create V000 | visible | ejecuta `_do_bulk_import_and_v000()` → import + abre CreateV000 tabulado con contexts explícitos |
+
+Notas:
+- El botón `Cancel` ya no se muestra en el footer Bulk (cancelar = cerrar ventana).
+- El payload hacia CreateV000 se arma por shot importado con `shot_root`, `shot_code` y rango timeline real colocado.
+
 ### Logica de Import (comportamiento previsto)
 
 > **Estado actual:** Import cierra el dialogo sin importar nada (stub).
@@ -915,7 +928,6 @@ donde se distribuya la repo.
   y estado "No soportado". Implementar cuando haya herramienta de transcode MOV disponible.
 - **Import real — generalizar:** quitar el flag `_IMPORT_ONLY_COMP` y soportar todos los tracks. Ver `LGA_import_shots_do.md`.
 - **Post-import — SetShotName:** llamada al script externo post-importacion.
-- **Post-import — CreateV000:** dialogo post-import para crear v000 en tasks sin versiones.
 
 ---
 

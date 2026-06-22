@@ -3,13 +3,13 @@
 
 # LGA_NKS_CreateV000
 
-Herramienta para crear una secuencia EXR negra `v000` para el shot activo en Hiero/Nuke Studio.
+Herramienta para crear una secuencia EXR negra `v000` para uno o varios shots en Hiero/Nuke Studio.
 
 ## Descripcion
 
-Abre un dialogo desde el Edit Panel que recolecta el contexto del shot bajo el playhead (secuencia, tracks, rango de frames, resolucion) y presenta una preview de los parametros de salida. Al confirmar, crea en disco una secuencia de frames EXR negros listos para ser importados en Hiero como punto de partida de compositing, roto o cleanup.
+Abre un dialogo desde el Edit Panel o desde Import Shot y construye contexto por shot (secuencia, tracks, rango de frames y resolucion). La UI es unificada: siempre usa tabs por shot (single = 1 tab, bulk = N tabs) y permite crear v000 en lote para todos los tabs elegibles.
 
-La herramienta crea archivos en disco, importa la v000 al bin correcto del proyecto y la coloca en el timeline cuando el rango destino esta disponible.
+La herramienta crea archivos en disco, importa la v000 al bin correcto del proyecto y la coloca en el timeline cuando el rango destino está disponible. Las tasks `comp`, `roto` y `cleanup` se deshabilitan automáticamente si ya existen clips superpuestos en su track para el rango del shot.
 
 ## Archivos principales
 
@@ -21,7 +21,7 @@ La herramienta crea archivos en disco, importa la v000 al bin correcto del proye
 
 **Boton del panel:** "Create v000" en el Edit Panel, ubicado despues del boton "Set Shot Name".
 
-Se activa con `open_create_v000_dialog()`.
+Se activa con `open_create_v000_dialog()` o `open_create_v000_dialog(shot_targets=[...])`.
 
 ---
 
@@ -43,36 +43,34 @@ El archivo se reinicia en cada carga del modulo con encabezado `Fecha: YYYY-MM-D
 
 ### Prerequisitos para que el dialogo abra
 
+Modo sin parámetros (`open_create_v000_dialog()`):
 - Debe haber una sequence activa en Hiero.
-- El viewer debe estar activo (playhead posicionado).
-- Debe haber al menos un clip bajo el playhead en un track cuyo nombre contenga `editref` o termine en `plate` (case-insensitive), usado como ancla del shot.
-- Debe detectarse al menos un track `plate` dentro de la isla temporal del shot (se usa para derivar el shot root y la resolucion).
-- El path de ese plate debe contener un segmento `_input` para derivar el shot root.
+- Si hay clips seleccionados en timeline, se construye un contexto por shot seleccionado.
+- Si no hay selección, usa el shot bajo playhead como fallback.
 
-Si alguna condicion no se cumple, el dialogo no abre y se muestra un warning descriptivo.
+Modo con parámetros (`open_create_v000_dialog(shot_targets=[...])`):
+- Cada target debe poder resolverse contra tracks `editref`/`plate` de la sequence.
+- Debe existir al menos un `plate` para derivar path/resolución.
+
+Si un shot ya tiene sus 3 tasks ocupadas en timeline (solape en `_comp_`, `_roto_`, `_cleanup_`), ese shot no genera tab.
 
 ### Flujo principal
 
 ```
-_collect_context()
+open_create_v000_dialog(shot_targets?)
     |
-    ├── hiero.ui.activeSequence()       -> sequence activa
-    ├── hiero.ui.currentViewer().time() -> posicion del playhead
-    ├── _collect_range_sources()        -> isla de clips editref/plate del shot bajo el playhead
-    ├── _derive_shot_root()             -> shot root desde _input en el path del plate
-    ├── _derive_shot_code()             -> shot code desde el nombre del archivo plate
-    ├── _timeline_resolution()          -> resolucion de la sequence
-
-CreateV000Dialog(context)
-    |
-    ├── _build_ui()                     -> construye el dialogo Qt
-    ├── _update_state()                 -> recalcula preview de output en vivo
-    └── _create_v000()
+    ├── _collect_dialog_contexts()
+    │     ├── _selected_shot_targets() / _collect_context_from_playhead()
+    │     └── _collect_context_for_target()
+    ├── filtro por tasks disponibles (_context_has_available_tasks)
+    └── CreateV000TabsDialog(contexts)
             |
-            └── _create_black_exr_sequence(params)
-                    |
-                    ├── oiiotool --create   -> crea el primer frame negro
-                    └── shutil.copyfile()   -> duplica el primer frame para todos los restantes
+            ├── tabs shell (_ImportShotTabBar + _HeaderSeparator)
+            ├── CreateV000Dialog(embedded=True) por shot
+            └── _create_all_tabs()
+                    ├── _preflight_and_create_exr() por task
+                    ├── beginUndo único por proyecto
+                    └── _hiero_import_for_params()
 ```
 
 ---
@@ -97,10 +95,10 @@ Esto permite detectar, por ejemplo, un `editref` que empieza varios frames despu
 
 ---
 
-## UI del dialogo
+## UI del dialogo (single + bulk unificado)
 
 ```
-[proyecto] / [shot_code]                                    Create v000
+[TAB: SHOT_A] [TAB: SHOT_B] ... [TAB: SHOT_N]
 
 FRAME RANGE                         RESOLUTION
 [ ] Track    TL IN  TL OUT  Frames  ( ) Timeline   WxH
@@ -119,18 +117,20 @@ Timeline: ... - ... (handle ...)
 Frames: ... - ... (... frames)
 Resolution: ... x ... (fuente)
 
-[ Preview In/Out ]                         [ Cancel ] [ Create v000 ]
+[ Preview In/Out ]      (en cada tab)
+...
+[ Cancel ] [ Create v000 (All tabs) ]     (footer global)
 ```
 
-- Ancho minimo de la ventana: `720px`.
-- Estilo: fondo oscuro `#2B2B2B`, texto `#a7a7a7`/`#CCCCCC`, separadores y botones custom.
+- Ancho minimo de la ventana tabulada: `980x700`.
+- Shell de tabs: mismo patrón visual de `LGA_import_shots` (`_ImportShotTabBar`, `_HeaderSeparator`, `_TAB_STYLE`).
 - La tabla de frame range no muestra grid ni scroll vertical.
 
 ---
 
 ## Seccion: Frame Range
 
-Lista los tracks disponibles bajo el playhead en este orden:
+Lista los tracks disponibles para el shot actual (resuelto por selección/playhead o por target explícito) en este orden:
 
 1. Tracks cuyo nombre contiene `editref` (case-insensitive).
 2. Tracks cuyo nombre termina en `plate` (case-insensitive).
@@ -258,11 +258,14 @@ Botones toggle independientes para las tres tasks disponibles:
 - Al abrir el dialogo no hay ninguna task seleccionada.
 - Se puede seleccionar una o varias tasks al mismo tiempo.
 - Si no hay ninguna task seleccionada, el boton `Create v000` queda deshabilitado.
-- La existencia de clips o versiones en los tracks destino no deshabilita ninguna task.
+- Si ya existe cualquier clip superpuesto al rango del shot en el track de la task, esa task queda deshabilitada (greyed out).
+- Si las 3 tasks están bloqueadas (`comp`, `roto`, `cleanup`), el shot no se muestra como tab elegible.
 - Al confirmar multiples tasks, se procesan secuencialmente en el orden `comp`, `roto`, `cleanup`.
 - Si el usuario cancela una comprobacion de una task, solo se saltea esa task y el proceso continua con la siguiente task seleccionada.
 
-Los conflictos de timeline se validan durante la creacion de cada task con `_timeline_overlaps()`.
+Los conflictos de timeline se validan en dos etapas:
+- **UI previa:** bloqueo de task por solape en el rango del shot.
+- **Creación:** validación final por task con `_timeline_overlaps()` y diálogo de resolución.
 
 **Implementacion:** `_build_task_box()`, `_select_default_task()`, `_selected_tasks()`, `_build_outputs()`
 
@@ -553,11 +556,12 @@ El dialogo bloquea `Create v000` y muestra un warning si:
 
 | Condicion                                              | Origen                     |
 |--------------------------------------------------------|----------------------------|
-| No hay sequence activa                                 | `_collect_context()`       |
-| No hay viewer / playhead activo                        | `_collect_context()`       |
-| No hay tracks editref ni plate bajo el playhead        | `_collect_context()`       |
-| No hay track plate (no se puede derivar path/resol.)   | `_collect_context()`       |
-| No se detecta shot code                                | `_collect_context()`       |
+| No hay sequence activa                                 | `_collect_dialog_contexts()` / `_collect_context_from_playhead()` |
+| No hay viewer / playhead activo (modo sin selección)   | `_collect_context_from_playhead()` |
+| No hay tracks editref/plate para el shot              | `_collect_context_for_target()` / `_collect_context_from_playhead()` |
+| No hay track plate (no se puede derivar path/resol.)   | `_build_context_from_sources()` |
+| No se detecta shot code                                | `_build_context_from_sources()` |
+| Todas las tasks del shot ya tienen solape en timeline  | filtro `_context_has_available_tasks()` |
 | No hay fuente de frame range seleccionada              | `_build_output()`          |
 | No hay task seleccionada                               | `_build_outputs()`         |
 | No se puede derivar shot root desde `_input`           | `_build_output()`          |
@@ -680,7 +684,7 @@ C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\+Building_Blocks\Hiero\Time
 
 | Archivo | Funciones / clases clave |
 |---------|--------------------------|
-| `LGA_NKS_Edit_Panel_py\LGA_NKS_CreateV000.py` | `setup_debug_logging()`, `debug_print()`, `cleanup_logging()`, `open_create_v000_dialog()`, `_collect_context()`, `_collect_range_sources()`, `_build_outputs()`, `_preview_in_out()`, `_zoom_timeline_to_preview_range()`, `_create_v000_for_params()`, `_set_v000_clip_color()`, `_disable_timeline_item()`, `_create_black_exr_sequence()`, `_colorize_path()`, `_ensure_task_folder_structure()`, `_build_folder_structure_section()`, `_read_create_folders_setting()`, `_write_create_folders_setting()`, `_insert_task_track()`, `_get_above_neighbor_for_task()`, `CreateV000Dialog` |
+| `LGA_NKS_Edit_Panel_py\LGA_NKS_CreateV000.py` | `open_create_v000_dialog(shot_targets=...)`, `_collect_dialog_contexts()`, `_selected_shot_targets()`, `_collect_context_for_target()`, `_collect_context_from_playhead()`, `_task_overlap_state()`, `_context_has_available_tasks()`, `CreateV000TabsDialog`, `CreateV000Dialog`, `_create_all_tabs()`, `_build_outputs()`, `_preview_in_out()`, `_preflight_and_create_exr()`, `_hiero_import_for_params()`, `_create_black_exr_sequence()`, `_insert_task_track()` |
 | `+Building_Blocks\Hiero\LGA_H-Tracks-InsertTest.py` | Referencia del workaround remove-all/re-add para insertar tracks en posicion especifica |
 | `docs\Docu_Logging_System.md` | Valores por defecto y patron de `QueueHandler` / `QueueListener` |
 | `LGA_NKS_ViewerTL_Panel_py\LGA_NKS_InOut_Editref.py` | Referencia para `seq.setInTime()` y `seq.setOutTime()` |

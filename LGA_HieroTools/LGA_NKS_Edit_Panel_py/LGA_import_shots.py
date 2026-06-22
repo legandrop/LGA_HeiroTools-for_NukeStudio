@@ -1,13 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.30 | Lega
+  LGA_import_shots v1.31 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.31: Bulk footer: se elimina botón Cancel y se agrega
+         "Import All (N shots) and Create V000". En single y bulk,
+         la apertura post-import de CreateV000 ahora pasa contextos
+         explícitos por shot (shot_root/shot_code/rango) para soportar
+         tabs multi-shot en CreateV000 sin depender del playhead.
   v1.30: Las opciones del dropdown Track usan los colores del Preview,
          incluyendo variante greyed para filas de versiones viejas.
   v1.29: La columna Track usa los mismos colores que los nombres de track del
@@ -5898,7 +5903,18 @@ class ImportShotDialog(QtWidgets.QDialog):
         # antes de que CreateV000 abra su propia ventana.
         if getattr(self, "_pending_create_v000", False):
             debug_print("_do_import: lanzando CreateV000 post-import")
-            QtCore.QTimer.singleShot(0, _launch_create_v000)
+            shot_target = {
+                "sequence": self.seq,
+                "shot_root_path": self.shot_root,
+                "shot_code": self.shot_name,
+            }
+            if _view_tc_in is not None and _view_tc_out is not None:
+                shot_target["timeline_in"] = int(_view_tc_in)
+                shot_target["timeline_out"] = int(_view_tc_out)
+            QtCore.QTimer.singleShot(
+                0,
+                lambda payload=[shot_target]: _launch_create_v000(payload),
+            )
 
     def _do_import_and_v000(self):
         """Marca que CreateV000 debe lanzarse al terminar y ejecuta el import normal."""
@@ -7124,14 +7140,16 @@ class BulkImportDialog(QtWidgets.QDialog):
             footer.addWidget(label, 1)
         else:
             footer.addStretch(1)
-        cancel = QtWidgets.QPushButton("Cancel")
-        cancel.setStyleSheet(_BTN_SECONDARY)
-        cancel.clicked.connect(self.reject)
-        footer.addWidget(cancel)
         self.import_button = QtWidgets.QPushButton("Import All (%d shots)" % len(entries))
         self.import_button.setStyleSheet(_BTN_PRIMARY)
         self.import_button.clicked.connect(self._do_bulk_import)
         footer.addWidget(self.import_button)
+        self.import_v000_button = QtWidgets.QPushButton(
+            "Import All (%d shots) and Create V000" % len(entries)
+        )
+        self.import_v000_button.setStyleSheet(_BTN_PRIMARY)
+        self.import_v000_button.clicked.connect(self._do_bulk_import_and_v000)
+        footer.addWidget(self.import_v000_button)
         _body_lay.addLayout(footer)
 
         if self._tab_bar.count() > 0:
@@ -7546,7 +7564,10 @@ class BulkImportDialog(QtWidgets.QDialog):
         duration = item.get("frame_count") or 0
         return max(0, master_duration - duration) // 2
 
-    def _do_bulk_import(self):
+    def _do_bulk_import_and_v000(self):
+        self._do_bulk_import(launch_create_v000=True)
+
+    def _do_bulk_import(self, launch_create_v000=False):
         empty = [p.shot_name for p in self.panels if not p.selected_items()]
         if empty:
             _show_tool_message(
@@ -7562,9 +7583,11 @@ class BulkImportDialog(QtWidgets.QDialog):
         except Exception:
             pass
         errors, placed_items = [], []
+        placed_items_by_shot = {}
 
         def run():
             for panel in sorted(self.panels, key=lambda p: p.shot_name.lower()):
+                shot_placed_items = placed_items_by_shot.setdefault(panel.shot_name, [])
                 duration = panel.master_duration()
                 selected_items = panel.selected_items()
                 selected_master = max(
@@ -7612,6 +7635,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                                       (panel.shot_name, clip_name, track_label, error))
                     elif timeline_item is not None:
                         placed_items.append(timeline_item)
+                        shot_placed_items.append(timeline_item)
             if placed_items:
                 timeline_mod.stretch_burnin(self.seq)
                 valid = [item for item in placed_items if item.parentTrack() is not None]
@@ -7620,6 +7644,8 @@ class BulkImportDialog(QtWidgets.QDialog):
                     self.seq.setOutTime(max(int(item.timelineOut()) for item in valid))
 
         self.import_button.setEnabled(False)
+        if hasattr(self, "import_v000_button"):
+            self.import_v000_button.setEnabled(False)
         try:
             if project:
                 with project.beginUndo("Bulk Import: %d shots" % len(self.panels)):
@@ -7628,6 +7654,8 @@ class BulkImportDialog(QtWidgets.QDialog):
                 run()
         finally:
             self.import_button.setEnabled(True)
+            if hasattr(self, "import_v000_button"):
+                self.import_v000_button.setEnabled(True)
 
         if placed_items:
             tc_in = min(int(item.timelineIn()) for item in placed_items
@@ -7640,7 +7668,41 @@ class BulkImportDialog(QtWidgets.QDialog):
                 self, "Bulk Import — errores parciales",
                 "%d items colocados.\n\n%s" % (len(placed_items), "\n".join(errors)),
             )
+        create_targets = []
+        if launch_create_v000:
+            for panel in sorted(self.panels, key=lambda p: p.shot_name.lower()):
+                valid_items = [
+                    item
+                    for item in placed_items_by_shot.get(panel.shot_name, [])
+                    if item.parentTrack() is not None
+                ]
+                if not valid_items:
+                    continue
+                shot_tc_in = min(int(item.timelineIn()) for item in valid_items)
+                shot_tc_out = max(int(item.timelineOut()) for item in valid_items)
+                create_targets.append(
+                    {
+                        "sequence": self.seq,
+                        "shot_root_path": panel.shot_root,
+                        "shot_code": panel.shot_name,
+                        "timeline_in": shot_tc_in,
+                        "timeline_out": shot_tc_out,
+                    }
+                )
+
         self.accept()
+        if launch_create_v000:
+            if create_targets:
+                QtCore.QTimer.singleShot(
+                    0,
+                    lambda payload=create_targets: _launch_create_v000(payload),
+                )
+            else:
+                _show_tool_message(
+                    None,
+                    "Bulk Import",
+                    "No se importaron shots elegibles para abrir Create v000.",
+                )
 
 
 _import_shot_dialog_instance = None
@@ -7672,7 +7734,7 @@ def _visible_import_dialog_for_shot(shot_name):
     return None
 
 
-def _launch_create_v000():
+def _launch_create_v000(shot_targets=None):
     """
     Llama a LGA_NKS_CreateV000.main() tal como lo hace el Edit Panel.
     Se invoca desde QTimer.singleShot(0, ...) para que el diálogo de import
@@ -7683,7 +7745,10 @@ def _launch_create_v000():
         if _cv0_key in sys.modules:
             del sys.modules[_cv0_key]
         _cv0 = importlib.import_module(_cv0_key)
-        _cv0.main()
+        if hasattr(_cv0, "open_create_v000_dialog"):
+            _cv0.open_create_v000_dialog(shot_targets=shot_targets)
+        else:
+            _cv0.main()
         debug_print("_launch_create_v000: CreateV000 abierto")
     except Exception as exc:
         debug_print("_launch_create_v000: error → %s" % exc, level="warning")
