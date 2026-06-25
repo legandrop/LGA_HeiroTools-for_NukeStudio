@@ -372,7 +372,10 @@ class ColorChangeWidget(QtWidgets.QWidget):
 
             button.setStyleSheet(button_stylesheet)
             if action == "color":
-                button.clicked.connect(self.handle_color_button_click(color, name))
+                button.setCustomClickHandler(self.handle_color_button_click(color, name))
+                button.setShiftClickHandler(
+                    self.handle_color_button_shift_click(color, name)
+                )
             elif action == "fpt_pull":
                 button.setCustomClickHandler(self.run_FPT_pull_with_deselect)
                 button.setShiftClickHandler(self.run_FPT_pull)
@@ -621,7 +624,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
 
     #### Push
     def handle_color_button_click(self, color, button_name):
-        def button_click_handler(_):
+        def button_click_handler(_=None):
             confirmation = self.confirm_status_application(button_name)
             if confirmation:
                 self.change_clip_color_and_push_status(color, button_name)
@@ -629,6 +632,20 @@ class ColorChangeWidget(QtWidgets.QWidget):
                     self.run_clear_tag_script()
 
         return button_click_handler
+
+    def handle_color_button_shift_click(self, color, button_name):
+        def button_shift_click_handler():
+            confirmation = self.confirm_status_application(button_name)
+            if confirmation:
+                self.change_clip_color_and_push_status(
+                    color,
+                    button_name,
+                    flow_target_version_mode=True,
+                )
+                if button_name in ["Rev_Dir", "Corrections"]:
+                    self.run_clear_tag_script()
+
+        return button_shift_click_handler
 
     def parse_exr_name(self, exr_name):
         """
@@ -709,7 +726,9 @@ class ColorChangeWidget(QtWidgets.QWidget):
             debug_print(f"Error durante la operacion de push: {e}")
             return False
 
-    def change_clip_color_and_push_status(self, color, button_name):
+    def change_clip_color_and_push_status(
+        self, color, button_name, flow_target_version_mode=False
+    ):
         """
         Ejecuta el push usando el método centralizado. La resolución de task y la
         recopilación de clips se delegan a push_from_selected_clips (que usa el
@@ -766,7 +785,11 @@ class ColorChangeWidget(QtWidgets.QWidget):
                     debug_print(f"Error cambiando color del clip {exr_name}: {e}")
 
             # La task se resuelve internamente en push_from_selected_clips
-            result = module.push_from_selected_clips(button_name, change_color_callback)
+            result = module.push_from_selected_clips(
+                button_name,
+                change_color_callback,
+                flow_target_version_mode=flow_target_version_mode,
+            )
             if not result:
                 debug_print("Push cancelado o fallido")
 

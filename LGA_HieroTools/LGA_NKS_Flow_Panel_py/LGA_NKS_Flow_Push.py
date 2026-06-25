@@ -186,6 +186,7 @@ script_start_time = None
 debug_log_listener = None
 debug_messages = []
 resumen_messages = []
+_ACTIVE_FLOW_VERSION_LOAD_WORKERS = []
 
 # Sincronizar debug con el módulo utilitario
 try:
@@ -739,6 +740,29 @@ class DBManager:
         except Exception as e:
             debug_print(
                 f"Error al buscar la última versión para task_id {task_id}: {e}"
+            )
+            return None
+
+    def find_version_by_number(self, task_id, version_number):
+        """Busca una versión específica por número para una tarea."""
+        if not self.conn:
+            debug_print("No hay conexión a la base de datos")
+            return None
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                SELECT * FROM versions
+                WHERE task_id = ? AND version_number = ?
+                LIMIT 1
+                """,
+                (task_id, version_number),
+            )
+            return cur.fetchone()
+        except Exception as e:
+            debug_print(
+                f"Error al buscar versión {version_number} para task_id {task_id}: {e}"
             )
             return None
 
@@ -1505,6 +1529,39 @@ class WorkerSignals(QObject):
     resumen_output = Signal()  # Nueva señal para imprimir resumen
 
 
+class FlowVersionListSignals(QObject):
+    loaded = Signal(list)
+    error = Signal(str)
+
+
+class LoadFlowVersionsWorker(QRunnable):
+    """Worker en background para listar versiones Flow sin bloquear UI."""
+
+    def __init__(self, base_name, original_file_name=None, file_path=None):
+        super(LoadFlowVersionsWorker, self).__init__()
+        self.base_name = base_name
+        self.original_file_name = original_file_name
+        self.file_path = file_path
+        self.signals = FlowVersionListSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            result = call_flow_connector(
+                "list_versions_for_task",
+                base_name=self.base_name,
+                original_file_name=self.original_file_name,
+                file_path=self.file_path,
+            )
+            if result.get("success"):
+                versions = result.get("versions", []) or []
+                self.signals.loaded.emit(versions)
+            else:
+                self.signals.error.emit(result.get("error", "Error desconocido"))
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
 class Worker(QRunnable):
     def __init__(
         self,
@@ -1515,6 +1572,7 @@ class Worker(QRunnable):
         should_delete_images=False,
         original_file_name=None,
         file_path=None,
+        target_version_number=None,
     ):
         super(Worker, self).__init__()
         self.button_name = button_name
@@ -1524,6 +1582,7 @@ class Worker(QRunnable):
         self.should_delete_images = should_delete_images
         self.original_file_name = original_file_name
         self.file_path = file_path
+        self.target_version_number = target_version_number
         self.signals = WorkerSignals()
 
     @Slot()
@@ -1566,6 +1625,7 @@ class Worker(QRunnable):
                 review_images=self.review_images,
                 original_file_name=getattr(self, "original_file_name", None),
                 file_path=getattr(self, "file_path", None),
+                target_version_number=getattr(self, "target_version_number", None),
             )
 
             # Capturar información para el resumen
@@ -1634,6 +1694,8 @@ class Worker(QRunnable):
             self.review_images,
             self.should_delete_images,
             self.original_file_name,
+            self.file_path,
+            target_version_number=self.target_version_number,
         )
 
         # Conectar las mismas señales
@@ -1716,9 +1778,25 @@ class Worker(QRunnable):
             )
             db_manager.update_task_status(db_task["id"], sg_status)
 
-            # Obtener la última versión para esta tarea
-            latest_version = db_manager.find_latest_version(db_task["id"])
-            if latest_version:
+            # Obtener versión target (Shift+Click) o fallback a la más reciente.
+            target_version = None
+            if self.target_version_number is not None:
+                target_version = db_manager.find_version_by_number(
+                    db_task["id"], int(self.target_version_number)
+                )
+                if target_version:
+                    debug_print(
+                        f"Worker: Usando versión target local v{target_version['version_number']} (ID: {target_version['id']})"
+                    )
+                else:
+                    debug_print(
+                        f"Worker: No se encontró versión target v{self.target_version_number} en DB local, fallback a latest"
+                    )
+
+            if not target_version:
+                target_version = db_manager.find_latest_version(db_task["id"])
+
+            if target_version:
                 # Decidir qué estado aplicar a la versión dependiendo del estado de la tarea
                 version_status = None
                 if sg_status in ["rev_di", "corr", "revcha"]:
@@ -1730,20 +1808,21 @@ class Worker(QRunnable):
 
                 if version_status:
                     debug_print(
-                        f"Worker: Actualizando estado de versión local (ID: {latest_version['id']}, version: {latest_version['version_number']}) a: {version_status}"
+                        f"Worker: Actualizando estado de versión local (ID: {target_version['id']}, "
+                        f"version: {target_version['version_number']}) a: {version_status}"
                     )
                     db_manager.update_version_status(
                         db_task["id"],
-                        latest_version["version_number"],
+                        target_version["version_number"],
                         version_status,
                     )
 
                 # Añadir nota si hay mensaje
                 if self.message:
                     debug_print(
-                        f"Worker: Añadiendo nota a versión local (ID: {latest_version['id']})"
+                        f"Worker: Añadiendo nota a versión local (ID: {target_version['id']})"
                     )
-                    db_manager.add_version_note(latest_version["id"], self.message)
+                    db_manager.add_version_note(target_version["id"], self.message)
 
         except Exception as e:
             debug_print(f"Worker: Error actualizando base de datos local: {e}")
@@ -2117,6 +2196,76 @@ def show_version_dialog(base_name, local_version, flow_version):
     return response == QMessageBox.Yes
 
 
+def show_flow_version_selection_dialog(base_name, versions):
+    """Selector modal de versión destino para Shift+Click."""
+    if not versions:
+        return None
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+
+    dialog = QDialog()
+    dialog.setWindowTitle("Seleccionar versión de Flow")
+    layout = QVBoxLayout(dialog)
+
+    title = QLabel(
+        f"Elegí la versión destino para <b>{base_name}</b><br/>"
+        f"<span style='color:#9a9a9a'>Shift+Click: la nota se enviará a esta versión.</span>"
+    )
+    title.setTextFormat(Qt.RichText)
+    layout.addWidget(title)
+
+    list_widget = QtWidgets.QListWidget(dialog)
+    list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+    for version in versions:
+        version_number = version.get("version_number")
+        if version_number is None:
+            continue
+        try:
+            version_number = int(version_number)
+        except Exception:
+            continue
+
+        version_label = version.get("version_label") or f"v{version_number:03d}"
+        user_name = version.get("user_name") or "Desconocido"
+        created_at = str(version.get("created_at") or "")
+        created_short = created_at.replace("T", " ")[:16] if created_at else ""
+        code = version.get("code") or ""
+
+        line = f"{version_label}  |  {user_name}"
+        if created_short:
+            line += f"  |  {created_short}"
+        if code:
+            line += f"  |  {code}"
+
+        item = QtWidgets.QListWidgetItem(line)
+        item.setData(Qt.UserRole, version_number)
+        list_widget.addItem(item)
+
+    if list_widget.count() > 0:
+        list_widget.setCurrentRow(0)
+    layout.addWidget(list_widget)
+
+    buttons_layout = QHBoxLayout()
+    cancel_button = QPushButton("Cancelar", dialog)
+    ok_button = QPushButton("OK", dialog)
+    cancel_button.clicked.connect(dialog.reject)
+    ok_button.clicked.connect(dialog.accept)
+    buttons_layout.addWidget(cancel_button)
+    buttons_layout.addWidget(ok_button)
+    layout.addLayout(buttons_layout)
+
+    dialog.resize(760, 380)
+    if dialog.exec_() != QDialog.Accepted:
+        return None
+
+    current_item = list_widget.currentItem()
+    if not current_item:
+        return None
+    return current_item.data(Qt.UserRole)
+
+
 def handle_results(info, sg_version_number, version_number):
     if sg_version_number > version_number:
         msg_manager.show_warning_message(info)
@@ -2151,7 +2300,12 @@ def handle_version_check_result(version_check_result, worker, update_callback):
 
 
 def Push_Task_Status(
-    button_name, base_name, update_callback=None, original_file_name=None, file_path=None
+    button_name,
+    base_name,
+    update_callback=None,
+    original_file_name=None,
+    file_path=None,
+    target_version_number=None,
 ):
     global msg_manager
     debug_print(
@@ -2175,7 +2329,10 @@ def Push_Task_Status(
 
     # PRIMERO: Verificar versiones del timeline ANTES de abrir el diálogo de notas
     sg_status = status_translation.get(button_name, None)
-    if sg_status in ["rev_di", "corr", "revleg", "revhld", "revcha", "revjua", "revjav"]:
+    if (
+        sg_status in ["rev_di", "corr", "revleg", "revhld", "revcha", "revjua", "revjav"]
+        and target_version_number is None
+    ):
         debug_print("=== Verificando versiones del timeline antes del push ===")
 
         # Obtener versiones del clip seleccionado
@@ -2327,6 +2484,7 @@ def Push_Task_Status(
             should_delete_images,
             original_file_name,
             file_path=file_path,
+            target_version_number=target_version_number,
         )
         # Conectar señales
         worker.signals.result_ready.connect(handle_results)
@@ -2339,7 +2497,16 @@ def Push_Task_Status(
             worker.signals.task_finished.connect(update_callback)
         QThreadPool.globalInstance().start(worker)
     else:
-        worker = Worker(button_name, base_name, None, [], False, original_file_name, file_path=file_path)
+        worker = Worker(
+            button_name,
+            base_name,
+            None,
+            [],
+            False,
+            original_file_name,
+            file_path=file_path,
+            target_version_number=target_version_number,
+        )
         worker.signals.result_ready.connect(handle_results)
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         worker.signals.resumen_output.connect(lambda: print_resumen())
@@ -2442,7 +2609,9 @@ def _describe_clip_for_log(clip):
         return f"<error describiendo clip: {e}>"
 
 
-def push_from_selected_clips(button_name, per_clip_callback=None):
+def push_from_selected_clips(
+    button_name, per_clip_callback=None, flow_target_version_mode=False
+):
     """
     Función principal que usa el método centralizado para obtener clips.
     Resuelve la task activa en el playhead mediante el selector compartido antes de
@@ -2454,6 +2623,8 @@ def push_from_selected_clips(button_name, per_clip_callback=None):
         per_clip_callback: Función opcional que se ejecuta después de cada push exitoso.
                           Recibe (clip, base_name, exr_name) como parámetros.
                           Se ejecuta SOLO cuando el push es exitoso (no se cancela).
+        flow_target_version_mode: Si True, activa el flujo Shift+Click para elegir
+                          versión destino en Flow (solo permitido con 1 clip).
 
     Returns:
         bool: True si se inició la operación exitosamente, False si se canceló o hubo error
@@ -2606,6 +2777,99 @@ def push_from_selected_clips(button_name, per_clip_callback=None):
     for idx, (clip, _fp, _en) in enumerate(valid_clips, start=1):
         debug_print(f"  [final {idx}] {_describe_clip_for_log(clip)}")
 
+    # Determinar si el estado requiere comentario.
+    sg_status = status_translation.get(button_name, None)
+    note_capable_statuses = [
+        "rev_di",
+        "corr",
+        "revleg",
+        "revhld",
+        "revcha",
+        "revjua",
+        "revjav",
+    ]
+    needs_message = sg_status in note_capable_statuses
+
+    def create_clip_callback(current_clip, current_base_name, current_exr_name):
+        """Crea un callback que ejecuta per_clip_callback si existe."""
+        def callback_wrapper(success):
+            if success and per_clip_callback:
+                try:
+                    per_clip_callback(current_clip, current_base_name, current_exr_name)
+                except Exception as e:
+                    debug_print(f"Error ejecutando per_clip_callback: {e}")
+        return callback_wrapper
+
+    # Shift+Click: elegir versión destino en Flow en background (solo 1 clip).
+    if flow_target_version_mode:
+        if not needs_message:
+            debug_print(
+                f"Shift+Click ignorado para estado '{button_name}' (no requiere comentario); se usa flujo normal."
+            )
+        elif len(valid_clips) != 1:
+            QMessageBox.warning(
+                None,
+                "Shift+Click - Selección inválida",
+                "Shift+Click para elegir versión de Flow solo admite 1 clip seleccionado.",
+            )
+            return False
+        else:
+            clip, file_path, exr_name = valid_clips[0]
+            exr_name_processed = exr_name.replace(".%", "_%")
+            base_name = clean_base_name(exr_name_processed)
+            clip_callback = create_clip_callback(clip, base_name, exr_name)
+
+            loader_worker = LoadFlowVersionsWorker(
+                base_name, exr_name, file_path=file_path
+            )
+            _ACTIVE_FLOW_VERSION_LOAD_WORKERS.append(loader_worker)
+
+            def _cleanup_loader():
+                if loader_worker in _ACTIVE_FLOW_VERSION_LOAD_WORKERS:
+                    _ACTIVE_FLOW_VERSION_LOAD_WORKERS.remove(loader_worker)
+
+            def _on_versions_loaded(versions):
+                _cleanup_loader()
+                if not versions:
+                    QMessageBox.warning(
+                        None,
+                        "Shift+Click - Sin versiones",
+                        "No se encontraron versiones en Flow para esta task.",
+                    )
+                    return
+
+                selected_version = show_flow_version_selection_dialog(base_name, versions)
+                if selected_version is None:
+                    debug_print("Shift+Click cancelado por el usuario en selector de versión.")
+                    return
+
+                result = Push_Task_Status(
+                    button_name,
+                    base_name,
+                    clip_callback,
+                    exr_name,
+                    file_path=file_path,
+                    target_version_number=selected_version,
+                )
+                if not result:
+                    debug_print("Shift+Click: push no iniciado después de seleccionar versión.")
+
+            def _on_versions_error(error_text):
+                _cleanup_loader()
+                QMessageBox.warning(
+                    None,
+                    "Shift+Click - Error",
+                    f"No se pudieron listar versiones de Flow:\n{error_text}",
+                )
+
+            loader_worker.signals.loaded.connect(_on_versions_loaded)
+            loader_worker.signals.error.connect(_on_versions_error)
+            QThreadPool.globalInstance().start(loader_worker)
+            debug_print(
+                f"Shift+Click iniciado en background para '{base_name}' (estado '{button_name}')"
+            )
+            return True
+
     # Confirmar si hay más de 4 clips (igual que en el panel)
     if len(valid_clips) > 4:
         msg = QMessageBox()
@@ -2619,10 +2883,6 @@ def push_from_selected_clips(button_name, per_clip_callback=None):
         if result != QMessageBox.Yes:
             debug_print("Usuario canceló la operación (más de 4 clips)")
             return False
-
-    # Determinar si necesitamos pedir un mensaje al usuario
-    sg_status = status_translation.get(button_name, None)
-    needs_message = sg_status in ["rev_di", "corr", "revleg", "revhld", "revcha", "revjua", "revjav"]
 
     # Para múltiples clips con mensaje, usar un mensaje compartido
     shared_message = None
@@ -2698,21 +2958,6 @@ def push_from_selected_clips(button_name, per_clip_callback=None):
             base_name = clean_base_name(exr_name_processed)
 
             debug_print(f"Procesando clip: {base_name}")
-
-            # Definir callback para este clip específico
-            def create_clip_callback(current_clip, current_base_name, current_exr_name):
-                """Crea un callback que ejecuta per_clip_callback si existe"""
-
-                def callback_wrapper(success):
-                    if success and per_clip_callback:
-                        try:
-                            per_clip_callback(
-                                current_clip, current_base_name, current_exr_name
-                            )
-                        except Exception as e:
-                            debug_print(f"Error ejecutando per_clip_callback: {e}")
-
-                return callback_wrapper
 
             # Llamar a Push_Task_Status para cada clip
             # Si es un solo clip con mensaje, usar el diálogo completo (con imágenes)

@@ -350,6 +350,69 @@ class ShotGridManager:
         )
         return None, None, None
 
+    def list_versions_for_task(self, shot_id, task_name="comp"):
+        """
+        Lista versiones de un shot filtradas por task, incluyendo uploader y fecha.
+        Útil para selector de versión destino en Shift+Click.
+        """
+        if not self.sg:
+            debug_print("ShotGrid no inicializado")
+            return []
+
+        filters = [["entity", "is", {"type": "Shot", "id": shot_id}]]
+        fields = ["id", "code", "created_at", "user", "sg_status_list", "description"]
+        try:
+            versions = self.sg.find("Version", filters, fields)
+        except Exception as e:
+            debug_print(f"Error listando versiones para shot_id {shot_id}: {e}")
+            return []
+
+        task_tokens = [f"_{task_name}_"]
+        if task_name == "comp":
+            task_tokens.append("_cmp_")
+        for alias, canonical in TASK_NAME_ALIASES.items():
+            if canonical == task_name:
+                task_tokens.append(f"_{alias}_")
+
+        version_pattern = re.compile(r"_v(\d+)", re.IGNORECASE)
+        out = []
+        for version in versions:
+            code = version.get("code") or ""
+            code_lower = code.lower()
+            if not any(token in code_lower for token in task_tokens):
+                continue
+
+            match = version_pattern.search(code)
+            if not match:
+                continue
+
+            version_number = int(match.group(1))
+            created_at = version.get("created_at")
+            if hasattr(created_at, "isoformat"):
+                created_at = created_at.isoformat()
+            user_name = (
+                version.get("user", {}).get("name")
+                if isinstance(version.get("user"), dict)
+                else ""
+            )
+
+            out.append(
+                {
+                    "id": version.get("id"),
+                    "code": code,
+                    "version_number": version_number,
+                    "version_label": f"v{version_number:03d}",
+                    "user_name": user_name or "Desconocido",
+                    "created_at": created_at or "",
+                }
+            )
+
+        out.sort(key=lambda item: item.get("version_number", -1), reverse=True)
+        debug_print(
+            f"list_versions_for_task: shot_id={shot_id}, task={task_name}, versiones={len(out)}"
+        )
+        return out
+
     def update_task_status(self, task_id, new_status):
         if not self.sg:
             debug_print("ShotGrid no inicializado")
@@ -384,21 +447,30 @@ class ShotGridManager:
         except Exception as e:
             debug_print(f"Error al actualizar el estado de la version: {e}")
 
-    def get_task_assignee(self, task_id):
+    def get_task_assignees(self, task_id):
         if not self.sg:
             debug_print("ShotGrid no inicializado")
-            return None
+            return []
         try:
             task = self.sg.find_one("Task", [["id", "is", task_id]], ["task_assignees"])
-            if task and task["task_assignees"]:
-                return task["task_assignees"][0]["id"]
-            return None
+            assignee_ids = []
+            if task and task.get("task_assignees"):
+                for assignee in task["task_assignees"]:
+                    assignee_id = assignee.get("id")
+                    if assignee_id and assignee_id not in assignee_ids:
+                        assignee_ids.append(assignee_id)
+            return assignee_ids
         except Exception as e:
-            debug_print(f"Error al obtener el asignado de la tarea: {e}")
-            return None
+            debug_print(f"Error al obtener los asignados de la tarea: {e}")
+            return []
+
+    def get_task_assignee(self, task_id):
+        # Compatibilidad con callers legacy.
+        assignees = self.get_task_assignees(task_id)
+        return assignees[0] if assignees else None
 
     def add_comment_to_version(
-        self, version_id, project_id, comment, user_id, task_assignee_id, shot_id=None
+        self, version_id, project_id, comment, user_id, task_assignee_ids=None, shot_id=None
     ):
         if not self.sg:
             debug_print("ShotGrid no inicializado")
@@ -407,16 +479,23 @@ class ShotGridManager:
             debug_print(
                 f"Agregando comentario a la version (ID: {version_id}): {comment}"
             )
-            addressings_to = [{"type": "HumanUser", "id": user_id}]
-            if task_assignee_id and task_assignee_id != user_id:
-                addressings_to.append({"type": "HumanUser", "id": task_assignee_id})
+            recipient_ids = []
+            if user_id:
+                recipient_ids.append(user_id)
+
+            for assignee_id in task_assignee_ids or []:
+                if assignee_id and assignee_id not in recipient_ids:
+                    recipient_ids.append(assignee_id)
+
+            addressings_to = [{"type": "HumanUser", "id": rid} for rid in recipient_ids]
+            note_links = [{"type": "Version", "id": version_id}]
+            if shot_id:
+                note_links.append({"type": "Shot", "id": shot_id})
+
             note_data = {
                 "project": {"type": "Project", "id": project_id},
                 "content": comment,
-                "note_links": [
-                    {"type": "Version", "id": version_id},
-                    {"type": "Shot", "id": shot_id},
-                ],
+                "note_links": note_links,
                 "addressings_to": addressings_to,
             }
             created_note = self.sg.create("Note", note_data)
@@ -614,7 +693,14 @@ class ShotGridManager:
 
 
 def execute_full_push_operation(
-    sg_manager, button_name, base_name, message, review_images, original_file_name=None, file_path=None
+    sg_manager,
+    button_name,
+    base_name,
+    message,
+    review_images,
+    original_file_name=None,
+    file_path=None,
+    target_version_number=None,
 ):
     """
     Ejecuta todo el proceso de push en una sola operación para mayor eficiencia
@@ -713,9 +799,15 @@ def execute_full_push_operation(
             return {"success": False, "error": error_msg}
 
         version_number = int(version_number_str.replace("v", ""))
+        requested_version_number = (
+            int(target_version_number)
+            if target_version_number is not None
+            else version_number
+        )
 
         debug_print(
-            f"Proyecto: {project_name}, Shot: {shot_code}, Task: {task_name}, Version: {version_number}"
+            f"Proyecto: {project_name}, Shot: {shot_code}, Task: {task_name}, "
+            f"Version clip: {version_number}, Version objetivo: {requested_version_number}"
         )
 
         # Buscar proyecto, shot y tareas
@@ -732,50 +824,83 @@ def execute_full_push_operation(
             }
 
         task_id = None
-        task_assignee_id = None
+        task_assignee_ids = []
 
         for task in tasks:
             if task["content"].lower() == task_name:
-                debug_print(f"Actualizando tarea: {task['content']} (ID: {task['id']})")
-                sg_manager.update_task_status(task["id"], sg_status)
                 task_id = task["id"]
-                task_assignee_id = sg_manager.get_task_assignee(task_id)
+                task_assignee_ids = sg_manager.get_task_assignees(task_id)
                 break
 
         if not task_id:
             return {"success": False, "error": f"No se encontró la tarea {task_name}"}
 
-        # Buscar versión específica correspondiente al clip actual para agregar comentarios
+        # Buscar versión objetivo explícita (Shift+Click) o la del clip actual.
         sg_specific_version, sg_version_number_str, user_id = (
-            sg_manager.find_specific_version_for_shot(shot["id"], version_number, task_name)
+            sg_manager.find_specific_version_for_shot(
+                shot["id"], requested_version_number, task_name
+            )
         )
 
-        # Si no se encuentra la versión específica, intentar con la más alta como fallback
+        # En modo Shift+Click (target_version_number), NO fallback silencioso.
+        if target_version_number is not None and not sg_specific_version:
+            return {
+                "success": False,
+                "error": (
+                    f"No se encontró la versión objetivo v{requested_version_number:03d} "
+                    f"para la task '{task_name}'"
+                ),
+            }
+
+        # Si no hay versión específica y no se pidió target explícito, fallback a la más alta.
         if not sg_specific_version:
             debug_print(
-                f"No se encontró versión específica v{version_number:02d} para task '{task_name}', usando versión más alta como fallback"
+                f"No se encontró versión específica v{requested_version_number:02d} "
+                f"para task '{task_name}', usando versión más alta como fallback"
             )
             sg_specific_version, sg_version_number_str, user_id = (
                 sg_manager.find_highest_version_for_shot(shot["id"], task_name)
             )
 
+        if not sg_specific_version:
+            return {
+                "success": False,
+                "error": (
+                    f"No se encontró ninguna versión en Flow para shot {shot_code} "
+                    f"y task {task_name}"
+                ),
+            }
+
+        debug_print(f"Actualizando tarea: {task_name} (ID: {task_id})")
+        sg_manager.update_task_status(task_id, sg_status)
+
+        effective_version_number = requested_version_number
+        try:
+            if sg_version_number_str:
+                effective_version_number = int(str(sg_version_number_str))
+        except Exception:
+            pass
+
+        target_version_label = f"v{effective_version_number:03d}"
+
         if sg_status in ["rev_di", "corr", "revleg", "revcha", "revjua", "revjav"]:
             debug_print(f"Actualizando versión a vwd")
             sg_manager.update_version_status(
-                project_name, shot_code, version_number_str, "vwd"
+                project_name, shot_code, target_version_label, "vwd"
             )
 
             # Agregar comentario si hay mensaje - usar la versión específica, no la más alta
             if message and sg_specific_version:
                 debug_print(
-                    f"Agregando comentario a versión específica {sg_specific_version['id']} (v{version_number:02d})"
+                    f"Agregando comentario a versión específica {sg_specific_version['id']} "
+                    f"(v{requested_version_number:02d})"
                 )
                 created_note = sg_manager.add_comment_to_version(
                     sg_specific_version["id"],
                     project["id"],
                     message,
                     user_id,
-                    task_assignee_id,
+                    task_assignee_ids,
                     shot["id"],
                 )
 
@@ -835,13 +960,13 @@ def execute_full_push_operation(
         elif sg_status == "rev_su":
             debug_print(f"Actualizando versión a rev")
             sg_manager.update_version_status(
-                project_name, shot_code, version_number_str, "rev"
+                project_name, shot_code, target_version_label, "rev"
             )
 
         elif sg_status == "revleg":
             debug_print(f"Actualizando versión a unvleg")
             sg_manager.update_version_status(
-                project_name, shot_code, version_number_str, "unvleg"
+                project_name, shot_code, target_version_label, "unvleg"
             )
 
         debug_print("execute_full_push: Push completado exitosamente")
@@ -947,10 +1072,13 @@ def execute_flow_operation(operation, **kwargs):
             project_id = kwargs.get("project_id")
             comment = kwargs.get("comment")
             user_id = kwargs.get("user_id")
-            task_assignee_id = kwargs.get("task_assignee_id")
+            task_assignee_ids = kwargs.get("task_assignee_ids")
+            if task_assignee_ids is None:
+                legacy_assignee_id = kwargs.get("task_assignee_id")
+                task_assignee_ids = [legacy_assignee_id] if legacy_assignee_id else []
             shot_id = kwargs.get("shot_id")
             note = sg_manager.add_comment_to_version(
-                version_id, project_id, comment, user_id, task_assignee_id, shot_id
+                version_id, project_id, comment, user_id, task_assignee_ids, shot_id
             )
 
             # Convertir objetos datetime a strings para JSON serialization
@@ -969,6 +1097,46 @@ def execute_flow_operation(operation, **kwargs):
             success = sg_manager.attach_images_to_note(note_id, version_id, image_paths)
             return {"success": success}
 
+        elif operation == "list_versions_for_task":
+            base_name = kwargs.get("base_name", "")
+            original_file_name = kwargs.get("original_file_name")
+            file_path_lv = kwargs.get("file_path")
+
+            base_name_for_detection = base_name
+            if original_file_name:
+                version_match = re.search(r"_v(\d+)", original_file_name)
+                if version_match and not any(
+                    part.startswith("v") and part[1:].isdigit()
+                    for part in base_name.split("_")
+                ):
+                    base_name_for_detection = f"{base_name}{version_match.group(0)}"
+
+            project_name = extract_project_name_from_path(file_path_lv)
+            if not project_name:
+                project_name = extract_project_name(base_name_for_detection)
+            shot_code = extract_shot_code(base_name_for_detection)
+
+            extracted_task = extract_task_name(base_name_for_detection or base_name)
+            task_name = normalize_task_name(extracted_task) if extracted_task else "comp"
+
+            project, shot, _ = sg_manager.find_shot_and_tasks(project_name, shot_code)
+            if not shot:
+                return {
+                    "success": False,
+                    "error": (
+                        f"No se encontró el shot {shot_code} en proyecto {project_name}"
+                    ),
+                }
+
+            versions = sg_manager.list_versions_for_task(shot["id"], task_name)
+            return {
+                "success": True,
+                "versions": versions,
+                "task_name": task_name,
+                "shot_id": shot["id"],
+                "project_id": project["id"] if project else None,
+            }
+
         elif operation == "execute_full_push":
             # Operación optimizada que hace todo el push de una vez
             button_name = kwargs.get("button_name")
@@ -977,6 +1145,7 @@ def execute_flow_operation(operation, **kwargs):
             review_images = kwargs.get("review_images", [])
             original_file_name = kwargs.get("original_file_name")
             file_path = kwargs.get("file_path")
+            target_version_number = kwargs.get("target_version_number")
 
             return execute_full_push_operation(
                 sg_manager,
@@ -986,6 +1155,7 @@ def execute_flow_operation(operation, **kwargs):
                 review_images,
                 original_file_name,
                 file_path=file_path,
+                target_version_number=target_version_number,
             )
 
         elif operation == "check_version":
