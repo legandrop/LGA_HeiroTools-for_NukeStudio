@@ -1,12 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.46 | Lega
+  LGA_NKS_Flow_Pull v3.47 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.47: Fix del calculo del alto de la ventana de resultados del Pull. El alto se
+         sobreestimaba (sumaba +4 px por fila) y siempre sobraba espacio vacio abajo.
+         Ahora el alto = header + suma real de filas + frame + margenes del layout.
+         Se agregaron logs "[WindowSize]" al debugPy_FlowPull.log para diagnosticar.
   v3.46: El Pull distingue "DB vacia/sin sincronizar" de "no hay cambios". Si la DB de
          PipeSync no tiene proyectos (tipico en modo client sin Flow sincronizado) avisa
          claramente con un warning en vez de mostrar "No changes detected". Tambien, si
@@ -708,13 +712,40 @@ class GUI_Table(QWidget):
         screen_rect = screen.availableGeometry()
         max_width = screen_rect.width() * 0.8
         final_width = min(width, max_width)
-        height = self.table.horizontalHeader().height() + 20
+
+        # --- Calculo del alto ---
+        # El alto exacto del contenido de la tabla es:
+        #   header + suma de las filas + el borde (frame) de la tabla.
+        # A eso se le suman los margenes verticales del layout que contiene la tabla.
+        # Antes se sumaba un +20 fijo y +4 por fila: ese +4 por fila se acumulaba y
+        # sobreestimaba el alto (mas notorio cuantas mas filas), dejando espacio
+        # vacio abajo. Buscar "[WindowSize]" en el .log para diagnosticar el calculo.
+        header_height = self.table.horizontalHeader().height()
+        frame = self.table.frameWidth() * 2
+        rows_height = 0
         for i in range(self.table.rowCount()):
-            height += self.table.rowHeight(i) + 4
+            rows_height += self.table.rowHeight(i)
+        margins = self.layout().getContentsMargins()  # (left, top, right, bottom)
+        layout_vmargins = margins[1] + margins[3]
+        content_height = header_height + rows_height + frame
+        height = content_height + layout_vmargins
         max_height = screen_rect.height() * 0.8
         final_height = min(height, max_height)
+
+        debug_print(
+            f"[WindowSize] rows={self.table.rowCount()} header_h={header_height} "
+            f"rows_h={rows_height} frame={frame} layout_vmargins={layout_vmargins} "
+            f"content_h={content_height} height_calc={height} "
+            f"max_height={int(max_height)} final_height={int(final_height)}"
+        )
+
         self.table.horizontalHeader().setStretchLastSection(True)
-        self.resize(final_width, final_height)
+        self.resize(int(final_width), int(final_height))
+        debug_print(
+            f"[WindowSize] resize solicitado=({int(final_width)}, {int(final_height)}) "
+            f"-> ventana_real={self.width()}x{self.height()} "
+            f"tabla_real={self.table.height()} viewport={self.table.viewport().height()}"
+        )
         self.move(
             (screen_rect.width() - final_width) // 2,
             (screen_rect.height() - final_height) // 2,
