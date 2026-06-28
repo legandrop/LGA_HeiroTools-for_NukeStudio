@@ -1,12 +1,21 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.47 | Lega
+  LGA_NKS_Flow_Pull v3.48 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.48: La ventana de resultados suma un titulo arriba a la izquierda (ProjectName /
+         SeqNumber, con los mismos colores que el header de Import Shot) y un checkbox
+         "Keep this window on top" abajo (arranca prendido por defecto y persiste en
+         %APPDATA%/LGA/HieroTools/FlowPull.ini). El "always on top" se togglea con Win32
+         SetWindowPos (HWND_TOPMOST/HWND_NOTOPMOST) en vez de setWindowFlags: este ultimo
+         destruye y recrea la ventana nativa, y ESE recreate es el parpadeo (ademas
+         minimizaba). SetWindowPos solo cambia el z-order, sin recrear -> cero parpadeo.
+         GUI_Table pasa a QDialog. El recalculo de tamano contempla titulo, checkbox y
+         gaps/margenes.
   v3.47: Fix del calculo del alto de la ventana de resultados del Pull. El alto se
          sobreestimaba (sumaba +4 px por fila) y siempre sobraba espacio vacio abajo.
          Ahora el alto = header + suma real de filas + frame + margenes del layout.
@@ -55,6 +64,7 @@ import os
 import re
 import sys
 import time
+import configparser
 import nuke
 import logging  # Agregar esta importación
 import queue
@@ -587,15 +597,92 @@ class ShotGridManager:
             self.conn.close()
 
 
-class GUI_Table(QWidget):
+# ── Persistencia del "Keep this window on top" ────────────────────────────────
+# Mismo enfoque que la Transcode Queue del Import Shot: se guarda el estado del
+# checkbox en un INI bajo %APPDATA%/LGA/HieroTools, para que persista entre
+# ejecuciones. Seccion propia para no pisar settings de otros tools.
+_FLOWPULL_CONFIG_DIR_NAME = "LGA"
+_FLOWPULL_CONFIG_SUBDIR_NAME = "HieroTools"
+_FLOWPULL_CONFIG_FILE_NAME = "FlowPull.ini"
+_FLOWPULL_SECTION = "FlowPullWindow"
+
+# Colores del titulo (mismos que el header de Import Shot: seq=cyan / shot=magenta).
+# Aca: ProjectName usa el cyan y SeqNumber usa el magenta.
+_TITLE_PROJECT_COLOR = "#6AB5CA"
+_TITLE_SEP_COLOR = "#888888"
+_TITLE_SEQ_COLOR = "#B56AB5"
+
+
+def _escape_html(text):
+    return (
+        str(text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _flowpull_user_config_root():
+    if sys.platform.startswith("win"):
+        v = os.getenv("APPDATA")
+        if v:
+            return v
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Application Support")
+    return os.path.expanduser("~/.config")
+
+
+def _flowpull_settings_path():
+    return Path(_flowpull_user_config_root()) / _FLOWPULL_CONFIG_DIR_NAME \
+        / _FLOWPULL_CONFIG_SUBDIR_NAME / _FLOWPULL_CONFIG_FILE_NAME
+
+
+def _load_keep_on_top():
+    try:
+        cfg = configparser.ConfigParser()
+        p = _flowpull_settings_path()
+        if p.exists():
+            cfg.read(str(p), encoding="utf-8")
+        # Por defecto prendido si todavia no existe el setting.
+        return cfg.getboolean(_FLOWPULL_SECTION, "keep_on_top", fallback=True)
+    except Exception as e:
+        debug_print(f"[WindowSize] No se pudo leer keep_on_top: {e}")
+        return True
+
+
+def _save_keep_on_top(value):
+    try:
+        p = _flowpull_settings_path()
+        cfg = configparser.ConfigParser()
+        if p.exists():
+            cfg.read(str(p), encoding="utf-8")
+        if not cfg.has_section(_FLOWPULL_SECTION):
+            cfg.add_section(_FLOWPULL_SECTION)
+        cfg.set(_FLOWPULL_SECTION, "keep_on_top", "true" if value else "false")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(p), "w", encoding="utf-8") as fh:
+            cfg.write(fh)
+    except Exception as e:
+        debug_print(f"[WindowSize] No se pudo guardar keep_on_top: {e}")
+
+
+class GUI_Table(QtWidgets.QDialog):
     def __init__(self, sg_manager, parent=None):
         super(GUI_Table, self).__init__(parent)
+        # Igual que la Transcode Queue del Import Shot: QDialog no modal. Esto evita
+        # el parpadeo/minimizado al re-aplicar window flags que sufre un QWidget pelado.
+        self.setModal(False)
         self.sg_manager = sg_manager
         self.row_background_colors = (
             []
         )  # Lista para almacenar listas de colores de fondo por fila
         self.row_navigation_data = []
         self.hiero_ops = None
+        # Datos para el titulo (ProjectName / SeqNumber). Se completan al procesar.
+        self.detected_project_name = ""
+        self.detected_seq_name = ""
+        # Estado del "Keep this window on top" (persistido en INI)
+        self._keep_on_top = _load_keep_on_top()
         self.initUI()
         self.last_selected_index = (
             None  # Guardar el indice de la ultima fila seleccionada
@@ -616,8 +703,16 @@ class GUI_Table(QWidget):
                 self.table, self.sg_manager
             )
             if changes_exist:
+                self.update_title()
                 self.adjust_window_size()
                 self.show()
+                # Estado inicial de "always on top" via Win32. Se difiere con
+                # singleShot(0) para que corra DESPUES de que Qt termine de procesar
+                # el show (si no, Qt reposiciona la ventana y pisa el topmost).
+                if sys.platform.startswith("win"):
+                    QtCore.QTimer.singleShot(
+                        0, lambda: self._set_topmost_native(self._keep_on_top)
+                    )
             elif (
                 self.hiero_ops.shots_found_in_db == 0
                 and self.hiero_ops.shots_not_found > 0
@@ -659,6 +754,18 @@ class GUI_Table(QWidget):
     def initUI(self):
         self.setWindowTitle("Read Nodes EXR Info")
         layout = QVBoxLayout(self)
+
+        # Titulo arriba de la tabla, alineado a la izquierda:
+        #   ProjectName (cyan) / SeqNumber (magenta), mismos colores que Import Shot.
+        self.title_label = QtWidgets.QLabel("")
+        self.title_label.setTextFormat(Qt.RichText)
+        self.title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.title_label.setStyleSheet(
+            "QLabel { background: transparent; font-size:14px; font-weight:bold; "
+            "padding:0 4px 4px 4px; }"
+        )
+        layout.addWidget(self.title_label)
+
         self.table = QTableWidget(0, 7, self)
         self.table.setHorizontalHeaderLabels(
             [
@@ -689,10 +796,124 @@ class GUI_Table(QWidget):
         delegate = ColorMixDelegate(self.table, self.row_background_colors)
         self.table.setItemDelegate(delegate)
         layout.addWidget(self.table)
+
+        # Fila inferior: checkbox "Keep this window on top" (mismo comportamiento
+        # que la Transcode Queue del Import Shot: evita parpadeos al re-aplicar flags).
+        bottom_row = QtWidgets.QHBoxLayout()
+        bottom_row.addStretch(1)
+        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
+        self.keep_on_top_chk.setChecked(bool(self._keep_on_top))
+        self.keep_on_top_chk.stateChanged.connect(
+            lambda _state: self._set_keep_on_top(self.keep_on_top_chk.isChecked())
+        )
+        bottom_row.addWidget(self.keep_on_top_chk)
+        layout.addLayout(bottom_row)
+
         self.setLayout(layout)
         font = QFont()
         font.setBold(True)
         self.table.horizontalHeader().setFont(font)
+
+        # Aplicar flags iniciales segun el estado persistido (sin re-mostrar todavia).
+        self._apply_window_flags(initial=True)
+
+    def update_title(self):
+        """Setea el titulo ProjectName / SeqNumber con los colores del Import Shot."""
+        project = _escape_html(self.detected_project_name) or "?"
+        seq = _escape_html(self.detected_seq_name) or "?"
+        self.title_label.setText(
+            "<span style='color:%s;'>%s</span>"
+            " <span style='color:%s;'>/</span> "
+            "<span style='color:%s;'>%s</span>"
+            % (_TITLE_PROJECT_COLOR, project, _TITLE_SEP_COLOR, _TITLE_SEQ_COLOR, seq)
+        )
+
+    def _apply_window_flags(self, initial=False):
+        """Define los window flags. Solo se usa para el estado INICIAL (antes del
+        primer show), donde setear WindowStaysOnTopHint no produce parpadeo porque
+        la ventana todavia no es visible. El TOGGLE en caliente NO pasa por aca:
+        usa _set_topmost_native (SetWindowPos) que no recrea la ventana."""
+        flags = Qt.Window
+        flags |= Qt.WindowMinimizeButtonHint
+        flags |= Qt.WindowCloseButtonHint
+        # En Windows el "always on top" lo maneja SetWindowPos (sin parpadeo), por eso
+        # NO se hornea en los flags. En otras plataformas si, como fallback.
+        if self._keep_on_top and not sys.platform.startswith("win"):
+            flags |= Qt.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        if not initial:
+            self.show()
+            self.raise_()
+
+    def _set_topmost_native(self, on):
+        """Activa/desactiva 'always on top' via Win32 SetWindowPos.
+
+        setWindowFlags(WindowStaysOnTopHint) destruye y recrea la ventana nativa
+        (ese recreate ES el parpadeo). SetWindowPos con HWND_TOPMOST/HWND_NOTOPMOST
+        cambia solo el z-order, sin recrear nada -> cero parpadeo, no minimiza ni
+        salta de posicion. Solo Windows.
+
+        IMPORTANTE: hay que declarar argtypes. Sin eso, ctypes asume int de 32 bits
+        y TRUNCA el HWND de 64 bits (winId), por lo que SetWindowPos apunta a un
+        handle invalido y la ventana no se queda on top.
+        """
+        try:
+            user32 = ctypes.windll.user32
+            SetWindowPos = user32.SetWindowPos
+            SetWindowPos.restype = ctypes.wintypes.BOOL
+            SetWindowPos.argtypes = [
+                ctypes.wintypes.HWND,  # hWnd
+                ctypes.wintypes.HWND,  # hWndInsertAfter
+                ctypes.c_int,          # X
+                ctypes.c_int,          # Y
+                ctypes.c_int,          # cx
+                ctypes.c_int,          # cy
+                ctypes.wintypes.UINT,  # uFlags
+            ]
+            HWND_TOPMOST = ctypes.wintypes.HWND(-1)
+            HWND_NOTOPMOST = ctypes.wintypes.HWND(-2)
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOACTIVATE = 0x0010
+            hwnd = int(self.winId())
+            ok = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST if on else HWND_NOTOPMOST,
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )
+            err = 0 if ok else ctypes.get_last_error()
+            debug_print(
+                f"[WindowSize] SetWindowPos topmost={on} hwnd={hwnd} ok={bool(ok)} err={err}"
+            )
+            return bool(ok)
+        except Exception as e:
+            debug_print(f"[WindowSize] SetWindowPos fallo: {e}")
+            return False
+
+    def _set_keep_on_top(self, value, save=True):
+        value = bool(value)
+        if self._keep_on_top == value:
+            if save:
+                _save_keep_on_top(value)
+            return
+        self._keep_on_top = value
+        if self.keep_on_top_chk.isChecked() != value:
+            self.keep_on_top_chk.blockSignals(True)
+            self.keep_on_top_chk.setChecked(value)
+            self.keep_on_top_chk.blockSignals(False)
+        if save:
+            _save_keep_on_top(value)
+        # Toggle en caliente: usar SetWindowPos (sin recrear la ventana -> sin
+        # parpadeo). Fallback a setWindowFlags solo si no es Windows o falla.
+        applied = False
+        if sys.platform.startswith("win"):
+            applied = self._set_topmost_native(value)
+        if not applied:
+            geom = self.geometry()
+            self._apply_window_flags(initial=False)
+            self.setGeometry(geom)
+        debug_print(f"[WindowSize] keep_on_top={self._keep_on_top} (native={applied})")
 
     def mix_colors(self, original_color, mix_color=(88, 88, 88)):
         """Mezcla dos colores RGB."""
@@ -708,6 +929,22 @@ class GUI_Table(QWidget):
         width = self.table.verticalHeader().width() - 30
         for i in range(self.table.columnCount()):
             width += self.table.columnWidth(i) + 20
+
+        layout = self.layout()
+        margins = layout.getContentsMargins()  # (left, top, right, bottom)
+        layout_hmargins = margins[0] + margins[2]
+        layout_vmargins = margins[1] + margins[3]
+        spacing = layout.spacing() if layout.spacing() > 0 else 0
+        # Gaps entre los items del layout (titulo, tabla, fila del checkbox).
+        gaps = max(0, layout.count() - 1) * spacing
+
+        # El titulo y el checkbox pueden ser mas anchos que la tabla: el ancho
+        # final debe contemplarlos para que no queden recortados.
+        title_w = self.title_label.sizeHint().width()
+        bottom_w = self.keep_on_top_chk.sizeHint().width()
+        min_content_w = max(title_w, bottom_w) + layout_hmargins
+        width = max(width, min_content_w)
+
         screen = QApplication.primaryScreen()
         screen_rect = screen.availableGeometry()
         max_width = screen_rect.width() * 0.8
@@ -716,7 +953,8 @@ class GUI_Table(QWidget):
         # --- Calculo del alto ---
         # El alto exacto del contenido de la tabla es:
         #   header + suma de las filas + el borde (frame) de la tabla.
-        # A eso se le suman los margenes verticales del layout que contiene la tabla.
+        # A eso se le suman: el titulo, la fila del checkbox, los gaps del layout
+        # y los margenes verticales del layout que contiene todo.
         # Antes se sumaba un +20 fijo y +4 por fila: ese +4 por fila se acumulaba y
         # sobreestimaba el alto (mas notorio cuantas mas filas), dejando espacio
         # vacio abajo. Buscar "[WindowSize]" en el .log para diagnosticar el calculo.
@@ -725,16 +963,17 @@ class GUI_Table(QWidget):
         rows_height = 0
         for i in range(self.table.rowCount()):
             rows_height += self.table.rowHeight(i)
-        margins = self.layout().getContentsMargins()  # (left, top, right, bottom)
-        layout_vmargins = margins[1] + margins[3]
+        title_h = self.title_label.sizeHint().height()
+        bottom_h = self.keep_on_top_chk.sizeHint().height()
         content_height = header_height + rows_height + frame
-        height = content_height + layout_vmargins
+        height = content_height + title_h + bottom_h + gaps + layout_vmargins
         max_height = screen_rect.height() * 0.8
         final_height = min(height, max_height)
 
         debug_print(
             f"[WindowSize] rows={self.table.rowCount()} header_h={header_height} "
-            f"rows_h={rows_height} frame={frame} layout_vmargins={layout_vmargins} "
+            f"rows_h={rows_height} frame={frame} title_h={title_h} "
+            f"bottom_h={bottom_h} gaps={gaps} layout_vmargins={layout_vmargins} "
             f"content_h={content_height} height_calc={height} "
             f"max_height={int(max_height)} final_height={int(final_height)}"
         )
@@ -1043,6 +1282,11 @@ class HieroOperations:
         seq = hiero.ui.activeSequence()
         changes_made = False
         if seq:
+            # Guardar el nombre de la secuencia (SeqNumber) para el titulo de la ventana.
+            try:
+                self.gui_table.detected_seq_name = seq.name() or ""
+            except Exception:
+                self.gui_table.detected_seq_name = ""
             te = hiero.ui.getTimelineEditor(seq)
             selected_clips = te.selection()
 
@@ -1152,6 +1396,10 @@ class HieroOperations:
                         else:
                             project_name = extract_project_name(base_name)
                             debug_print(f"Project name (from filename fallback): {project_name}")
+
+                        # Guardar el primer project_name detectado para el titulo de la ventana.
+                        if project_name and not self.gui_table.detected_project_name:
+                            self.gui_table.detected_project_name = project_name
 
                         shot_code = extract_shot_code(base_name)
                         debug_print(f"Shot code: {shot_code}")
