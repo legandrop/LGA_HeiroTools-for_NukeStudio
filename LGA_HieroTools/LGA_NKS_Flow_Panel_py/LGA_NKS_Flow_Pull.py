@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.48 | Lega
+  LGA_NKS_Flow_Pull v3.49 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.49: Al hacer click en una fila de resultados, el In/Out se toma primero del clip
+         correspondiente en el track EditRef usando la misma logica de ViewerTL
+         Prev/Next Rev. Si no hay match en EditRef, usa el clip de la fila como fallback.
   v3.48: La ventana de resultados suma un titulo arriba a la izquierda (ProjectName /
          SeqNumber, con los mismos colores que el header de Import Shot) y un checkbox
          "Keep this window on top" abajo (arranca prendido por defecto y persiste en
@@ -112,6 +115,13 @@ try:
     )
 except ImportError:
     switch_to_sequence = None
+
+try:
+    from LGA_NKS_ViewerTL_Panel_py.LGA_NKS_PrevNext_Rev import (
+        find_editref_clip_at_position,
+    )
+except ImportError:
+    find_editref_clip_at_position = None
 
 
 def track_for_task_from_registered_tracks(task_name):
@@ -276,8 +286,39 @@ def navigate_to_pull_result(nav_data):
                 window.activateWindow()
                 window.setFocus()
 
-        in_point = target_clip.timelineIn()
-        out_point = target_clip.timelineOut()
+        reference_clip = target_clip
+        clip_position = target_clip.timelineIn()
+        has_editref_track = any(track.name() == "EditRef" for track in seq.videoTracks())
+        if has_editref_track and find_editref_clip_at_position:
+            editref_clip = find_editref_clip_at_position(clip_position)
+            if editref_clip:
+                reference_clip = editref_clip
+                debug_print(
+                    "Navegacion desde tabla: usando EditRef para In/Out: "
+                    f"'{reference_clip.name()}' "
+                    f"[{reference_clip.timelineIn()}-{reference_clip.timelineOut()}]"
+                )
+            else:
+                debug_print(
+                    "Navegacion desde tabla: no se encontro clip EditRef; "
+                    "se usa el clip de la fila como fallback."
+                )
+        elif has_editref_track:
+            debug_print(
+                "Navegacion desde tabla: helper Prev/Next Rev no disponible; "
+                "se usa el clip de la fila como fallback."
+            )
+        else:
+            debug_print(
+                "Navegacion desde tabla: no existe track EditRef; "
+                "se usa el clip de la fila como fallback."
+            )
+
+        if timeline_editor:
+            timeline_editor.setSelection([reference_clip])
+
+        in_point = reference_clip.timelineIn()
+        out_point = reference_clip.timelineOut()
         try:
             seq.setInTime(in_point)
             seq.setOutTime(out_point)
@@ -292,8 +333,8 @@ def navigate_to_pull_result(nav_data):
             0, lambda: hiero.ui.findMenuAction("Zoom to Fit").trigger()
         )
         debug_print(
-            f"Navegacion desde tabla: clip='{target_clip.name()}' "
-            f"track='{target_clip.parentTrack().name() if target_clip.parentTrack() else ''}' "
+            f"Navegacion desde tabla: clip='{reference_clip.name()}' "
+            f"track='{reference_clip.parentTrack().name() if reference_clip.parentTrack() else ''}' "
             f"range=[{in_point}-{out_point}]"
         )
         return True
