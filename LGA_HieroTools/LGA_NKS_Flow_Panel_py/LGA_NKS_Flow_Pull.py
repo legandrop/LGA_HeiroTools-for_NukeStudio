@@ -1,12 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.49 | Lega
+  LGA_NKS_Flow_Pull v3.50 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.50: La tabla de resultados incluye tambien las tasks que ya estaban en review
+         para el usuario actual, aunque no hayan cambiado ni tengan mismatch de version.
+         Usa el mismo mapeo de usuario que ViewerTL: Sebas -> rev_su, Lega -> revleg,
+         Juano -> revjua, Javi -> revjav, y suma Charly -> revcha.
   v3.49: Al hacer click en una fila de resultados, el In/Out se toma primero del clip
          correspondiente en el track EditRef usando la misma logica de ViewerTL
          Prev/Next Rev. Si no hay match en EditRef, usa el clip de la fila como fallback.
@@ -122,6 +126,56 @@ try:
     )
 except ImportError:
     find_editref_clip_at_position = None
+
+
+def _normalize_flow_login(login):
+    if not login:
+        return None
+
+    user = str(login).split("@")[0].strip().lower()
+    if not user:
+        return None
+
+    aliases = {
+        "sebasromano_post": "sebas",
+        "sebas_romano": "sebas",
+        "sebasromano": "sebas",
+        "juanolivares": "juano",
+        "juano_olivares": "juano",
+        "javi_bravo": "javi",
+        "javibravo": "javi",
+        "lega_pugliese": "lega",
+        "legapugliese": "lega",
+        "charly_villafane": "charly",
+        "charlyvillafane": "charly",
+    }
+    return aliases.get(user, user)
+
+
+def _current_user_review_status_codes():
+    """Devuelve los codigos Flow de review que corresponden al usuario actual."""
+    try:
+        from LGA_NKS_Shared.SecureConfig_Reader import get_flow_credentials
+
+        _url, login, _password = get_flow_credentials()
+    except Exception as e:
+        debug_print(f"No se pudo obtener usuario actual para filas de review: {e}")
+        return set()
+
+    user = _normalize_flow_login(login)
+    user_to_status = {
+        "lega": {"revleg"},
+        "sebas": {"rev_su"},
+        "juano": {"revjua"},
+        "javi": {"revjav"},
+        "charly": {"revcha", "review_charly"},
+    }
+    statuses = user_to_status.get(user, set())
+    debug_print(
+        f"Usuario actual para filas de review: login='{login}' "
+        f"normalizado='{user}' statuses={sorted(statuses)}"
+    )
+    return statuses
 
 
 def track_for_task_from_registered_tracks(task_name):
@@ -1088,6 +1142,7 @@ class HieroOperations:
         # Contadores para distinguir "sin cambios" de "shots no encontrados en la DB"
         self.shots_found_in_db = 0
         self.shots_not_found = 0
+        self.current_user_review_status_codes = _current_user_review_status_codes()
 
     def parse_exr_name(self, file_name):
         """Extrae el nombre base del archivo y el numero de version con prefijo."""
@@ -1573,7 +1628,24 @@ class HieroOperations:
                                 task_name,
                                 shot_code,
                             )
-                            if change or sg_version_number > version_number:
+                            is_current_user_review = (
+                                str(task_status_code).lower()
+                                in self.current_user_review_status_codes
+                            )
+                            row_reason = []
+                            if change:
+                                row_reason.append("status_change")
+                            if sg_version_number > version_number:
+                                row_reason.append("version_mismatch")
+                            if is_current_user_review:
+                                row_reason.append("current_user_review")
+
+                            if row_reason:
+                                debug_print(
+                                    f"Agregando fila Pull para {shot_code} | {task_name}: "
+                                    f"reason={','.join(row_reason)} "
+                                    f"task_status_code='{task_status_code}'"
+                                )
                                 prev_color_hex = (
                                     current_color_hex
                                     if current_color_hex

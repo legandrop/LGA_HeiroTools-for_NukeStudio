@@ -74,7 +74,7 @@ Render de los dropdowns (`ColoredStatusComboBox`):
 ## Reviewers de Task
 
 Los reviewers son **asignaciones de personas** a la task (no un estado). En la UI
-son checkboxes (Lega, Sebas, Juano, Javi) y se mapean a usuarios de Flow:
+son checkboxes (Lega, Sebas, Juano, Charly, Javi) y se mapean a usuarios de Flow:
 
 | Checkbox UI | Clave interna       | Nombre real en Flow |
 |-------------|---------------------|---------------------|

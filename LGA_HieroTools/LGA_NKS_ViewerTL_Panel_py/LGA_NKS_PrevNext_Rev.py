@@ -1,9 +1,9 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_PrevNext_Rev v1.25 | Lega
+  LGA_NKS_PrevNext_Rev v1.26 | Lega
 
-  Busca el clip anterior o siguiente con estado Rev Lega, Rev Sebas, Rev Juano o Rev Javi
+  Busca el clip anterior o siguiente con estado Rev Lega, Rev Sebas, Rev Charly, Rev Juano o Rev Javi
   y ajusta la vista:
   1. Obtiene la posición actual del playhead.
   2. Encuentra el clip más cercano con el color especificado en la dirección indicada.
@@ -14,6 +14,7 @@ ____________________________________________________________________
   6. Ajusta el zoom para que se ajuste al clip seleccionado.
   7. Deselecciona todos los clips.
 
+  v1.26: Agrega soporte para Rev Charly (#a9909d).
   v1.25: Si no existe un track EditRef, usa el In/Out del clip del task en review
   v1.24: No descarta clips offline para navegación y agrega logging a archivo
   v1.23: Usa módulo centralizado LGA_NKS_GetClip con método híbrido para buscar clips EditRef cuando la posición coincide con el playhead
@@ -127,6 +128,7 @@ def debug_print(*message):
 COLORS = {
     "lega": QtGui.QColor(105, 19, 94),  # #69135e
     "sup": QtGui.QColor(189, 127, 159),  # #bd7f9f
+    "charly": QtGui.QColor(169, 144, 157),  # #a9909d
     "juano": QtGui.QColor(64, 34, 52),  # #7F4B69
     "javi": QtGui.QColor(156, 62, 94),  # #9c3e5e
 }

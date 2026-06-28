@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.68 | Lega
+  LGA_ViewerPanel v1.69 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.69: Agregado Charly a los botones dinamicos de Prev/Next Rev.
   v1.68: Agregado sistema de scroll, logging a archivo y gap vertical
   v1.67: Agregado usuario Juano a botones dinámicos de prev/next rev.
   v1.66: Botones de prev/next rev para usuarios Lega, Javi y Sebas ahora son dinámicos y se muestran solo para el usuario actual.
@@ -282,6 +283,8 @@ class ViewerPanel(QtWidgets.QWidget):
             # Alias de usuarios (login -> key en usuarios_config)
             usuario_aliases = {
                 "juanolivares": "juano",
+                "charly_villafane": "charly",
+                "charlyvillafane": "charly",
             }
             usuario_normalizado = usuario_aliases.get(
                 usuario_normalizado, usuario_normalizado
@@ -312,6 +315,12 @@ class ViewerPanel(QtWidgets.QWidget):
                 "juano": {
                     "nombre": "Juano",
                     "color": "#7F4B69",
+                    "prev_shortcut": "Ctrl+Alt+Shift+,",  # Usar shortcuts de Lega
+                    "next_shortcut": "Ctrl+Alt+Shift+.",  # Usar shortcuts de Lega
+                },
+                "charly": {
+                    "nombre": "Charly",
+                    "color": "#a9909d",
                     "prev_shortcut": "Ctrl+Alt+Shift+,",  # Usar shortcuts de Lega
                     "next_shortcut": "Ctrl+Alt+Shift+.",  # Usar shortcuts de Lega
                 }
@@ -637,6 +646,12 @@ class ViewerPanel(QtWidgets.QWidget):
 
     def next_rev_juano(self):
         self.execute_prevnext_rev("next", "juano")
+
+    def prev_rev_charly(self):
+        self.execute_prevnext_rev("prev", "charly")
+
+    def next_rev_charly(self):
+        self.execute_prevnext_rev("next", "charly")
 
     # Métodos dinámicos para usuarios - delegan a los métodos existentes
     def prev_rev_sebas(self):
