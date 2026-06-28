@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.52 | Lega
+  LGA_NKS_Flow_Panel v2.53 | Lega
 
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
@@ -9,6 +9,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.53: Corrige el QColor del boton Rev Juano para que el Push pinte el clip
+         con el mismo #7F4B69 que usa Flow Pull.
   v2.52: Agregado Rev Charly a la lista de botones
   v2.51: Agregado logging a archivo con switches de debug
   v2.50: Actualizado para usar scroll bar cuando es necesario
@@ -249,7 +251,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             },
             {
                 "name": "Rev Juano",
-                "color": QtGui.QColor(64, 34, 52),
+                "color": QtGui.QColor(127, 75, 105),
                 "style": "#7F4B69",
                 "action": "color",
             },

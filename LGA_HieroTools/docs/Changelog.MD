@@ -1,4 +1,10 @@
 v3.78:
+        - Flow Pull (LGA_NKS_Flow_Pull v3.53): la tabla de resultados muestra el estado `rev_su` como `Review Sebas` en lugar de `Review Sup`, manteniendo el codigo Flow y el tag interno `Rev_Sup`. [ Flow Pull - Mostrar Review Sebas ]
+
+        - Flow Pull (LGA_NKS_Flow_Pull v3.52): normaliza las comparaciones de colores hex a minusculas para que `#7f4b69` y `#7F4B69` sean el mismo estado. Esto evita que Pull muestre `Unknown -> Review Juano` y detecte un falso cambio cuando el Push ya habia pintado correctamente el clip con Rev Juano. [ Flow Pull - Normalizar colores hex ]
+
+        - Flow Pull (LGA_NKS_Flow_Pull v3.51) mueve `Keep this window on top` al header, en la misma linea que `ProjectName / SeqNumber` y alineado a la derecha. Flow Panel (v2.53) corrige el `QColor` de `Rev Juano` para que el Push pinte clips con el mismo `#7F4B69` que Pull; ViewerTL Prev/Next Rev (v1.27) tambien busca ese color real para Juano. [ Flow Pull y Push - Header keep on top y color Rev Juano ]
+
         - ViewerTL suma botones dinamicos Prev/Next Rev para Charly y `LGA_NKS_PrevNext_Rev` reconoce el color `#a9909d` de `revcha`. Se agrega `docs/Docu_Flow_Reviewer_Onboarding.md` con el checklist de archivos y puntos a modificar cada vez que entra o sale un reviewer del estudio, y se corrige la doc de estados para incluir a Charly en la descripcion de checkboxes. [ ViewerTL - Agregar Rev Charly y doc reviewers ]
 
         - Flow Pull (LGA_NKS_Flow_Pull v3.50): la ventana de resultados ahora tambien muestra las tasks que ya estaban en review para el usuario actual, aunque no hayan cambiado ni tengan mismatch de version. El mapeo sigue ViewerTL: Lega `revleg`, Sebas `rev_su`, Juano `revjua`, Javi `revjav`, y se suma Charly `revcha`/`review_charly`. [ Flow Pull - Mostrar reviews del usuario actual ]

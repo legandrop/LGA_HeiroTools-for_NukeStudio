@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_PrevNext_Rev v1.26 | Lega
+  LGA_NKS_PrevNext_Rev v1.27 | Lega
 
   Busca el clip anterior o siguiente con estado Rev Lega, Rev Sebas, Rev Charly, Rev Juano o Rev Javi
   y ajusta la vista:
@@ -14,6 +14,7 @@ ____________________________________________________________________
   6. Ajusta el zoom para que se ajuste al clip seleccionado.
   7. Deselecciona todos los clips.
 
+  v1.27: Corrige Rev Juano para buscar el color real #7F4B69, igual que Pull/Push.
   v1.26: Agrega soporte para Rev Charly (#a9909d).
   v1.25: Si no existe un track EditRef, usa el In/Out del clip del task en review
   v1.24: No descarta clips offline para navegación y agrega logging a archivo
@@ -129,7 +130,7 @@ COLORS = {
     "lega": QtGui.QColor(105, 19, 94),  # #69135e
     "sup": QtGui.QColor(189, 127, 159),  # #bd7f9f
     "charly": QtGui.QColor(169, 144, 157),  # #a9909d
-    "juano": QtGui.QColor(64, 34, 52),  # #7F4B69
+    "juano": QtGui.QColor(127, 75, 105),  # #7F4B69
     "javi": QtGui.QColor(156, 62, 94),  # #9c3e5e
 }
 

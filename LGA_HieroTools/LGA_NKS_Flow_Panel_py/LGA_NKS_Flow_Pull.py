@@ -1,12 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.50 | Lega
+  LGA_NKS_Flow_Pull v3.53 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.53: Muestra rev_su como "Review Sebas" en la tabla del Pull, manteniendo
+         el codigo Flow y el tag interno Rev_Sup.
+  v3.52: Normaliza comparaciones de colores hex a minusculas. Evita que Pull
+         marque como cambio un clip que ya tenia el mismo color con distinta
+         capitalizacion (#7f4b69 vs #7F4B69), como Rev Juano.
+  v3.51: Mueve el checkbox "Keep this window on top" al header, en la misma linea
+         que el titulo ProjectName / SeqNumber y alineado a la derecha.
   v3.50: La tabla de resultados incluye tambien las tasks que ya estaban en review
          para el usuario actual, aunque no hayan cambiado ni tengan mismatch de version.
          Usa el mismo mapeo de usuario que ViewerTL: Sebas -> rev_su, Lega -> revleg,
@@ -580,7 +587,7 @@ class ShotGridManager:
             "ready": ("Ready To Start", "#8a8a8a", None),
             "progre": ("In Progress", "#7d4cff", None),
             "corr": ("Corrections", "#2e77d4", "Corrections"),
-            "rev_su": ("Review Sup", "#bd7f9f", "Rev_Sup"),
+            "rev_su": ("Review Sebas", "#bd7f9f", "Rev_Sup"),
             "revcha": ("Review Charly", "#a9909d", "Rev_Sup"),
             "review_charly": ("Review Charly", "#a9909d", "Rev_Sup"),
             "revjua": ("Review Juano", "#7F4B69", "Rev_Sup"),
@@ -850,8 +857,9 @@ class GUI_Table(QtWidgets.QDialog):
         self.setWindowTitle("Read Nodes EXR Info")
         layout = QVBoxLayout(self)
 
-        # Titulo arriba de la tabla, alineado a la izquierda:
-        #   ProjectName (cyan) / SeqNumber (magenta), mismos colores que Import Shot.
+        # Header: titulo a la izquierda y checkbox "Keep this window on top" a la derecha.
+        header_row = QtWidgets.QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
         self.title_label = QtWidgets.QLabel("")
         self.title_label.setTextFormat(Qt.RichText)
         self.title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -859,7 +867,15 @@ class GUI_Table(QtWidgets.QDialog):
             "QLabel { background: transparent; font-size:14px; font-weight:bold; "
             "padding:0 4px 4px 4px; }"
         )
-        layout.addWidget(self.title_label)
+        header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        header_row.addStretch(1)
+        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
+        self.keep_on_top_chk.setChecked(bool(self._keep_on_top))
+        self.keep_on_top_chk.stateChanged.connect(
+            lambda _state: self._set_keep_on_top(self.keep_on_top_chk.isChecked())
+        )
+        header_row.addWidget(self.keep_on_top_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        layout.addLayout(header_row)
 
         self.table = QTableWidget(0, 7, self)
         self.table.setHorizontalHeaderLabels(
@@ -891,18 +907,6 @@ class GUI_Table(QtWidgets.QDialog):
         delegate = ColorMixDelegate(self.table, self.row_background_colors)
         self.table.setItemDelegate(delegate)
         layout.addWidget(self.table)
-
-        # Fila inferior: checkbox "Keep this window on top" (mismo comportamiento
-        # que la Transcode Queue del Import Shot: evita parpadeos al re-aplicar flags).
-        bottom_row = QtWidgets.QHBoxLayout()
-        bottom_row.addStretch(1)
-        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
-        self.keep_on_top_chk.setChecked(bool(self._keep_on_top))
-        self.keep_on_top_chk.stateChanged.connect(
-            lambda _state: self._set_keep_on_top(self.keep_on_top_chk.isChecked())
-        )
-        bottom_row.addWidget(self.keep_on_top_chk)
-        layout.addLayout(bottom_row)
 
         self.setLayout(layout)
         font = QFont()
@@ -1030,14 +1034,15 @@ class GUI_Table(QtWidgets.QDialog):
         layout_hmargins = margins[0] + margins[2]
         layout_vmargins = margins[1] + margins[3]
         spacing = layout.spacing() if layout.spacing() > 0 else 0
-        # Gaps entre los items del layout (titulo, tabla, fila del checkbox).
+        # Gaps entre los items del layout (header y tabla).
         gaps = max(0, layout.count() - 1) * spacing
 
-        # El titulo y el checkbox pueden ser mas anchos que la tabla: el ancho
-        # final debe contemplarlos para que no queden recortados.
+        # El header puede ser mas ancho que la tabla: el ancho final debe
+        # contemplarlo para que titulo y checkbox no queden recortados.
         title_w = self.title_label.sizeHint().width()
-        bottom_w = self.keep_on_top_chk.sizeHint().width()
-        min_content_w = max(title_w, bottom_w) + layout_hmargins
+        checkbox_w = self.keep_on_top_chk.sizeHint().width()
+        header_spacing = 12
+        min_content_w = title_w + checkbox_w + header_spacing + layout_hmargins
         width = max(width, min_content_w)
 
         screen = QApplication.primaryScreen()
@@ -1048,8 +1053,8 @@ class GUI_Table(QtWidgets.QDialog):
         # --- Calculo del alto ---
         # El alto exacto del contenido de la tabla es:
         #   header + suma de las filas + el borde (frame) de la tabla.
-        # A eso se le suman: el titulo, la fila del checkbox, los gaps del layout
-        # y los margenes verticales del layout que contiene todo.
+        # A eso se le suman: el header (titulo + checkbox), el gap del layout y
+        # los margenes verticales del layout que contiene todo.
         # Antes se sumaba un +20 fijo y +4 por fila: ese +4 por fila se acumulaba y
         # sobreestimaba el alto (mas notorio cuantas mas filas), dejando espacio
         # vacio abajo. Buscar "[WindowSize]" en el .log para diagnosticar el calculo.
@@ -1058,17 +1063,19 @@ class GUI_Table(QtWidgets.QDialog):
         rows_height = 0
         for i in range(self.table.rowCount()):
             rows_height += self.table.rowHeight(i)
-        title_h = self.title_label.sizeHint().height()
-        bottom_h = self.keep_on_top_chk.sizeHint().height()
+        header_h = max(
+            self.title_label.sizeHint().height(),
+            self.keep_on_top_chk.sizeHint().height(),
+        )
         content_height = header_height + rows_height + frame
-        height = content_height + title_h + bottom_h + gaps + layout_vmargins
+        height = content_height + header_h + gaps + layout_vmargins
         max_height = screen_rect.height() * 0.8
         final_height = min(height, max_height)
 
         debug_print(
             f"[WindowSize] rows={self.table.rowCount()} header_h={header_height} "
-            f"rows_h={rows_height} frame={frame} title_h={title_h} "
-            f"bottom_h={bottom_h} gaps={gaps} layout_vmargins={layout_vmargins} "
+            f"rows_h={rows_height} frame={frame} top_header_h={header_h} "
+            f"gaps={gaps} layout_vmargins={layout_vmargins} "
             f"content_h={content_height} height_calc={height} "
             f"max_height={int(max_height)} final_height={int(final_height)}"
         )
@@ -1310,7 +1317,11 @@ class HieroOperations:
                 current_status = "Unknown"
 
             # No cambiar el color si las condiciones especificas se cumplen
-            if current_color_hex == new_color_hex:
+            if (
+                current_color_hex
+                and new_color_hex
+                and str(current_color_hex).lower() == str(new_color_hex).lower()
+            ):
                 return ""
             if current_status == "v_00" and (
                 task_status == "Not Ready To Start" or task_status == "Ready To Start"
@@ -1344,15 +1355,16 @@ class HieroOperations:
 
     def get_status_name_by_color(self, color_hex):
         """Devuelve el nombre del estado basado en el color."""
+        normalized_color = str(color_hex).lower() if color_hex else None
         # Verificar primero en el diccionario de Hiero
         for status, color in self.hiero_status_dict.items():
-            if color == color_hex:
+            if normalized_color and str(color).lower() == normalized_color:
                 return status
         # Si no se encuentra en Hiero, buscar en el diccionario de ShotGrid
 # El orden de los valores es:
         # (nombre en Flow/ShotGrid, color_hex[, tag XYplorer])
         for status, (name, color, tag) in self.sg_manager.task_status_dict.items():
-            if color == color_hex:
+            if normalized_color and str(color).lower() == normalized_color:
                 return name
         return "Unknown"
 
