@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.53 | Lega
+  LGA_NKS_Flow_Panel v2.54 | Lega
 
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
@@ -9,6 +9,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.54: Despues de un Push exitoso, avisa a ventanas abiertas del Pull para
+         actualizar la fila del shot si esta visible en la tabla.
   v2.53: Corrige el QColor del boton Rev Juano para que el Push pinte el clip
          con el mismo #7F4B69 que usa Flow Pull.
   v2.52: Agregado Rev Charly a la lista de botones
@@ -28,6 +30,7 @@ import hiero.core
 import sys
 import os
 import re
+import builtins
 import logging
 import queue
 import time
@@ -767,6 +770,47 @@ class ColorChangeWidget(QtWidgets.QWidget):
             def change_color_callback(clip, base_name, exr_name):
                 """Callback que cambia el color del clip después de push exitoso"""
                 try:
+                    def _clip_file_path(item):
+                        try:
+                            fileinfos = item.source().mediaSource().fileinfos()
+                            if fileinfos:
+                                return fileinfos[0].filename()
+                        except Exception:
+                            pass
+                        return None
+
+                    def _push_status_for_pull():
+                        status_code = getattr(module, "status_translation", {}).get(
+                            button_name
+                        )
+                        status_info = getattr(module, "task_status_dict", {}).get(
+                            status_code, (button_name, color.name(), None)
+                        )
+                        status_name = status_info[0] if status_info else button_name
+                        status_color = status_info[1] if status_info else color.name()
+                        if status_code == "rev_su":
+                            status_name = "Review Sebas"
+                        return status_code, status_name, status_color
+
+                    def _notify_open_pull_windows():
+                        updater = getattr(
+                            builtins,
+                            "_LGA_HIEROTOOLS_UPDATE_FLOW_PULL_WINDOWS_AFTER_PUSH",
+                            None,
+                        )
+                        if not updater:
+                            return
+                        status_code, status_name, status_color = _push_status_for_pull()
+                        updater(
+                            clip=clip,
+                            file_path=_clip_file_path(clip),
+                            base_name=base_name,
+                            exr_name=exr_name,
+                            status_code=status_code,
+                            status_name=status_name,
+                            status_color=status_color,
+                        )
+
                     project = (
                         hiero.core.projects()[0] if hiero.core.projects() else None
                     )
@@ -778,6 +822,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
                                 active_version = bin_item.activeVersion()
                                 if active_version:
                                     bin_item.setColor(color)
+                                    _notify_open_pull_windows()
                                     debug_print(
                                         f"Color cambiado para clip (después de push exitoso): {exr_name}"
                                     )
@@ -785,6 +830,14 @@ class ColorChangeWidget(QtWidgets.QWidget):
                             project.endUndo()
                 except Exception as e:
                     debug_print(f"Error cambiando color del clip {exr_name}: {e}")
+                    QtWidgets.QMessageBox.critical(
+                        self,
+                        "Flow Push - Error post-push",
+                        (
+                            "El Push termino, pero fallo la actualizacion local del clip:\n\n"
+                            f"{e}"
+                        ),
+                    )
 
             # La task se resuelve internamente en push_from_selected_clips
             result = module.push_from_selected_clips(

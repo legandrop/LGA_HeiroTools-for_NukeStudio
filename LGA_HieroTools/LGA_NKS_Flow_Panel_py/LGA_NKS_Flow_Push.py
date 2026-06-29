@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.01 | Lega
+  LGA_NKS_Flow_Push v4.02 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -11,6 +11,9 @@ ____________________________________________________________________
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v4.02: Los errores del Worker de Push y del callback post-push se muestran con
+         QMessageBox, evitando fallos silenciosos cuando el conector no completa.
 
   v4.01: file_path propagado al conector (LGA_NKS_Flow_Push_connector) vía JSON
          para que también use extract_project_name_from_path. El conector además
@@ -1522,6 +1525,7 @@ def tag_shot_folder(shot_base_path, tag):
 class WorkerSignals(QObject):
     result_ready = Signal(str, int, int)
     task_finished = Signal(bool)  # Ahora incluye el estado de exito
+    error = Signal(str)
     debug_output = Signal()  # Nueva señal para imprimir logs
     version_check_result = Signal(
         dict
@@ -1583,7 +1587,47 @@ class Worker(QRunnable):
         self.original_file_name = original_file_name
         self.file_path = file_path
         self.target_version_number = target_version_number
+        self.last_error_message = None
         self.signals = WorkerSignals()
+
+    def _push_context_lines(self):
+        project_name = extract_project_name_from_path(self.file_path)
+        if not project_name:
+            project_name = extract_project_name(self.base_name)
+
+        shot_code = extract_shot_code(self.base_name) or "No detectado"
+        task_name = extract_task_name(self.base_name)
+        task_name = normalize_task_name(task_name) if task_name else "No detectada"
+
+        version_label = None
+        if self.target_version_number is not None:
+            try:
+                version_label = f"v{int(self.target_version_number):03d}"
+            except Exception:
+                version_label = str(self.target_version_number)
+        if not version_label and self.original_file_name:
+            match = re.search(r"_v(\d+)", self.original_file_name, re.IGNORECASE)
+            if match:
+                version_label = f"v{int(match.group(1)):03d}"
+        if not version_label:
+            match = re.search(r"_v(\d+)", self.base_name, re.IGNORECASE)
+            if match:
+                version_label = f"v{int(match.group(1)):03d}"
+        if not version_label:
+            version_label = "No detectada"
+
+        return [
+            f"Proyecto buscado: {project_name or 'No detectado'}",
+            f"Shot buscado: {shot_code}",
+            f"Task buscada: {task_name}",
+            f"Version buscada: {version_label}",
+            f"Estado solicitado: {self.button_name}",
+            f"Archivo: {self.original_file_name or os.path.basename(self.file_path or '') or 'No disponible'}",
+        ]
+
+    def _format_error_with_context(self, error_message):
+        context = "\n".join(self._push_context_lines())
+        return f"{error_message}\n\nContexto de busqueda:\n{context}"
 
     @Slot()
     def run(self):
@@ -1650,7 +1694,9 @@ class Worker(QRunnable):
                 self.apply_xyplorer_tag()
             else:
                 error_message = result.get("error", "Unknown error")
+                self.last_error_message = self._format_error_with_context(error_message)
                 debug_print(f"Worker: Error en operación de red: {error_message}")
+                debug_print(self.last_error_message)
                 success = False
 
             # Generar resumen
@@ -1659,6 +1705,9 @@ class Worker(QRunnable):
         except Exception as e:
             debug_print(f"Worker: Exception in Worker.run: {e}")
             success = False
+            self.last_error_message = self._format_error_with_context(
+                f"Excepcion: {str(e)}"
+            )
             # Generar resumen incluso en caso de excepción
             images_total = len(self.review_images)
             self.generate_resumen(success, images_total, 0, f"Excepción: {str(e)}")
@@ -1678,6 +1727,8 @@ class Worker(QRunnable):
                     "Worker: Operacion fallida: NO se borra la carpeta ReviewPic_Cache"
                 )
 
+            if not success and self.last_error_message:
+                self.signals.error.emit(self.last_error_message)
             self.signals.task_finished.emit(success)
             self.signals.debug_output.emit()  # Emitir señal al finalizar
             self.signals.resumen_output.emit()  # Emitir señal para imprimir resumen
@@ -2271,6 +2322,15 @@ def handle_results(info, sg_version_number, version_number):
         msg_manager.show_warning_message(info)
 
 
+def show_push_error_message(error_text):
+    debug_print(f"Mostrando error de Push al usuario: {error_text}")
+    QMessageBox.critical(
+        None,
+        "Flow Push - Error",
+        f"No se pudo completar el Push:\n\n{error_text}",
+    )
+
+
 def handle_version_check_result(version_check_result, worker, update_callback):
     """Maneja el resultado de la verificación de versiones desde el Worker"""
     debug_print("Manejando resultado de verificación de versiones")
@@ -2488,6 +2548,7 @@ def Push_Task_Status(
         )
         # Conectar señales
         worker.signals.result_ready.connect(handle_results)
+        worker.signals.error.connect(show_push_error_message)
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         worker.signals.resumen_output.connect(lambda: print_resumen())
         worker.signals.version_check_result.connect(
@@ -2508,6 +2569,7 @@ def Push_Task_Status(
             target_version_number=target_version_number,
         )
         worker.signals.result_ready.connect(handle_results)
+        worker.signals.error.connect(show_push_error_message)
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         worker.signals.resumen_output.connect(lambda: print_resumen())
         worker.signals.version_check_result.connect(
@@ -2798,6 +2860,11 @@ def push_from_selected_clips(
                     per_clip_callback(current_clip, current_base_name, current_exr_name)
                 except Exception as e:
                     debug_print(f"Error ejecutando per_clip_callback: {e}")
+                    QMessageBox.critical(
+                        None,
+                        "Flow Push - Error post-push",
+                        f"El Push termino, pero fallo la actualizacion local:\n\n{e}",
+                    )
         return callback_wrapper
 
     # Shift+Click: elegir versión destino en Flow en background (solo 1 clip).
@@ -2984,6 +3051,7 @@ def push_from_selected_clips(
                         file_path=file_path,
                     )
                     worker.signals.result_ready.connect(handle_results)
+                    worker.signals.error.connect(show_push_error_message)
                     worker.signals.debug_output.connect(lambda: print_debug_messages())
                     worker.signals.resumen_output.connect(lambda: print_resumen())
                     # Conectar el callback para ejecutarse cuando el push sea exitoso

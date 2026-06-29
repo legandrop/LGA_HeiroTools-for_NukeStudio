@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.54 | Lega
+  LGA_NKS_Flow_Pull v3.55 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.55: Registra las ventanas abiertas del Pull y permite que un Push exitoso
+         actualice la fila existente moviendo New Status a Previous Status y
+         escribiendo el nuevo estado pusheado en New Status.
   v3.54: Si hay ventana Task / Track Mismatch, difiere la ventana de resultados
          del Pull hasta que el usuario cierre la advertencia.
   v3.53: Muestra rev_su como "Review Sebas" en la tabla del Pull, manteniendo
@@ -81,6 +84,7 @@ import re
 import sys
 import time
 import configparser
+import builtins
 import nuke
 import logging  # Agregar esta importación
 import queue
@@ -557,6 +561,132 @@ def debug_print(*message):
         debug_logger.info(msg)  # El logger ya incluye el timestamp en el archivo
 
 
+_FLOW_PULL_WINDOW_REGISTRY_ATTR = "_LGA_HIEROTOOLS_FLOW_PULL_WINDOWS"
+_FLOW_PULL_WINDOW_UPDATER_ATTR = "_LGA_HIEROTOOLS_UPDATE_FLOW_PULL_WINDOWS_AFTER_PUSH"
+
+
+def _flow_pull_window_registry():
+    registry = getattr(builtins, _FLOW_PULL_WINDOW_REGISTRY_ATTR, None)
+    if registry is None:
+        registry = []
+        setattr(builtins, _FLOW_PULL_WINDOW_REGISTRY_ATTR, registry)
+    return registry
+
+
+def register_flow_pull_window(window):
+    registry = _flow_pull_window_registry()
+    registry[:] = [w for w in registry if w is not None]
+    if window not in registry:
+        registry.append(window)
+
+
+def unregister_flow_pull_window(window):
+    registry = _flow_pull_window_registry()
+    registry[:] = [w for w in registry if w is not None and w is not window]
+
+
+def get_open_flow_pull_windows():
+    windows = []
+    registry = _flow_pull_window_registry()
+    for window in list(registry):
+        try:
+            if window and window.isVisible():
+                windows.append(window)
+        except RuntimeError:
+            registry.remove(window)
+    return windows
+
+
+def _normalize_path_for_match(path):
+    if not path:
+        return None
+    return os.path.normcase(os.path.normpath(str(path)))
+
+
+def _color_name(color):
+    if isinstance(color, QColor):
+        return color.name()
+    if color:
+        qcolor = QColor(str(color))
+        if qcolor.isValid():
+            return qcolor.name()
+    return None
+
+
+def _status_display_from_code(status_code, fallback_name):
+    status_display = {
+        "rev_su": "Review Sebas",
+        "revleg": "Review Lega",
+        "revjua": "Review Juano",
+        "revjav": "Review Javi",
+        "revcha": "Review Charly",
+        "review_charly": "Review Charly",
+        "rev_di": "Review Dir",
+        "corr": "Corrections",
+        "revhld": "Review Hold",
+        "rev": "Review",
+        "ip": "In Progress",
+        "rts": "Ready To Start",
+        "n_rdy": "Not Ready To Start",
+    }
+    return status_display.get(status_code, fallback_name or status_code or "")
+
+
+def update_open_pull_windows_after_push(
+    clip=None,
+    file_path=None,
+    shot_code=None,
+    task_name=None,
+    base_name=None,
+    exr_name=None,
+    status_code=None,
+    status_name=None,
+    status_color=None,
+):
+    status_name = _status_display_from_code(status_code, status_name)
+    status_color = _color_name(status_color)
+    if not status_name or not status_color:
+        debug_print("No se pudo actualizar Pull abierto: faltan status_name/status_color")
+        return 0
+
+    if not file_path:
+        file_path = _safe_clip_file_path(clip)
+
+    source_name = base_name or clean_base_name(os.path.basename(file_path or exr_name or ""))
+    if not shot_code and source_name:
+        shot_code = extract_shot_code(source_name)
+    if not task_name and source_name:
+        task_name = extract_task_name(source_name)
+    if task_name:
+        task_name = normalize_task_name(task_name)
+
+    updated = 0
+    for window in get_open_flow_pull_windows():
+        try:
+            if window.update_row_after_push(
+                clip=clip,
+                file_path=file_path,
+                shot_code=shot_code,
+                task_name=task_name,
+                status_name=status_name,
+                status_color=status_color,
+            ):
+                updated += 1
+        except Exception as e:
+            debug_print(f"Error actualizando ventana Pull abierta tras Push: {e}")
+
+    if updated:
+        debug_print(f"Ventanas Pull actualizadas tras Push: {updated}")
+    return updated
+
+
+setattr(
+    builtins,
+    _FLOW_PULL_WINDOW_UPDATER_ATTR,
+    update_open_pull_windows_after_push,
+)
+
+
 def extract_version_number(version_str):
     """Extrae el numero de version numerico de un string de version."""
     debug_print(f"Intentando extraer version de: {version_str}")
@@ -788,6 +918,7 @@ class GUI_Table(QtWidgets.QDialog):
         # Estado del "Keep this window on top" (persistido en INI)
         self._keep_on_top = _load_keep_on_top()
         self.initUI()
+        register_flow_pull_window(self)
         self.last_selected_index = (
             None  # Guardar el indice de la ultima fila seleccionada
         )
@@ -872,6 +1003,94 @@ class GUI_Table(QtWidgets.QDialog):
     def add_navigation_data(self, nav_data):
         """Guarda los datos necesarios para navegar al clip de una fila."""
         self.row_navigation_data.append(nav_data or {})
+
+    def _text_color_for_background(self, color_hex):
+        color = QColor(color_hex)
+        luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
+        return "#ffffff" if luminance < 128 else "#000000"
+
+    def _item_background_name(self, item, fallback="#8a8a8a"):
+        if not item:
+            return fallback
+        color = item.background().color()
+        if color.isValid():
+            return color.name()
+        return fallback
+
+    def _row_matches_push(self, row, clip, file_path, shot_code, task_name):
+        nav_data = self.row_navigation_data[row] if row < len(self.row_navigation_data) else {}
+
+        if clip and nav_data.get("clip") is clip:
+            return True
+
+        normalized_file_path = _normalize_path_for_match(file_path)
+        normalized_nav_path = _normalize_path_for_match(nav_data.get("file_path"))
+        if normalized_file_path and normalized_nav_path:
+            return normalized_file_path == normalized_nav_path
+
+        if clip and _clip_matches_navigation_data(clip, nav_data):
+            return True
+
+        nav_shot = nav_data.get("shot_code")
+        nav_task = normalize_task_name(nav_data.get("task_name")) if nav_data.get("task_name") else None
+        if shot_code and task_name and nav_shot and nav_task:
+            return nav_shot == shot_code and nav_task == normalize_task_name(task_name)
+
+        return False
+
+    def _apply_status_item(self, item, text, color_hex):
+        item.setText(f" {text.strip()} ")
+        item.setBackground(QBrush(QColor(color_hex)))
+        item.setForeground(QBrush(QColor(self._text_color_for_background(color_hex))))
+        item.setTextAlignment(Qt.AlignCenter)
+
+    def update_row_after_push(
+        self,
+        clip=None,
+        file_path=None,
+        shot_code=None,
+        task_name=None,
+        status_name=None,
+        status_color=None,
+    ):
+        if not status_name or not status_color:
+            return False
+
+        for row in range(self.table.rowCount()):
+            if not self._row_matches_push(row, clip, file_path, shot_code, task_name):
+                continue
+
+            prev_status_item = self.table.item(row, 5)
+            new_status_item = self.table.item(row, 6)
+            if not prev_status_item or not new_status_item:
+                return False
+
+            old_new_status = new_status_item.text().strip()
+            old_new_color = self._item_background_name(
+                new_status_item,
+                self.row_background_colors[row][6]
+                if row < len(self.row_background_colors)
+                and len(self.row_background_colors[row]) > 6
+                else "#8a8a8a",
+            )
+
+            self._apply_status_item(prev_status_item, old_new_status, old_new_color)
+            self._apply_status_item(new_status_item, status_name, status_color)
+
+            if row < len(self.row_background_colors):
+                while len(self.row_background_colors[row]) <= 6:
+                    self.row_background_colors[row].append("#8a8a8a")
+                self.row_background_colors[row][5] = old_new_color
+                self.row_background_colors[row][6] = status_color
+
+            self.table.viewport().update()
+            debug_print(
+                f"Fila Pull actualizada tras Push: row={row} "
+                f"previous='{old_new_status}' new='{status_name}'"
+            )
+            return True
+
+        return False
 
     def navigate_to_table_row(self, row, column=None):
         if row < 0 or row >= len(self.row_navigation_data):
@@ -1126,6 +1345,7 @@ class GUI_Table(QtWidgets.QDialog):
             super(GUI_Table, self).keyPressEvent(event)
 
     def closeEvent(self, event):
+        unregister_flow_pull_window(self)
         if self.sg_manager:
             self.sg_manager.close()
             self.sg_manager = None
