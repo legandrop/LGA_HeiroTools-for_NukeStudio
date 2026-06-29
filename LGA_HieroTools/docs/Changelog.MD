@@ -1,4 +1,6 @@
 v3.78:
+        - Flow Push (`LGA_NKS_Flow_Push v4.03`, `LGA_NKS_Flow_Push_connector v1.02`): si Flow encuentra proyecto/shot/task pero no encuentra la Version, el Push ya no termina directamente en error. Ahora pregunta si se quiere cambiar igualmente el estado de la Task sin enviar mensaje ni adjuntar imagenes; al aceptar, actualiza la Task, pinta el clip y actualiza la ventana Pull abierta si corresponde. [ Flow Push - Permitir task sin version ]
+
         - Flow Push (`LGA_NKS_Flow_Push v4.02`): los errores del worker/conector ahora se muestran con `QMessageBox` en la UI, incluyendo proyecto, shot, task, version, estado solicitado y archivo. Esto cubre casos como Push fallido porque Flow no tiene version para el shot/task, que antes quedaban solo en el log y parecian un cuelgue sin feedback. [ Flow Push - Mostrar errores en UI ]
 
         - Flow Push / Pull (`LGA_NKS_Flow_Panel v2.54`, `LGA_NKS_Flow_Pull v3.55`): cuando un Push exitoso cambia el color de un clip, si hay una ventana de Pull abierta con ese shot/task en la tabla, la fila se actualiza en vivo: el `New Status` anterior pasa a `Previous Status` y `New Status` muestra el estado recien pusheado. [ Flow Push - Actualizar ventana Pull abierta ]

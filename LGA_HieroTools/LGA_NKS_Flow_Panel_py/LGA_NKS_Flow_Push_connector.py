@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.01 | Lega
+  LGA_NKS_Flow_Push_connector v1.02 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,8 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.02: Agrega modo allow_task_only para actualizar solo la Task cuando existe
+         proyecto/shot/task pero no existe Version en Flow.
   v1.01: project_name desde segmento de ruta "VFX-NOMBRE" (fallback al filename).
          normalize_task_name resuelve aliases ("compo"→"comp") para búsquedas en Flow.
          find_highest/specific_version_for_shot incluye aliases inversos en task_tokens.
@@ -701,6 +703,7 @@ def execute_full_push_operation(
     original_file_name=None,
     file_path=None,
     target_version_number=None,
+    allow_task_only=False,
 ):
     """
     Ejecuta todo el proceso de push en una sola operación para mayor eficiencia
@@ -863,6 +866,18 @@ def execute_full_push_operation(
             )
 
         if not sg_specific_version:
+            if allow_task_only:
+                debug_print(
+                    "No se encontro version en Flow. allow_task_only=True: "
+                    f"actualizando solo la tarea {task_name} (ID: {task_id})."
+                )
+                sg_manager.update_task_status(task_id, sg_status)
+                return {
+                    "success": True,
+                    "message": "Task actualizada sin Version en Flow",
+                    "task_only": True,
+                    "images_attached": 0,
+                }
             return {
                 "success": False,
                 "error": (
@@ -1146,6 +1161,7 @@ def execute_flow_operation(operation, **kwargs):
             original_file_name = kwargs.get("original_file_name")
             file_path = kwargs.get("file_path")
             target_version_number = kwargs.get("target_version_number")
+            allow_task_only = bool(kwargs.get("allow_task_only"))
 
             return execute_full_push_operation(
                 sg_manager,
@@ -1156,6 +1172,7 @@ def execute_flow_operation(operation, **kwargs):
                 original_file_name,
                 file_path=file_path,
                 target_version_number=target_version_number,
+                allow_task_only=allow_task_only,
             )
 
         elif operation == "check_version":

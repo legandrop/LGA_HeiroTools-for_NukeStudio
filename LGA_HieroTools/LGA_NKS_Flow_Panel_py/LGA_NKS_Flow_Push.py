@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.02 | Lega
+  LGA_NKS_Flow_Push v4.03 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.03: Si Flow encuentra proyecto/shot/task pero no encuentra Version, pregunta
+         si se quiere actualizar solo el estado de la Task sin enviar mensaje.
   v4.02: Los errores del Worker de Push y del callback post-push se muestran con
          QMessageBox, evitando fallos silenciosos cuando el conector no completa.
 
@@ -1526,6 +1528,7 @@ class WorkerSignals(QObject):
     result_ready = Signal(str, int, int)
     task_finished = Signal(bool)  # Ahora incluye el estado de exito
     error = Signal(str)
+    task_only_confirmation = Signal(dict)
     debug_output = Signal()  # Nueva señal para imprimir logs
     version_check_result = Signal(
         dict
@@ -1577,6 +1580,7 @@ class Worker(QRunnable):
         original_file_name=None,
         file_path=None,
         target_version_number=None,
+        allow_task_only=False,
     ):
         super(Worker, self).__init__()
         self.button_name = button_name
@@ -1587,6 +1591,9 @@ class Worker(QRunnable):
         self.original_file_name = original_file_name
         self.file_path = file_path
         self.target_version_number = target_version_number
+        self.allow_task_only = allow_task_only
+        self.task_only_mode = False
+        self.task_only_prompt_context = None
         self.last_error_message = None
         self.signals = WorkerSignals()
 
@@ -1625,9 +1632,22 @@ class Worker(QRunnable):
             f"Archivo: {self.original_file_name or os.path.basename(self.file_path or '') or 'No disponible'}",
         ]
 
+    def _push_context_dict(self):
+        lines = self._push_context_lines()
+        context = {}
+        for line in lines:
+            key, _sep, value = line.partition(": ")
+            context[key] = value
+        context["error_message"] = self.last_error_message or ""
+        return context
+
     def _format_error_with_context(self, error_message):
         context = "\n".join(self._push_context_lines())
         return f"{error_message}\n\nContexto de busqueda:\n{context}"
+
+    def _is_task_only_candidate(self, error_message):
+        text = str(error_message or "").lower()
+        return "no se encontr" in text and "ninguna versi" in text and "flow" in text
 
     @Slot()
     def run(self):
@@ -1670,6 +1690,7 @@ class Worker(QRunnable):
                 original_file_name=getattr(self, "original_file_name", None),
                 file_path=getattr(self, "file_path", None),
                 target_version_number=getattr(self, "target_version_number", None),
+                allow_task_only=getattr(self, "allow_task_only", False),
             )
 
             # Capturar información para el resumen
@@ -1686,6 +1707,7 @@ class Worker(QRunnable):
                         f"Worker: Imágenes adjuntadas según Flow: {images_attached} de {images_total} enviadas"
                     )
                 success = True
+                self.task_only_mode = bool(result.get("task_only"))
 
                 # Si fue exitoso, actualizar también la base de datos local
                 self.update_local_database(db_manager)
@@ -1697,6 +1719,8 @@ class Worker(QRunnable):
                 self.last_error_message = self._format_error_with_context(error_message)
                 debug_print(f"Worker: Error en operación de red: {error_message}")
                 debug_print(self.last_error_message)
+                if self._is_task_only_candidate(error_message):
+                    self.task_only_prompt_context = self._push_context_dict()
                 success = False
 
             # Generar resumen
@@ -1727,7 +1751,9 @@ class Worker(QRunnable):
                     "Worker: Operacion fallida: NO se borra la carpeta ReviewPic_Cache"
                 )
 
-            if not success and self.last_error_message:
+            if not success and self.task_only_prompt_context:
+                self.signals.task_only_confirmation.emit(self.task_only_prompt_context)
+            elif not success and self.last_error_message:
                 self.signals.error.emit(self.last_error_message)
             self.signals.task_finished.emit(success)
             self.signals.debug_output.emit()  # Emitir señal al finalizar
@@ -1747,6 +1773,7 @@ class Worker(QRunnable):
             self.original_file_name,
             self.file_path,
             target_version_number=self.target_version_number,
+            allow_task_only=self.allow_task_only,
         )
 
         # Conectar las mismas señales
@@ -1757,11 +1784,41 @@ class Worker(QRunnable):
         new_worker.signals.version_check_result.connect(
             self.signals.version_check_result
         )
+        new_worker.signals.error.connect(self.signals.error)
+        new_worker.signals.task_only_confirmation.connect(
+            self.signals.task_only_confirmation
+        )
 
         # Marcar que debe saltar la verificación de versiones
         new_worker.skip_version_check = True
 
         # Ejecutar el nuevo Worker
+        QThreadPool.globalInstance().start(new_worker)
+
+    def continue_task_only(self):
+        debug_print("Worker: Reintentando Push en modo task-only")
+        new_worker = Worker(
+            self.button_name,
+            self.base_name,
+            None,
+            [],
+            False,
+            self.original_file_name,
+            self.file_path,
+            target_version_number=self.target_version_number,
+            allow_task_only=True,
+        )
+        new_worker.signals.result_ready.connect(self.signals.result_ready)
+        new_worker.signals.task_finished.connect(self.signals.task_finished)
+        new_worker.signals.debug_output.connect(self.signals.debug_output)
+        new_worker.signals.resumen_output.connect(self.signals.resumen_output)
+        new_worker.signals.version_check_result.connect(
+            self.signals.version_check_result
+        )
+        new_worker.signals.error.connect(self.signals.error)
+        new_worker.signals.task_only_confirmation.connect(
+            self.signals.task_only_confirmation
+        )
         QThreadPool.globalInstance().start(new_worker)
 
     def update_local_database(self, db_manager):
@@ -1828,6 +1885,12 @@ class Worker(QRunnable):
                 f"Worker: Actualizando estado de tarea local (ID: {db_task['id']}) a: {sg_status}"
             )
             db_manager.update_task_status(db_task["id"], sg_status)
+
+            if self.task_only_mode:
+                debug_print(
+                    "Worker: task_only_mode=True, no se actualiza Version local ni se agrega nota local"
+                )
+                return
 
             # Obtener versión target (Shift+Click) o fallback a la más reciente.
             target_version = None
@@ -2331,6 +2394,35 @@ def show_push_error_message(error_text):
     )
 
 
+def handle_task_only_confirmation(context, worker):
+    context_lines = [
+        f"Proyecto: {context.get('Proyecto buscado', 'No detectado')}",
+        f"Shot: {context.get('Shot buscado', 'No detectado')}",
+        f"Task: {context.get('Task buscada', 'No detectada')}",
+        f"Version: {context.get('Version buscada', 'No detectada')}",
+        f"Estado: {context.get('Estado solicitado', 'No detectado')}",
+        f"Archivo: {context.get('Archivo', 'No disponible')}",
+    ]
+    message = (
+        "No se encontro la Version en Flow, pero si se encontro el proyecto, "
+        "el shot y la task.\n\n"
+        + "\n".join(context_lines)
+        + "\n\nNo se puede enviar mensaje ni adjuntar imagenes porque no existe Version.\n"
+        "Queres cambiar igualmente el estado de la Task?"
+    )
+    response = QMessageBox.question(
+        None,
+        "Flow Push - Version no encontrada",
+        message,
+        QMessageBox.Yes | QMessageBox.No,
+        QMessageBox.No,
+    )
+    if response == QMessageBox.Yes:
+        worker.continue_task_only()
+    else:
+        debug_print("Usuario cancelo Push task-only sin Version en Flow")
+
+
 def handle_version_check_result(version_check_result, worker, update_callback):
     """Maneja el resultado de la verificación de versiones desde el Worker"""
     debug_print("Manejando resultado de verificación de versiones")
@@ -2554,6 +2646,9 @@ def Push_Task_Status(
         worker.signals.version_check_result.connect(
             lambda result: handle_version_check_result(result, worker, update_callback)
         )
+        worker.signals.task_only_confirmation.connect(
+            lambda context: handle_task_only_confirmation(context, worker)
+        )
         if update_callback:
             worker.signals.task_finished.connect(update_callback)
         QThreadPool.globalInstance().start(worker)
@@ -2574,6 +2669,9 @@ def Push_Task_Status(
         worker.signals.resumen_output.connect(lambda: print_resumen())
         worker.signals.version_check_result.connect(
             lambda result: handle_version_check_result(result, worker, update_callback)
+        )
+        worker.signals.task_only_confirmation.connect(
+            lambda context: handle_task_only_confirmation(context, worker)
         )
         if update_callback:
             worker.signals.task_finished.connect(update_callback)
@@ -3054,6 +3152,11 @@ def push_from_selected_clips(
                     worker.signals.error.connect(show_push_error_message)
                     worker.signals.debug_output.connect(lambda: print_debug_messages())
                     worker.signals.resumen_output.connect(lambda: print_resumen())
+                    worker.signals.task_only_confirmation.connect(
+                        lambda context, current_worker=worker: handle_task_only_confirmation(
+                            context, current_worker
+                        )
+                    )
                     # Conectar el callback para ejecutarse cuando el push sea exitoso
                     worker.signals.task_finished.connect(clip_callback)
                     QThreadPool.globalInstance().start(worker)

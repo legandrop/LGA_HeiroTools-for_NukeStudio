@@ -64,6 +64,10 @@ La ventana para introducir una nota se activa cuando el estado de la tarea se ca
 *   **"Rev Javi"** (se traduce a `revjav` en ShotGrid)
 *   **"Rev Hold"** (se traduce a `revhld` en ShotGrid)
 
+## Fallback Sin Version:
+
+Si Flow encuentra el proyecto, el shot y la task, pero no encuentra ninguna Version para esa task, el Push muestra una confirmacion antes de continuar. Si el usuario acepta, se actualiza solo el estado de la Task: no se crea nota, no se adjuntan imagenes y no se actualiza estado de Version porque no existe Version destino. El flujo exitoso conserva los efectos locales normales: sincroniza la DB local para la task, aplica tag, pinta el clip y actualiza la ventana Pull abierta si corresponde.
+
 ## Arquitectura y Rendimiento:
 
 El sistema utiliza una arquitectura distribuida optimizada:
