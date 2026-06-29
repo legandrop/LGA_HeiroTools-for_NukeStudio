@@ -1,4 +1,6 @@
 v3.78:
+        - Task / Track Mismatch (`LGA_NKS_TaskMismatchDialog v1.01`): la advertencia de clips en tracks incorrectos deja de ser modal/bloqueante, suma checkbox persistente `Keep this window on top` abajo a la izquierda (on por defecto) y permite clickear una fila para seleccionar el clip, setear In/Out desde el propio clip y mover el playhead. [ Task Mismatch - Ventana no modal con navegacion ]
+
         - Flow Pull (LGA_NKS_Flow_Pull v3.53): la tabla de resultados muestra el estado `rev_su` como `Review Sebas` en lugar de `Review Sup`, manteniendo el codigo Flow y el tag interno `Rev_Sup`. [ Flow Pull - Mostrar Review Sebas ]
 
         - Flow Pull (LGA_NKS_Flow_Pull v3.52): normaliza las comparaciones de colores hex a minusculas para que `#7f4b69` y `#7F4B69` sean el mismo estado. Esto evita que Pull muestre `Unknown -> Review Juano` y detecte un falso cambio cuando el Push ya habia pintado correctamente el clip con Rev Juano. [ Flow Pull - Normalizar colores hex ]

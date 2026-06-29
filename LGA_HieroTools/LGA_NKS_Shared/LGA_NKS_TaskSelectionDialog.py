@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskSelectionDialog v1.40 | Lega
+  LGA_NKS_TaskSelectionDialog v1.41 | Lega
 
   Detección y selección de task entre los tracks EXR del playhead.
 
@@ -22,6 +22,8 @@ ____________________________________________________________________
 
   Convención de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.41: Los mismatches reportados desde el selector incluyen el TrackItem y
+        rango de timeline para que la ventana compartida pueda navegar al clip.
   v1.40: Los botones del selector muestran un atajo de teclado (1-9) en un
         cuadradito a la izquierda. Se puede elegir la task con el mouse o
         presionando el numero correspondiente.
@@ -307,8 +309,12 @@ def get_valid_tasks_at_playhead_with_check(seq, extract_task_name, clean_base_na
             if task_from_name and task_from_name.lower() != task_from_track:
                 mismatches.append({
                     "clip": clip.name(),
+                    "clip_item": clip,
+                    "sequence": seq,
                     "task": task_from_name.lower(),
                     "track": track_name,
+                    "timeline_in": clip.timelineIn(),
+                    "timeline_out": clip.timelineOut(),
                 })
                 continue
         except Exception:
