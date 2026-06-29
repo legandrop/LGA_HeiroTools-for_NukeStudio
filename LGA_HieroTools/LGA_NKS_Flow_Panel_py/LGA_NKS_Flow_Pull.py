@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.53 | Lega
+  LGA_NKS_Flow_Pull v3.54 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.54: Si hay ventana Task / Track Mismatch, difiere la ventana de resultados
+         del Pull hasta que el usuario cierre la advertencia.
   v3.53: Muestra rev_su como "Review Sebas" en la tabla del Pull, manteniendo
          el codigo Flow y el tag interno Rev_Sup.
   v3.52: Normaliza comparaciones de colores hex a minusculas. Evita que Pull
@@ -804,7 +806,8 @@ class GUI_Table(QtWidgets.QDialog):
             changes_exist = self.hiero_ops.process_selected_clips(
                 self.table, self.sg_manager
             )
-            if changes_exist:
+
+            def show_pull_results():
                 self.update_title()
                 self.adjust_window_size()
                 self.show()
@@ -815,12 +818,8 @@ class GUI_Table(QtWidgets.QDialog):
                     QtCore.QTimer.singleShot(
                         0, lambda: self._set_topmost_native(self._keep_on_top)
                     )
-            elif (
-                self.hiero_ops.shots_found_in_db == 0
-                and self.hiero_ops.shots_not_found > 0
-            ):
-                # Ningun shot del timeline existe en la DB: probablemente la DB
-                # esta sin sincronizar para este contexto (no es que no haya cambios).
+
+            def show_shots_not_found_warning():
                 QMessageBox.warning(
                     self,
                     "Shots no encontrados en PipeSync",
@@ -832,12 +831,39 @@ class GUI_Table(QtWidgets.QDialog):
                         "Abri PipeSync, configura Flow y sincroniza."
                     ),
                 )
-            else:
+
+            def show_no_changes_info():
                 QMessageBox.information(
                     self,
                     "No Changes",
                     "No changes were detected in the selected shots.",
                 )
+
+            next_action = None
+            if changes_exist:
+                next_action = show_pull_results
+            elif (
+                self.hiero_ops.shots_found_in_db == 0
+                and self.hiero_ops.shots_not_found > 0
+            ):
+                next_action = show_shots_not_found_warning
+            else:
+                next_action = show_no_changes_info
+
+            task_mismatches = getattr(self.hiero_ops, "task_mismatches", [])
+            if task_mismatches:
+                try:
+                    dialog = show_task_mismatch_warning(task_mismatches)
+                    if dialog and next_action:
+                        dialog.closed.connect(next_action)
+                    elif next_action:
+                        next_action()
+                except Exception as e:
+                    debug_print(f"Error mostrando ventana de task mismatch: {e}")
+                    if next_action:
+                        next_action()
+            elif next_action:
+                next_action()
 
     def add_color_to_background_list(self, row_colors):
         """Agrega una lista de colores de fondo para una nueva fila."""
@@ -1150,6 +1176,7 @@ class HieroOperations:
         self.shots_found_in_db = 0
         self.shots_not_found = 0
         self.current_user_review_status_codes = _current_user_review_status_codes()
+        self.task_mismatches = []
 
     def parse_exr_name(self, file_name):
         """Extrae el nombre base del archivo y el numero de version con prefijo."""
@@ -1744,12 +1771,7 @@ class HieroOperations:
             debug_print("No active sequence found in Hiero.")
             pass
 
-        # Mostrar advertencia al final si hay clips con task de filename distinta al track
-        try:
-            if 'task_mismatches' in locals() and task_mismatches:
-                show_task_mismatch_warning(task_mismatches)
-        except Exception as e:
-            debug_print(f"Error mostrando ventana de task mismatch: {e}")
+        self.task_mismatches = task_mismatches if 'task_mismatches' in locals() else []
 
         return changes_made
 

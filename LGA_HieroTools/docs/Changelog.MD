@@ -1,4 +1,6 @@
 v3.78:
+        - Task / Track Mismatch (`LGA_NKS_TaskMismatchDialog v1.02`, Flow Pull v3.54): la ventana sigue siendo no modal, pero ahora la ventana siguiente del Pull queda diferida hasta que el usuario cierre la advertencia. El mensaje superior aclara que se puede clickear una fila para ubicar el clip en timeline, y la seleccion de filas pasa a gris/blanco en lugar del amarillo default. [ Task Mismatch - Diferir Pull y ajustar seleccion ]
+
         - Task / Track Mismatch (`LGA_NKS_TaskMismatchDialog v1.01`): la advertencia de clips en tracks incorrectos deja de ser modal/bloqueante, suma checkbox persistente `Keep this window on top` abajo a la izquierda (on por defecto) y permite clickear una fila para seleccionar el clip, setear In/Out desde el propio clip y mover el playhead. [ Task Mismatch - Ventana no modal con navegacion ]
 
         - Flow Pull (LGA_NKS_Flow_Pull v3.53): la tabla de resultados muestra el estado `rev_su` como `Review Sebas` en lugar de `Review Sup`, manteniendo el codigo Flow y el tag interno `Rev_Sup`. [ Flow Pull - Mostrar Review Sebas ]

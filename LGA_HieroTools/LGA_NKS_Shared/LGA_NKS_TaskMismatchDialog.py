@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskMismatchDialog v1.01 | Lega
+  LGA_NKS_TaskMismatchDialog v1.02 | Lega
 
   Ventana de advertencia compartida para cuando la task detectada en
   el filename de un clip NO coincide con el nombre del track donde
@@ -14,6 +14,9 @@ ____________________________________________________________________
 
   Convencion de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.02: Emite senial closed para encadenar la ventana siguiente al cierre,
+         aclara que se puede clickear una fila para navegar al clip y usa
+         seleccion gris/blanca en la tabla.
   v1.01: La ventana pasa a ser no modal, suma checkbox persistente "Keep this
          window on top" abajo a la izquierda, y permite navegar al clip al hacer
          click en una fila usando el In/Out del propio clip.
@@ -188,6 +191,8 @@ def _build_mismatch_data(clip, seq, task_name, track_name):
 
 
 class _TaskMismatchDialog(QtWidgets.QDialog):
+    closed = QtCore.Signal()
+
     def __init__(self, mismatches, parent=None):
         super(_TaskMismatchDialog, self).__init__(parent)
         self.setWindowTitle("Task / Track Mismatch")
@@ -204,7 +209,8 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
         header = QtWidgets.QLabel(
             "Se encontraron clips donde la <b>task del filename</b> no coincide con el "
             "<b>nombre del track</b> donde el clip esta ubicado.<br>"
-            "Revisa si hay que renombrar el clip o moverlo de track."
+            "Revisa si hay que renombrar el clip o moverlo de track.<br>"
+            "Puedes clickear una fila para ubicar ese clip en el timeline y setear su In/Out."
         )
         header.setWordWrap(True)
         layout.addWidget(header)
@@ -217,6 +223,14 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.cellClicked.connect(self.navigate_to_table_row)
+        self.table.setStyleSheet(
+            """
+            QTableView::item:selected {
+                color: black;
+                background-color: #b8b8b8;
+            }
+            """
+        )
 
         for row, mismatch in enumerate(self._mismatches):
             self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(mismatch.get("clip", "")))
@@ -335,6 +349,10 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
         try:
             if self in _OPEN_MISMATCH_WINDOWS:
                 _OPEN_MISMATCH_WINDOWS.remove(self)
+        except Exception:
+            pass
+        try:
+            self.closed.emit()
         except Exception:
             pass
         super(_TaskMismatchDialog, self).closeEvent(event)
