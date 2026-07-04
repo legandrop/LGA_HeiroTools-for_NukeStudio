@@ -1,3 +1,6 @@
+v3.79:
+        - Projects Panel (`LGA_NKS_Projects_Panel_SwitchSequence v2.29`): el log del cambio de timeline ahora registra snapshots de viewers/timelines, widgets agendados con `deleteLater()`, tiempos de `processEvents` / `DeferredDelete` y una espera final post-event-loop para detectar en que punto real Hiero queda ocupado cerrando o rearmando timelines. [ Projects Panel - Mejorar diagnostico de cambio de timeline ]
+
 v3.78:
         - Flow Push (`LGA_NKS_Flow_Push v4.03`, `LGA_NKS_Flow_Push_connector v1.02`): si Flow encuentra proyecto/shot/task pero no encuentra la Version, el Push ya no termina directamente en error. Ahora pregunta si se quiere cambiar igualmente el estado de la Task sin enviar mensaje ni adjuntar imagenes; al aceptar, actualiza la Task, pinta el clip y actualiza la ventana Pull abierta si corresponde. [ Flow Push - Permitir task sin version ]
 

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.28 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.29 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -18,6 +18,8 @@ ____________________________________________________________________
 
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
+
+  v2.29: Agregado logging diagnostico del cierre real de viewers/timelines: snapshots de widgets, medicion de eventos Qt/DeferredDelete y espera post-switch para detectar donde tarda Hiero.
 
   v2.28: Fix: el check "Ya activa" ahora compara también el proyecto. Antes, si dos proyectos abiertos tenían una secuencia con el mismo nombre (ej: "101" en MORLASP y en MOR), el switch hacia el proyecto incorrecto era ignorado porque el nombre coincidía con la secuencia activa de otro proyecto.
   v2.27: Desactiva el Frame Number del ViewerTL al finalizar cada cambio de secuencia
@@ -48,17 +50,189 @@ from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
 # Si True, cierra TODOS los viewers + timelines viejos y deja solo el nuevo
 CLOSE_ALL_TIMELINES = True
 
+# Logging diagnostico post-switch. Mide si Qt/Hiero siguen procesando cierres
+# despues de que las llamadas Python ya retornaron.
+SWITCH_DIAGNOSTIC_LOG_WIDGETS = True
+SWITCH_CLEANUP_WAIT_TIMEOUT = 8.0
+SWITCH_CLEANUP_WAIT_INTERVAL = 0.10
+SWITCH_CLEANUP_LOG_INTERVAL = 0.50
+
 # Qt import (según entorno)
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 
 
-def _process_events():
-    """Procesa eventos de Qt para estabilidad."""
+def _process_events(label=None, send_deferred_delete=False):
+    """Procesa eventos de Qt para estabilidad y devuelve el tiempo consumido."""
+    start = time.time()
     if QtCore:
         try:
+            if send_deferred_delete and hasattr(QtCore, "QEvent"):
+                QtCore.QCoreApplication.sendPostedEvents(
+                    None, QtCore.QEvent.DeferredDelete
+                )
             QtCore.QCoreApplication.processEvents()
         except Exception:
             pass
+    elapsed = time.time() - start
+    if label:
+        debug_print(
+            f"   [QtEvents] {label}: {elapsed:.3f}s | deferred_delete={send_deferred_delete}"
+        )
+    return elapsed
+
+
+def _safe_widget_value(widget, attr_name, default=""):
+    try:
+        value = getattr(widget, attr_name)
+        return value() if callable(value) else value
+    except Exception:
+        return default
+
+
+def _snapshot_switch_widgets():
+    """Captura estado compacto de viewers y timelines de Hiero."""
+    snapshot = {"viewers": [], "timelines": [], "active_sequence": None}
+    try:
+        active_seq = hiero.ui.activeSequence()
+        snapshot["active_sequence"] = active_seq.name() if active_seq else None
+    except Exception as e:
+        snapshot["active_sequence"] = f"<error:{e}>"
+
+    try:
+        app = QtWidgets.QApplication.instance()
+        if not app:
+            return snapshot
+
+        for widget in app.allWidgets():
+            try:
+                class_name = (
+                    widget.metaObject().className()
+                    if hasattr(widget, "metaObject")
+                    else str(type(widget))
+                )
+                is_viewer = "Foundry::Storm::UI::Viewer" in class_name
+                is_timeline = "TimelineEditor" in class_name
+                if not is_viewer and not is_timeline:
+                    continue
+
+                seq_name = None
+                if is_timeline:
+                    try:
+                        seq = widget.sequence() if hasattr(widget, "sequence") else None
+                        seq_name = seq.name() if seq else None
+                    except Exception as e:
+                        seq_name = f"<error:{e}>"
+
+                entry = {
+                    "object": _safe_widget_value(widget, "objectName", ""),
+                    "title": _safe_widget_value(widget, "windowTitle", ""),
+                    "visible": _safe_widget_value(widget, "isVisible", False),
+                    "enabled": _safe_widget_value(widget, "isEnabled", False),
+                    "class": class_name,
+                    "seq": seq_name,
+                }
+                if is_viewer:
+                    snapshot["viewers"].append(entry)
+                else:
+                    snapshot["timelines"].append(entry)
+            except Exception:
+                continue
+    except Exception as e:
+        snapshot["error"] = str(e)
+
+    return snapshot
+
+
+def _format_widget_entry(entry):
+    title = entry.get("title") or "<sin titulo>"
+    obj = entry.get("object") or "<sin objectName>"
+    visible = "visible" if entry.get("visible") else "hidden"
+    enabled = "enabled" if entry.get("enabled") else "disabled"
+    seq = entry.get("seq")
+    seq_part = f" | seq={seq}" if seq else ""
+    return f"{title} | obj={obj} | {visible}/{enabled}{seq_part}"
+
+
+def _log_widget_snapshot(label, snapshot=None):
+    if not SWITCH_DIAGNOSTIC_LOG_WIDGETS:
+        return snapshot
+    snapshot = snapshot or _snapshot_switch_widgets()
+    debug_print(
+        f"   [Widgets] {label}: active={snapshot.get('active_sequence')} | "
+        f"viewers={len(snapshot.get('viewers', []))} | "
+        f"timelines={len(snapshot.get('timelines', []))}"
+    )
+    for entry in snapshot.get("viewers", []):
+        debug_print(f"   [Widgets]   viewer: {_format_widget_entry(entry)}")
+    for entry in snapshot.get("timelines", []):
+        debug_print(f"   [Widgets]   timeline: {_format_widget_entry(entry)}")
+    if snapshot.get("error"):
+        debug_print(f"   [Widgets]   error: {snapshot['error']}")
+    return snapshot
+
+
+def _pending_widget_names(widget_names):
+    pending = []
+    if not widget_names:
+        return pending
+    target_names = set(name for name in widget_names if name)
+    snapshot = _snapshot_switch_widgets()
+    for group_name in ("viewers", "timelines"):
+        for entry in snapshot.get(group_name, []):
+            obj_name = entry.get("object")
+            if obj_name in target_names:
+                pending.append((group_name[:-1], entry))
+    return pending
+
+
+def _wait_for_scheduled_widget_cleanup(widget_names, timeout, interval, log_interval):
+    """
+    Espera diagnostica: procesa eventos Qt hasta que desaparezcan los widgets
+    agendados con deleteLater(), o hasta timeout.
+    """
+    target_names = sorted(set(name for name in widget_names if name))
+    if not target_names:
+        debug_print("   [CleanupWait] Sin widgets agendados para esperar")
+        return 0.0, True, []
+
+    debug_print(
+        f"   [CleanupWait] Esperando cierre real de {len(target_names)} widgets: {target_names}"
+    )
+    start = time.time()
+    next_log = 0.0
+    pending = _pending_widget_names(target_names)
+
+    while pending and (time.time() - start) < timeout:
+        elapsed = time.time() - start
+        if elapsed >= next_log:
+            pending_names = [
+                f"{kind}:{entry.get('title') or '<sin titulo>'}|{entry.get('object')}"
+                for kind, entry in pending
+            ]
+            debug_print(
+                f"   [CleanupWait] +{elapsed:.2f}s pendientes={len(pending)} {pending_names}"
+            )
+            next_log = elapsed + log_interval
+
+        _process_events("cleanup wait tick", send_deferred_delete=True)
+        if interval > 0:
+            time.sleep(min(interval, 0.05))
+        pending = _pending_widget_names(target_names)
+
+    elapsed = time.time() - start
+    ok = not pending
+    if ok:
+        debug_print(f"   [CleanupWait] Widgets cerrados realmente en {elapsed:.2f}s")
+    else:
+        pending_names = [
+            f"{kind}:{entry.get('title') or '<sin titulo>'}|{entry.get('object')}"
+            for kind, entry in pending
+        ]
+        debug_print(
+            f"   [CleanupWait] TIMEOUT {elapsed:.2f}s | siguen pendientes={pending_names}",
+            level="warning",
+        )
+    return elapsed, ok, pending
 
 
 def _get_viewer_state(viewer):
@@ -195,17 +369,18 @@ def _close_old_viewer_and_timeline_safe(old_viewer_object_name, old_timeline_obj
     Mantiene el equilibrio delicado de Hiero cerrando ambos simultáneamente.
     """
     if not old_viewer_object_name and not old_timeline_object_name:
-        return 0, 0
+        return 0, 0, []
 
     closed_viewers = 0
     closed_timelines = 0
+    scheduled_widget_names = []
 
     try:
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
 
         app = QtWidgets.QApplication.instance()
         if not app:
-            return 0, 0
+            return 0, 0, []
 
         widgets_to_close = []
 
@@ -241,7 +416,10 @@ def _close_old_viewer_and_timeline_safe(old_viewer_object_name, old_timeline_obj
         # Cierre simultáneo para mantener equilibrio
         for widget_type, widget in widgets_to_close:
             try:
+                obj_name = widget.objectName() if hasattr(widget, "objectName") else ""
                 widget.deleteLater()
+                if obj_name:
+                    scheduled_widget_names.append(obj_name)
                 if widget_type == "viewer":
                     closed_viewers += 1
                 elif widget_type == "timeline":
@@ -249,12 +427,12 @@ def _close_old_viewer_and_timeline_safe(old_viewer_object_name, old_timeline_obj
             except Exception:
                 continue
 
-        _process_events()
+        _process_events("close originals immediate", send_deferred_delete=True)
 
     except Exception:
-        return closed_viewers, closed_timelines
+        return closed_viewers, closed_timelines, scheduled_widget_names
 
-    return closed_viewers, closed_timelines
+    return closed_viewers, closed_timelines, scheduled_widget_names
 
 
 def _close_all_other_viewers_and_timelines_safe(
@@ -265,17 +443,18 @@ def _close_all_other_viewers_and_timelines_safe(
     Usa deleteLater() para evitar crashes en Hiero 16 y mantener equilibrio delicado.
     """
     if not current_viewer_object_name and not current_timeline_object_name:
-        return 0, 0
+        return 0, 0, []
 
     closed_viewers = 0
     closed_timelines = 0
+    scheduled_widget_names = []
 
     try:
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
 
         app = QtWidgets.QApplication.instance()
         if not app:
-            return 0, 0
+            return 0, 0, []
 
         widgets_to_close = []
 
@@ -306,7 +485,10 @@ def _close_all_other_viewers_and_timelines_safe(
 
         for widget_type, widget in widgets_to_close:
             try:
+                obj_name = widget.objectName() if hasattr(widget, "objectName") else ""
                 widget.deleteLater()
+                if obj_name:
+                    scheduled_widget_names.append(obj_name)
                 if widget_type == "viewer":
                     closed_viewers += 1
                 elif widget_type == "timeline":
@@ -314,12 +496,12 @@ def _close_all_other_viewers_and_timelines_safe(
             except Exception:
                 continue
 
-        _process_events()
+        _process_events("close all old widgets immediate", send_deferred_delete=True)
 
     except Exception:
-        return closed_viewers, closed_timelines
+        return closed_viewers, closed_timelines, scheduled_widget_names
 
-    return closed_viewers, closed_timelines
+    return closed_viewers, closed_timelines, scheduled_widget_names
 
 
 def _collect_viewers():
@@ -650,6 +832,7 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     """
     reset_debug_log()
     total_start = time.time()
+    _log_widget_snapshot("inicio switch")
     debug_print(f"🔄 Switch híbrido a '{target_sequence_name}'...")
 
     # 1. Verificar proyectos
@@ -740,12 +923,17 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     # 4. Capturar viewer + timeline actuales ANTES de duplicar (método refresh)
     old_viewer_object_name = _get_current_viewer_object_name()
     old_timeline_object_name = _get_current_timeline_object_name()
+    debug_print(
+        f"   [Targets] Original viewer={old_viewer_object_name} | "
+        f"timeline={old_timeline_object_name}"
+    )
 
     # 5. Abrir secuencia con openInTimeline (como v2) - playhead se preserva automáticamente
     step_start = time.time()
     try:
+        debug_print("   [Stage] openInTimeline: inicio")
         hiero.ui.openInTimeline(target_seq)
-        _process_events()
+        _process_events("despues de openInTimeline")
 
         # Verificar que cambió correctamente
         new_active = hiero.ui.activeSequence()
@@ -759,12 +947,16 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
 
     open_time = time.time() - step_start
     new_timeline = hiero.ui.getTimelineEditor(new_active) if new_active else None
+    _log_widget_snapshot("despues openInTimeline")
 
     # 6. CERRAR viewer + timeline ORIGINALES simultáneamente (método refresh)
     step_start = time.time()
     try:
-        closed_viewers, closed_timelines = _close_old_viewer_and_timeline_safe(
+        closed_viewers, closed_timelines, scheduled_original_names = _close_old_viewer_and_timeline_safe(
             old_viewer_object_name, old_timeline_object_name
+        )
+        debug_print(
+            f"   [DeleteLater] Originales agendados: {scheduled_original_names}"
         )
         debug_print(
             f"   ├── Cerrados originales: viewers={closed_viewers}, timelines={closed_timelines}"
@@ -772,13 +964,16 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     except Exception as e:
         debug_print(f"   ├── Error cerrando viewer/timeline originales: {e}")
         closed_viewers, closed_timelines = 0, 0
+        scheduled_original_names = []
     close_time = time.time() - step_start
+    _log_widget_snapshot("despues deleteLater originales")
 
     # 7. Ejecutar pre-cleanup sobre la secuencia nueva antes de ajustes finales de UI
     step_start = time.time()
     try:
         precleanup_module = import_script("LGA_NKS_Timeline_PreCleanup")
         if precleanup_module:
+            debug_print("   [Stage] Timeline pre-cleanup: inicio")
             precleanup_result = precleanup_module.main()
             debug_print(f"   ├── Timeline pre-cleanup: {precleanup_result}")
         else:
@@ -797,29 +992,41 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         viewer_restore_time = time.time() - step_start
 
     # 9. Enfocar viewer objetivo tras cierre (para evitar pantallas grises)
+    debug_print("   [Stage] Focus target viewer: inicio")
     _focus_target_viewer(target_sequence_name)
+    _log_widget_snapshot("despues focus target viewer")
 
     # 10. Redimensionar ventana del timeline (como v4)
     step_start = time.time()
+    debug_print("   [Stage] UI reduce: inicio")
     reduce_success = reduce_sequence_window(new_timeline)
     reduce_time = time.time() - step_start
+    debug_print(f"   [Stage] UI reduce: fin | ok={reduce_success} | {reduce_time:.3f}s")
 
     # 11. Scrollear al top track (como v4)
     step_start = time.time()
+    debug_print("   [Stage] UI scroll: inicio")
     scroll_success = scroll_to_top_track(new_timeline)
     scroll_time = time.time() - step_start
+    debug_print(f"   [Stage] UI scroll: fin | ok={scroll_success} | {scroll_time:.3f}s")
 
     # 12. Cerrar TODOS los viewers + timelines viejos si el flag está activo
     close_all_widgets_time = 0
+    scheduled_extra_names = []
     if CLOSE_ALL_TIMELINES:
         step_start = time.time()
         current_viewer_object_name = _get_current_viewer_object_name()
         current_timeline_object_name = _get_current_timeline_object_name()
-        closed_extra_viewers, closed_extra_timelines = (
+        debug_print(
+            f"   [Targets] Current keep viewer={current_viewer_object_name} | "
+            f"timeline={current_timeline_object_name}"
+        )
+        closed_extra_viewers, closed_extra_timelines, scheduled_extra_names = (
             _close_all_other_viewers_and_timelines_safe(
                 current_viewer_object_name, current_timeline_object_name
             )
         )
+        debug_print(f"   [DeleteLater] Extras agendados: {scheduled_extra_names}")
         close_all_widgets_time = time.time() - step_start
         debug_print(
             f"   ├── Close ALL old viewers: {closed_extra_viewers} cerrados"
@@ -827,6 +1034,8 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         debug_print(
             f"   ├── Close ALL old timelines: {closed_extra_timelines} cerrados"
         )
+
+        _log_widget_snapshot("despues deleteLater close all")
 
     # 13. Aplicar LUT Rec.709 si existe (evita reset a sRGB)
     rec709_time = 0
@@ -848,7 +1057,18 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         debug_print(f"   Frame Number off: error inesperado: {e}")
     frame_number_off_time = time.time() - step_start
 
-    # 15. Resultado final
+    # 15. Espera diagnostica post-event-loop: confirma cierre real de widgets
+    cleanup_wait_time, cleanup_wait_ok, cleanup_pending = (
+        _wait_for_scheduled_widget_cleanup(
+            scheduled_original_names + scheduled_extra_names,
+            SWITCH_CLEANUP_WAIT_TIMEOUT,
+            SWITCH_CLEANUP_WAIT_INTERVAL,
+            SWITCH_CLEANUP_LOG_INTERVAL,
+        )
+    )
+    _log_widget_snapshot("final post cleanup wait")
+
+    # 16. Resultado final
     total_time = time.time() - total_start
     debug_print(f"✅ Switch híbrido perfecto completado en {total_time:.2f}s")
     debug_print(f"   ├── Viewer capture: {viewer_capture_time:.3f}s")
@@ -869,5 +1089,10 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
             f"   ├── Close ALL old viewers+timelines: {close_all_widgets_time:.3f}s"
         )
     debug_print(f"   └── Total: {total_time:.2f}s")
+
+    debug_print(
+        f"   [Summary] Post-event cleanup wait: {cleanup_wait_time:.3f}s | "
+        f"ok={cleanup_wait_ok} | pending={len(cleanup_pending)}"
+    )
 
     return True

@@ -17,7 +17,7 @@
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ScanManager.py` - Clase `ScanManager` para gestion de operaciones de escaneo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectHandler.py` - Clase `ProjectHandler` para manejo de proyectos y apertura. `on_update_project_click()` actualiza proyectos.
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py` - `scan_projects_on_disk()`, `get_open_projects_info()`, `is_project_open()`, `get_project_sequences()`, `get_projects_with_newer_versions()`.
-- `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py` - `switch_to_sequence_hybrid()` (V3 hibrida: preserva gain/gamma/saturation/playhead, optimiza UI, hace pre-cleanup del timeline nuevo, apaga `Frame_Only` y funciona cross-project). `disable_frame_number_on_active_sequence()` desactiva el Frame Number del ViewerTL sin crearlo ni reposicionarlo.
+- `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py` - `switch_to_sequence_hybrid()` (V3 hibrida: preserva gain/gamma/saturation/playhead, optimiza UI, hace pre-cleanup del timeline nuevo, apaga `Frame_Only`, funciona cross-project y registra diagnostico post-event-loop de viewers/timelines). `disable_frame_number_on_active_sequence()` desactiva el Frame Number del ViewerTL sin crearlo ni reposicionarlo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectsPanel_Logging.py` - Helper compartido de logging para todo el flujo del panel.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel.
@@ -45,9 +45,11 @@
 - Archivo principal: `logs/DebugPy_ProjectsPanel.log`
 - Cada `switch_to_sequence_hybrid()` reinicia el `.log` una sola vez al comienzo del cambio de timeline, dejando una traza independiente por secuencia.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` y `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` escriben en ese mismo `.log` cuando son invocados desde Projects Panel.
+- El cambio de secuencia registra snapshots `[Widgets]`, targets `[Targets]`, widgets agendados con `deleteLater()` (`[DeleteLater]`), tiempos de `processEvents` / `DeferredDelete` (`[QtEvents]`) y una espera final `[CleanupWait]` para detectar si Hiero sigue cerrando/rearmando timelines despues de que las llamadas Python retornan.
 - El log actual incluye:
   - pasos principales del `switch_to_sequence_hybrid()`
   - tiempos de ejecucion por etapa
+  - tiempo post-event-loop real (`[Summary] Post-event cleanup wait`)
   - resultados del pre-cleanup de timeline
   - resultados del scroll vertical al top track
   - resultado de `Frame Number off`

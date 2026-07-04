@@ -20,6 +20,8 @@ Módulo auxiliar que implementa la **solución ganadora V3 Híbrida** para cambi
 
 Ademas, al terminar cada cambio de secuencia, el flujo desactiva el overlay de Frame Number (`Frame_Only`) del track `BurnIn` si estaba enabled. Este apagado no crea ni reposiciona el efecto.
 
+El flujo tambien registra diagnostico post-event-loop para detectar freezes diferidos de Qt/Hiero: snapshots de viewers/timelines, widgets agendados con `deleteLater()`, duracion de `processEvents` / `DeferredDelete`, y una espera final que confirma si los widgets viejos desaparecieron realmente.
+
 ## API
 
 ### Función Principal
@@ -79,6 +81,8 @@ def on_sequence_click(self, sequence_name):
   - `DEBUG_LOG = True`
 - El `.log` se reinicia una sola vez al comienzo de cada `switch_to_sequence_hybrid()`
 - Los scripts shared de pre-cleanup y scroll reciben el `debug_print` del Projects Panel cuando son importados desde este flujo
+- El switch loguea snapshots `[Widgets]` antes/despues de abrir/cerrar timelines, targets `[Targets]`, widgets agendados `[DeleteLater]`, ticks `[QtEvents]` y una espera `[CleanupWait]` para confirmar si los viewers/timelines viejos desaparecieron realmente
+- El resumen final incluye `[Summary] Post-event cleanup wait`, que mide el tiempo posterior a las llamadas Python inmediatas y ayuda a detectar freezes diferidos de Qt/Hiero
 
 ## Compatibilidad
 
@@ -91,6 +95,11 @@ def on_sequence_click(self, sequence_name):
 ### Flag opcional
 - `CLOSE_ALL_TIMELINES = True` → Cierra todos los viewers+timelines viejos dejando solo el nuevo
 - `CLOSE_ALL_TIMELINES = False` → Solo cierra viewer+timeline originales (comportamiento base)
+
+### Flags de diagnostico
+- `SWITCH_DIAGNOSTIC_LOG_WIDGETS = True` -> activa snapshots detallados de viewers/timelines en el log del Projects Panel
+- `SWITCH_CLEANUP_WAIT_TIMEOUT = 8.0` -> maximo de espera diagnostica para verificar cierre real de widgets agendados
+- `SWITCH_CLEANUP_WAIT_INTERVAL = 0.10` y `SWITCH_CLEANUP_LOG_INTERVAL = 0.50` -> frecuencia de procesamiento de eventos y de logs de pendientes durante la espera
 
 ## Dependencias
 
