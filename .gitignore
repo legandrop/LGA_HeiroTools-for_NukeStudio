@@ -17,4 +17,5 @@ CLAUDE.md
 LGA_HieroTools/LGA_NKS_Shared/FFmpeg_Win/
 .cursor/
 .claude/
+.codex/
 agents.md
