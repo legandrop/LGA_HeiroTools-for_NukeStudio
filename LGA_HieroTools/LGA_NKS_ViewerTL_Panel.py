@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.69 | Lega
+  LGA_ViewerPanel v1.70 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.70: Shift+Click en SnapShot abre la captura en ShareX ImageEditor LGA.
   v1.69: Agregado Charly a los botones dinamicos de Prev/Next Rev.
   v1.68: Agregado sistema de scroll, logging a archivo y gap vertical
   v1.67: Agregado usuario Juano a botones dinámicos de prev/next rev.
@@ -64,6 +65,25 @@ class RelativeTimeFormatter(logging.Formatter):
         relative_time = record.created - script_start_time
         record.relative_time = f"{relative_time:.3f}s"
         return super().format(record)
+
+
+class ShiftClickButton(QtWidgets.QPushButton):
+    """Boton que conserva el click normal y ejecuta otra accion con Shift+Click."""
+
+    def __init__(self, text, shift_click_handler):
+        super(ShiftClickButton, self).__init__(text)
+        self._shift_click_handler = shift_click_handler
+
+    def mousePressEvent(self, event):
+        if (
+            event.button() == QtCore.Qt.LeftButton
+            and event.modifiers() & QtCore.Qt.ShiftModifier
+        ):
+            self._shift_click_handler()
+            event.accept()
+            return
+
+        super(ShiftClickButton, self).mousePressEvent(event)
 
 
 def setup_debug_logging(script_name="ViewerPanel"):
@@ -366,7 +386,7 @@ class ViewerPanel(QtWidgets.QWidget):
                 self.snapshot,
                 "#2d5a3d",
                 None,
-                "Crea un snapshot de la imagen actual del viewer\n(cropeada al aspect ratio de la secuencia) y lo copia al portapapeles\nIdeal para enviar por telegram con algun comentario",
+                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en ShareX ImageEditor LGA sin guardarlo.\nLa captura se recorta al aspect ratio de la secuencia.",
             ),
         ]
 
@@ -418,7 +438,10 @@ class ViewerPanel(QtWidgets.QWidget):
                 tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
                 button_stylesheet += tooltip_stylesheet
 
-            button = QtWidgets.QPushButton(name)
+            if name == "SnapShot":
+                button = ShiftClickButton(name, self.snapshot_in_image_editor)
+            else:
+                button = QtWidgets.QPushButton(name)
             button.setObjectName(f"button_{index}")
             button.setStyleSheet(button_stylesheet)
             button.clicked.connect(handler)
@@ -683,7 +706,7 @@ class ViewerPanel(QtWidgets.QWidget):
             debug_print(f"Error al ejecutar el script PrevNext Rev: {e}")
 
     ###### SnapShot
-    def snapshot(self):
+    def snapshot(self, open_in_editor=False):
         try:
             script_path = os.path.join(
                 os.path.dirname(__file__), "LGA_NKS_ViewerTL_Panel_py", "LGA_NKS_SnapShot.py"
@@ -698,12 +721,15 @@ class ViewerPanel(QtWidgets.QWidget):
                 spec.loader.exec_module(module)
 
                 # Llamar a la funcion principal del script
-                module.main()
+                module.main(open_in_editor=open_in_editor)
                 debug_print("Ejecutado LGA_NKS_SnapShot script.")
             else:
                 debug_print(f"Script no encontrado en la ruta: {script_path}")
         except Exception as e:
             debug_print(f"Error al ejecutar el script SnapShot: {e}")
+
+    def snapshot_in_image_editor(self):
+        self.snapshot(open_in_editor=True)
 
     ###### Frame Number Position
     def frame_number_position(self):

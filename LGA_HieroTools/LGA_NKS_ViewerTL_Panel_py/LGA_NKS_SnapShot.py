@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_SnapShot v0.61 | Lega
+  LGA_NKS_SnapShot v0.62 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo copia al portapapeles
 
+  v0.62: Shift+Click abre el snapshot en ShareX ImageEditor LGA sin crear archivos.
   v0.61: Se tiene en cuenta el pixel aspect ratio (PAR) del formato. El crop ahora se
          hace contra el DISPLAY aspect (storage * PAR) en lugar del storage aspect,
          porque viewer.image() ya entrega la imagen con el PAR aplicado. Antes, en
@@ -15,6 +16,8 @@ ____________________________________________________________________
 import hiero.core
 import hiero.ui
 import os
+import subprocess
+import sys
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
 
 DEBUG = False
@@ -46,7 +49,33 @@ def crop_to_aspect_ratio(qimage, target_aspect):
         return cropped
 
 
-def main():
+def open_in_image_editor(qimage):
+    """Abre la captura en ShareX ImageEditor LGA sin generar un archivo temporal."""
+    app = QtWidgets.QApplication.instance()
+    if not app:
+        app = QtWidgets.QApplication([])
+
+    app.clipboard().setImage(qimage)
+
+    editor_path = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "LGA_NKS_Flow_Panel_py",
+            "ShareX_ImageEditor_LGA",
+            "ShareX_ImageEditor_LGA.exe",
+        )
+    )
+    if not os.path.isfile(editor_path):
+        raise FileNotFoundError(f"No se encontro ShareX ImageEditor LGA: {editor_path}")
+
+    if sys.platform != "win32":
+        raise RuntimeError("ShareX ImageEditor LGA solo esta disponible en Windows.")
+
+    subprocess.Popen([editor_path, "--clipboard"])
+
+
+def main(open_in_editor=False):
     output_path = r"T:\Borrame\snapshot.jpg"
 
     viewer = hiero.ui.currentViewer()
@@ -99,6 +128,11 @@ def main():
             debug_print("✅ Archivo creado:", output_path)
         else:
             debug_print("❌ No se pudo crear el archivo.")
+
+    if open_in_editor:
+        open_in_image_editor(qimage_cropped)
+        debug_print("Imagen abierta en ShareX ImageEditor LGA.")
+        return
 
     # Copiar al portapapeles
     app = QtWidgets.QApplication.instance()

@@ -1,4 +1,6 @@
 v3.79:
+        - ViewerTL (`LGA_ViewerPanel v1.70`, `LGA_NKS_SnapShot v0.62`): Shift+Click en SnapShot abre la captura recortada en ShareX ImageEditor LGA sin generar JPG ni cache. El click normal conserva la copia al portapapeles. [ ViewerTL - Abrir Snapshot en editor con Shift ]
+
         - Review Panel (`LGA_ReviewPanel v2.81`): suma al final los botones Next Annotation y Previous Annotation. Navegan las anotaciones del clip seleccionado en ambas direcciones y vuelven al extremo opuesto al superar la primera o ultima anotacion. [ Review Panel - Navegar anotaciones del clip ]
 
         - Projects Panel (`LGA_NKS_Projects_Panel_SwitchSequence v2.29`): el log del cambio de timeline ahora registra snapshots de viewers/timelines, widgets agendados con `deleteLater()`, tiempos de `processEvents` / `DeferredDelete` y una espera final post-event-loop para detectar en que punto real Hiero queda ocupado cerrando o rearmando timelines. [ Projects Panel - Mejorar diagnostico de cambio de timeline ]
