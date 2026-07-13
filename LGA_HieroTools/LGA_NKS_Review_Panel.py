@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.80 | Lega
+  LGA_ReviewPanel v2.81 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.81: Agregados botones Next Annotation y Previous Annotation para navegar
+         las anotaciones del clip seleccionado.
   v2.80: Agregado boton Contact Sheet para pegar clips seleccionados en NukeX
 
   v2.79: Agregado botón ON OFF _roto_ con shortcut Ctrl+Shift+D
@@ -228,6 +230,20 @@ class ReviewPanel(QtWidgets.QWidget):
                 "Shift+R\nAbre la carpeta que contiene al script de Nuke asociado al clip seleccionado",
             ),
             ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nAbre en Nuke el script asociado al clip seleccionado"),
+            (
+                "Next Annotation",
+                self.execute_NextAnnotation,
+                "#283526",
+                None,
+                "Salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.",
+            ),
+            (
+                "Previous Annotation",
+                self.execute_PreviousAnnotation,
+                "#283526",
+                None,
+                "Salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.",
+            ),
         ]
 
         self.num_columns = 1  # Inicialmente una columna
@@ -389,7 +405,7 @@ class ReviewPanel(QtWidgets.QWidget):
         )
 
     # Metodo generico para ejecutar scripts externos
-    def execute_external_script(self, script_name):
+    def execute_external_script(self, script_name, *args):
         script_path = os.path.join(os.path.dirname(__file__), "LGA_NKS_Review_Panel_py", script_name)
         if os.path.exists(script_path):
             try:
@@ -399,7 +415,7 @@ class ReviewPanel(QtWidgets.QWidget):
                 if spec is not None and spec.loader is not None:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
-                    module.main()
+                    module.main(*args)
                 else:
                     debug_print(
                         f"El modulo o loader no se encontraron para el script {script_name}"
@@ -491,6 +507,12 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def execute_DisableRoto(self):
         self.execute_external_script("LGA_NKS_Clip_DisableRoto.py")
+
+    def execute_NextAnnotation(self):
+        self.execute_external_script("LGA_NKS_NextPrev_Annotation.py")
+
+    def execute_PreviousAnnotation(self):
+        self.execute_external_script("LGA_NKS_NextPrev_Annotation.py", "previous")
 
 
 # Crear la instancia del widget y anadirlo al gestor de ventanas de Hiero

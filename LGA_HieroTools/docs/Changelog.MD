@@ -1,4 +1,6 @@
 v3.79:
+        - Review Panel (`LGA_ReviewPanel v2.81`): suma al final los botones Next Annotation y Previous Annotation. Navegan las anotaciones del clip seleccionado en ambas direcciones y vuelven al extremo opuesto al superar la primera o ultima anotacion. [ Review Panel - Navegar anotaciones del clip ]
+
         - Projects Panel (`LGA_NKS_Projects_Panel_SwitchSequence v2.29`): el log del cambio de timeline ahora registra snapshots de viewers/timelines, widgets agendados con `deleteLater()`, tiempos de `processEvents` / `DeferredDelete` y una espera final post-event-loop para detectar en que punto real Hiero queda ocupado cerrando o rearmando timelines. [ Projects Panel - Mejorar diagnostico de cambio de timeline ]
 
 v3.78:
