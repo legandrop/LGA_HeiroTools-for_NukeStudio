@@ -90,6 +90,29 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull_README.md`
   - referencias históricas y ejemplos con paths legacy.
 
+## Packaging (release generator)
+
+- El `_LGA_ReleaseGen-HieroTools.bat` genera dos zips y cada uno viaja con un
+  `LGA_HieroTools_context.ini` fijado por el packaging, independiente del
+  INI activo de Lega al momento de releasar:
+  - Zip público `*_gh.zip`: `mode = client` (fuente:
+    `Python/Startup/LGA_HieroTools_context_gh.ini`).
+  - Zip interno `*.zip`: `mode = studio` (fuente:
+    `Python/Startup/LGA_HieroTools_context_studio.ini`).
+- Los INI fuente son fijos, versionados y verificados por preflight
+  (existencia + valor de `mode`) antes de empaquetar.
+- El INI se agrega al zip con 7z desde un directorio temporal renombrado a
+  `Startup/LGA_HieroTools_context.ini`, así el installer lo deposita en el
+  path esperado.
+- El `i_win_engine.ps1` copia el `LGA_HieroTools_context.ini` a
+  `%USERPROFILE%/.nuke/python/startup/` siempre pisando el previo. No se
+  respeta el INI del usuario final: la política es que el modo lo define el
+  zip que se instala (client para gh, studio para interno).
+- Consecuencia: la editora del cliente siempre arranca en modo client sin
+  intervención manual, y los demás reviewers de estudio siempre arrancan en
+  studio (sin ver el switch, porque su `Flow.Login` de PipeSync normal no
+  es `lega@wanka.tv`).
+
 ## Decisiones de diseño implementadas
 
 - Switch en Projects Panel:
