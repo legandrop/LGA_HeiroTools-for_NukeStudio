@@ -1,4 +1,6 @@
 v3.79:
+        - ViewerTL (`LGA_ViewerPanel v1.71`): los botones dinamicos Prev/Next Rev y sus shortcuts `Ctrl+Alt+Shift+,` / `Ctrl+Alt+Shift+.` ahora aparecen tambien cuando Hiero se abre en modo client. La identidad del reviewer local se lee siempre desde el perfil PipeSync normal (`get_normal_pipesync_flow_login`), no desde el contexto activo, porque quien usa las tools es una propiedad de la maquina/instalacion y no del proyecto abierto. Antes, en modo client se resolvia al `Flow.Login` del `PipeSyncClient/config.secure` (editora), no matcheaba ningun usuario en `usuarios_config` y los botones no se creaban. [ ViewerTL - Botones Prev/Next Rev en modo client ]
+
         - ViewerTL (`LGA_ViewerPanel v1.70`, `LGA_NKS_SnapShot v0.62`): Shift+Click en SnapShot abre la captura recortada en ShareX ImageEditor LGA sin generar JPG ni cache. El click normal conserva la copia al portapapeles. [ ViewerTL - Abrir Snapshot en editor con Shift ]
 
         - Review Panel (`LGA_ReviewPanel v2.81`): suma al final los botones Next Annotation y Previous Annotation. Navegan las anotaciones del clip seleccionado en ambas direcciones y vuelven al extremo opuesto al superar la primera o ultima anotacion. [ Review Panel - Navegar anotaciones del clip ]

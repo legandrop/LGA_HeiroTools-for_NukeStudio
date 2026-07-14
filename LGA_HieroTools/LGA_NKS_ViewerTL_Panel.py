@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.70 | Lega
+  LGA_ViewerPanel v1.71 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.71: Identidad del reviewer local se lee siempre del perfil PipeSync
+         normal (no del contexto activo), asi los botones dinamicos Prev/Next
+         Rev y sus shortcuts se muestran tambien en modo client.
   v1.70: Shift+Click en SnapShot abre la captura en ShareX ImageEditor LGA.
   v1.69: Agregado Charly a los botones dinamicos de Prev/Next Rev.
   v1.68: Agregado sistema de scroll, logging a archivo y gap vertical
@@ -169,17 +172,23 @@ def debug_print(*message, level="info"):
 
 def obtener_usuario_actual():
     """
-    Obtiene el usuario actual de PipeSync desde la configuración segura.
+    Obtiene el usuario actual del reviewer local desde el perfil PipeSync
+    normal (studio), independiente del contexto activo Studio/Client.
+
+    Motivo: la identidad de quien usa las tools LGA es una propiedad de la
+    maquina/instalacion, no del proyecto abierto. Si se leyera por contexto
+    activo, en modo client se cargaria el login de la editora y no se
+    dibujarian los botones dinamicos Prev/Next Rev del reviewer local.
 
     Returns:
-        str: Login del usuario actual, o None si no se puede determinar
+        str: Login del reviewer local, o None si no se puede determinar
     """
     try:
-        from LGA_NKS_Shared.SecureConfig_Reader import get_flow_credentials
+        from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import get_normal_pipesync_flow_login
 
-        url, login, password = get_flow_credentials()
+        login = get_normal_pipesync_flow_login()
         if login:
-            debug_print(f"Usuario actual determinado: {login}")
+            debug_print(f"Usuario actual (perfil normal) determinado: {login}")
             return login
     except Exception as e:
         debug_print(f"Error obteniendo usuario actual: {e}")
