@@ -1,20 +1,125 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BucketResolver v1.00 | Lega
+  LGA_NKS_BucketResolver v1.01 | Lega
 
-  Resolver central de mapeo Proyecto <-> Bucket Wasabi para HieroTools.
+  v1.01 (2026-07-21)
+  - Endurece ProjectBucketOverrides con contrato fail-closed, detección
+    de colisiones en buckets efectivos y cache de último snapshot válido.
+
+  v1.00:
+  - Resolver central de mapeo Proyecto <-> Bucket Wasabi para HieroTools.
 ____________________________________________________________________
 """
 
+import copy
 import os
 import re
 
-from SecureConfig_Reader import read_secure_config
+from SecureConfig_Reader import read_secure_config_with_status
 
 
 _BUCKET_ALLOWED_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*[a-z0-9]$")
 _BUCKET_IPV4_RE = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
+_LAST_VALID_RUNTIME_SNAPSHOT = None
+
+
+def _new_snapshot():
+    return {
+        "project_to_bucket": {},
+        "bucket_to_project": {},
+        "effective_project_to_bucket": {},
+        "project_errors": {},
+        "bucket_errors": {},
+        "general_errors": [],
+        "known_projects": set(),
+        "override_projects": set(),
+        "blocked_projects": set(),
+        "ambiguous_buckets": set(),
+        "warnings": [],
+        "schema_error": "",
+        "overrides_field_present": False,
+        "overrides_schema_valid": True,
+    }
+
+
+def _append_unique(target_list, message):
+    text = str(message or "").strip()
+    if not text:
+        return
+    if text not in target_list:
+        target_list.append(text)
+
+
+def _append_project_error(snapshot, project_key, message):
+    errors = snapshot["project_errors"].setdefault(project_key, [])
+    _append_unique(errors, message)
+
+
+def _append_bucket_error(snapshot, bucket_name, message):
+    errors = snapshot["bucket_errors"].setdefault(bucket_name, [])
+    _append_unique(errors, message)
+
+
+def _describe_json_type(value):
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    if value is None:
+        return "null"
+    return "unknown"
+
+
+def _first_project_error(snapshot, project_key):
+    errors = snapshot.get("project_errors", {}).get(project_key) or []
+    return errors[0] if errors else ""
+
+
+def _first_bucket_error(snapshot, bucket_name):
+    errors = snapshot.get("bucket_errors", {}).get(bucket_name) or []
+    return errors[0] if errors else ""
+
+
+def _blocked_project_message(snapshot, project_key):
+    first_error = _first_project_error(snapshot, project_key)
+    if first_error:
+        return first_error
+    return f"Project '{project_key}' is blocked by ProjectBucketOverrides validation."
+
+
+def _normalize_known_projects(known_projects):
+    normalized = set()
+    for project in known_projects or []:
+        project_key = normalize_project_key(project)
+        if project_key:
+            normalized.add(project_key)
+    return normalized
+
+
+def _rebuild_warning_list(snapshot):
+    warnings = []
+    if snapshot.get("schema_error"):
+        _append_unique(warnings, snapshot["schema_error"])
+
+    for error in snapshot.get("general_errors", []):
+        _append_unique(warnings, error)
+
+    for errors in snapshot.get("project_errors", {}).values():
+        for error in errors:
+            _append_unique(warnings, error)
+
+    for errors in snapshot.get("bucket_errors", {}).values():
+        for error in errors:
+            _append_unique(warnings, error)
+
+    snapshot["warnings"] = warnings
 
 
 def normalize_project_key(project_name):
@@ -67,81 +172,273 @@ def default_bucket_for_project(project_name):
     return candidate if is_valid else ""
 
 
-def normalize_and_validate_overrides(raw_overrides):
-    """
-    Normaliza/valida overrides y devuelve:
-        (normalized_overrides, errors)
-    """
-    normalized_overrides = {}
-    bucket_owners = {}
-    errors = []
+def build_snapshot_from_raw_value(
+    raw_overrides_value, overrides_field_present, known_projects=None
+):
+    snapshot = _new_snapshot()
+    snapshot["overrides_field_present"] = bool(overrides_field_present)
+    snapshot["known_projects"] = _normalize_known_projects(known_projects)
 
-    if not isinstance(raw_overrides, dict):
-        return normalized_overrides, ["ProjectBucketOverrides must be a JSON object."]
+    if overrides_field_present and not isinstance(raw_overrides_value, dict):
+        snapshot["overrides_schema_valid"] = False
+        snapshot["schema_error"] = "ProjectBucketOverrides must be a JSON object."
+        _rebuild_warning_list(snapshot)
+        return snapshot
 
-    for raw_project, raw_bucket in raw_overrides.items():
-        project_key = normalize_project_key(raw_project)
+    raw_object = raw_overrides_value if overrides_field_present else {}
+    valid_overrides = {}
+    raw_keys_per_project = {}
+
+    for raw_project_key, raw_bucket_value in raw_object.items():
+        project_key = normalize_project_key(raw_project_key)
         if not project_key:
-            errors.append(
-                f"Project override key '{raw_project}' is empty after normalization."
+            _append_unique(
+                snapshot["general_errors"],
+                f"Project override key '{raw_project_key}' is empty after normalization.",
             )
             continue
 
-        bucket_name = normalize_bucket_name(raw_bucket)
+        snapshot["known_projects"].add(project_key)
+        raw_keys_per_project.setdefault(project_key, []).append(raw_project_key)
+
+        if not isinstance(raw_bucket_value, str):
+            _append_project_error(
+                snapshot,
+                project_key,
+                f"Project '{project_key}' has a non-string override bucket value "
+                f"({_describe_json_type(raw_bucket_value)}).",
+            )
+            continue
+
+        original_bucket = raw_bucket_value
+        bucket_name = normalize_bucket_name(original_bucket)
         is_valid, reason = is_valid_bucket_name(bucket_name)
         if not is_valid:
-            errors.append(
+            _append_project_error(
+                snapshot,
+                project_key,
                 f"Project '{project_key}' has invalid override bucket "
-                f"'{str(raw_bucket).strip()}': {reason}"
+                f"'{original_bucket.strip()}': {reason}",
             )
             continue
 
-        existing_bucket = normalized_overrides.get(project_key)
+        existing_bucket = valid_overrides.get(project_key)
         if existing_bucket and existing_bucket != bucket_name:
-            errors.append(
+            _append_project_error(
+                snapshot,
+                project_key,
                 f"Project '{project_key}' is duplicated with different buckets "
-                f"('{existing_bucket}' vs '{bucket_name}')."
+                f"('{existing_bucket}' vs '{bucket_name}').",
             )
             continue
 
-        owner = bucket_owners.get(bucket_name)
+        valid_overrides[project_key] = bucket_name
+
+    for project_key, raw_keys in raw_keys_per_project.items():
+        if len(raw_keys) > 1:
+            _append_project_error(
+                snapshot,
+                project_key,
+                f"Project '{project_key}' is duplicated after normalization "
+                f"({', '.join(raw_keys)}).",
+            )
+
+    override_bucket_owners = {}
+    for project_key, bucket_name in valid_overrides.items():
+        owner = override_bucket_owners.get(bucket_name)
         if owner and owner != project_key:
-            errors.append(
+            _append_project_error(
+                snapshot,
+                project_key,
                 f"Bucket '{bucket_name}' is assigned to multiple projects "
-                f"('{owner}' and '{project_key}')."
+                f"('{owner}' and '{project_key}').",
             )
+            _append_project_error(
+                snapshot,
+                owner,
+                f"Bucket '{bucket_name}' is assigned to multiple projects "
+                f"('{owner}' and '{project_key}').",
+            )
+            _append_bucket_error(
+                snapshot,
+                bucket_name,
+                f"Bucket '{bucket_name}' is ambiguous because it is assigned to "
+                f"'{owner}' and '{project_key}'.",
+            )
+            snapshot["ambiguous_buckets"].add(bucket_name)
+            continue
+        override_bucket_owners[bucket_name] = project_key
+
+    for project_key, errors in snapshot["project_errors"].items():
+        if errors:
+            snapshot["blocked_projects"].add(project_key)
+
+    effective_bucket_by_project = {}
+    effective_bucket_owners = {}
+    for project_key in sorted(snapshot["known_projects"]):
+        if project_key in snapshot["blocked_projects"]:
             continue
 
-        normalized_overrides[project_key] = bucket_name
-        bucket_owners[bucket_name] = project_key
+        if project_key in valid_overrides:
+            effective_bucket = valid_overrides[project_key]
+        else:
+            effective_bucket = default_bucket_for_project(project_key)
 
-    return normalized_overrides, errors
+        if not effective_bucket:
+            _append_project_error(
+                snapshot,
+                project_key,
+                f"Project '{project_key}' cannot produce a valid effective bucket.",
+            )
+            snapshot["blocked_projects"].add(project_key)
+            continue
+
+        effective_bucket_by_project[project_key] = effective_bucket
+        effective_bucket_owners.setdefault(effective_bucket, []).append(project_key)
+
+    for bucket_name, projects in effective_bucket_owners.items():
+        if len(projects) <= 1:
+            continue
+
+        snapshot["ambiguous_buckets"].add(bucket_name)
+        _append_bucket_error(
+            snapshot,
+            bucket_name,
+            f"Bucket '{bucket_name}' is shared by multiple effective projects "
+            f"({', '.join(projects)}).",
+        )
+
+        for project_key in projects:
+            others = [other for other in projects if other != project_key]
+            _append_project_error(
+                snapshot,
+                project_key,
+                f"Project '{project_key}' collides on effective bucket '{bucket_name}' "
+                f"with project(s): {', '.join(others)}.",
+            )
+            snapshot["blocked_projects"].add(project_key)
+
+    for project_key, bucket_name in effective_bucket_by_project.items():
+        if project_key in snapshot["blocked_projects"]:
+            continue
+        if bucket_name in snapshot["ambiguous_buckets"]:
+            continue
+
+        snapshot["effective_project_to_bucket"][project_key] = bucket_name
+        snapshot["bucket_to_project"][bucket_name] = project_key
+
+        if project_key in valid_overrides:
+            snapshot["project_to_bucket"][project_key] = valid_overrides[project_key]
+            snapshot["override_projects"].add(project_key)
+
+    _rebuild_warning_list(snapshot)
+    return snapshot
 
 
-def load_snapshot(config_dict=None):
+def build_snapshot(raw_overrides, known_projects=None):
+    if raw_overrides is None:
+        return build_snapshot_from_raw_value({}, True, known_projects)
+    return build_snapshot_from_raw_value(dict(raw_overrides), True, known_projects)
+
+
+def normalize_and_validate_overrides(raw_overrides):
+    snapshot = build_snapshot(raw_overrides)
+    return dict(snapshot["project_to_bucket"]), list(snapshot["warnings"])
+
+
+def _discover_known_projects_from_local_root(config_dict):
+    known_projects = set()
+    if not isinstance(config_dict, dict):
+        return known_projects
+
+    wasabi_cfg = config_dict.get("Wasabi", {})
+    if isinstance(wasabi_cfg, dict):
+        raw_overrides = wasabi_cfg.get("ProjectBucketOverrides")
+        if isinstance(raw_overrides, dict):
+            for raw_project in raw_overrides.keys():
+                project_key = normalize_project_key(raw_project)
+                if project_key:
+                    known_projects.add(project_key)
+
+    app_cfg = config_dict.get("App", {})
+    local_root = ""
+    if isinstance(app_cfg, dict):
+        local_root = str(app_cfg.get("AltTPath", "")).strip()
+    if not local_root:
+        local_root = "T:/"
+
+    normalized_root = os.path.normpath(local_root)
+    if not os.path.isdir(normalized_root):
+        return known_projects
+
+    try:
+        for folder_name in os.listdir(normalized_root):
+            folder_path = os.path.join(normalized_root, folder_name)
+            if not os.path.isdir(folder_path):
+                continue
+            if not folder_name.upper().startswith("VFX-"):
+                continue
+            project_key = normalize_project_key(folder_name)
+            if project_key:
+                known_projects.add(project_key)
+    except Exception:
+        return known_projects
+
+    return known_projects
+
+
+def load_snapshot(config_dict=None, known_projects=None):
     """
     Carga snapshot de mapping contextual desde config.secure activo.
-    """
-    if config_dict is None:
-        config_dict = read_secure_config() or {}
 
-    wasabi_cfg = config_dict.get("Wasabi", {}) if isinstance(config_dict, dict) else {}
-    raw_overrides = (
-        wasabi_cfg.get("ProjectBucketOverrides", {})
-        if isinstance(wasabi_cfg, dict)
-        else {}
+    - Si falla la lectura de config en runtime, conserva el último snapshot válido.
+    - Si no hay snapshot previo, devuelve snapshot inválido (fail-closed).
+    """
+    global _LAST_VALID_RUNTIME_SNAPSHOT
+
+    runtime_mode = config_dict is None
+    config_error = ""
+    if runtime_mode:
+        config_dict, config_error = read_secure_config_with_status()
+        if config_dict is None:
+            if _LAST_VALID_RUNTIME_SNAPSHOT is not None:
+                snapshot = copy.deepcopy(_LAST_VALID_RUNTIME_SNAPSHOT)
+                detail = config_error.strip() or "unknown error"
+                _append_unique(
+                    snapshot["warnings"],
+                    "Could not refresh ProjectBucketOverrides from config.secure; "
+                    f"using last valid snapshot: {detail}",
+                )
+                return snapshot
+
+            snapshot = _new_snapshot()
+            snapshot["overrides_schema_valid"] = False
+            detail = config_error.strip() or "unknown error"
+            snapshot["schema_error"] = (
+                "Could not read ProjectBucketOverrides from config.secure: "
+                f"{detail}"
+            )
+            _append_unique(snapshot["warnings"], snapshot["schema_error"])
+            return snapshot
+
+    config = config_dict if isinstance(config_dict, dict) else {}
+    wasabi_cfg = config.get("Wasabi", {}) if isinstance(config, dict) else {}
+
+    overrides_field_present = False
+    raw_overrides_value = {}
+    if isinstance(wasabi_cfg, dict) and "ProjectBucketOverrides" in wasabi_cfg:
+        overrides_field_present = True
+        raw_overrides_value = wasabi_cfg.get("ProjectBucketOverrides")
+
+    discovered_known_projects = _discover_known_projects_from_local_root(config)
+    discovered_known_projects.update(_normalize_known_projects(known_projects))
+    snapshot = build_snapshot_from_raw_value(
+        raw_overrides_value, overrides_field_present, discovered_known_projects
     )
 
-    project_to_bucket, errors = normalize_and_validate_overrides(raw_overrides)
-    bucket_to_project = {}
-    for project_key, bucket_name in project_to_bucket.items():
-        bucket_to_project[bucket_name] = project_key
-
-    return {
-        "project_to_bucket": project_to_bucket,
-        "bucket_to_project": bucket_to_project,
-        "warnings": errors,
-    }
+    if runtime_mode and snapshot.get("overrides_schema_valid", True):
+        _LAST_VALID_RUNTIME_SNAPSHOT = copy.deepcopy(snapshot)
+    return snapshot
 
 
 def resolve_bucket_for_project(project_name, snapshot=None):
@@ -158,11 +455,33 @@ def resolve_bucket_for_project(project_name, snapshot=None):
             "warning": "Project name is empty.",
         }
 
-    bucket_name = snapshot.get("project_to_bucket", {}).get(project_key)
-    if not bucket_name:
-        bucket_name = default_bucket_for_project(project_key)
+    if not snapshot.get("overrides_schema_valid", True):
+        return {
+            "ok": False,
+            "project": project_key,
+            "bucket": "",
+            "warning": snapshot.get("schema_error")
+            or "ProjectBucketOverrides has an invalid schema.",
+        }
 
-    if not bucket_name:
+    if project_key in snapshot.get("blocked_projects", set()):
+        return {
+            "ok": False,
+            "project": project_key,
+            "bucket": "",
+            "warning": _blocked_project_message(snapshot, project_key),
+        }
+
+    explicit_bucket = snapshot.get("project_to_bucket", {}).get(project_key)
+    if explicit_bucket:
+        return {"ok": True, "project": project_key, "bucket": explicit_bucket, "warning": ""}
+
+    effective_bucket = snapshot.get("effective_project_to_bucket", {}).get(project_key)
+    if effective_bucket:
+        return {"ok": True, "project": project_key, "bucket": effective_bucket, "warning": ""}
+
+    fallback_bucket = default_bucket_for_project(project_key)
+    if not fallback_bucket:
         return {
             "ok": False,
             "project": project_key,
@@ -170,13 +489,23 @@ def resolve_bucket_for_project(project_name, snapshot=None):
             "warning": "Could not build a valid fallback bucket.",
         }
 
-    return {"ok": True, "project": project_key, "bucket": bucket_name, "warning": ""}
+    return {"ok": True, "project": project_key, "bucket": fallback_bucket, "warning": ""}
 
 
 def resolve_project_for_bucket(bucket_name, snapshot=None):
     """Resuelve proyecto lógico para bucket físico."""
     if snapshot is None:
         snapshot = load_snapshot()
+
+    if not snapshot.get("overrides_schema_valid", True):
+        return {
+            "ok": False,
+            "bucket": "",
+            "project": "",
+            "from_override": False,
+            "warning": snapshot.get("schema_error")
+            or "ProjectBucketOverrides has an invalid schema.",
+        }
 
     normalized_bucket = normalize_bucket_name(bucket_name)
     is_valid, reason = is_valid_bucket_name(normalized_bucket)
@@ -189,27 +518,73 @@ def resolve_project_for_bucket(bucket_name, snapshot=None):
             "warning": reason,
         }
 
-    project_key = snapshot.get("bucket_to_project", {}).get(normalized_bucket)
-    from_override = bool(project_key)
-
-    if not project_key and normalized_bucket.startswith("vfx-"):
-        project_key = normalize_project_key(normalized_bucket[4:])
-
-    if not project_key:
+    if normalized_bucket in snapshot.get("ambiguous_buckets", set()):
         return {
             "ok": False,
             "bucket": normalized_bucket,
             "project": "",
             "from_override": False,
-            "warning": "Bucket is not mapped to any known project.",
+            "warning": _first_bucket_error(snapshot, normalized_bucket)
+            or f"Bucket '{normalized_bucket}' is ambiguous in the current mapping.",
+        }
+
+    mapped_project = snapshot.get("bucket_to_project", {}).get(normalized_bucket)
+    if mapped_project:
+        if mapped_project in snapshot.get("blocked_projects", set()):
+            return {
+                "ok": False,
+                "bucket": normalized_bucket,
+                "project": "",
+                "from_override": False,
+                "warning": _blocked_project_message(snapshot, mapped_project),
+            }
+
+        from_override = (
+            mapped_project in snapshot.get("override_projects", set())
+            and snapshot.get("project_to_bucket", {}).get(mapped_project) == normalized_bucket
+        )
+        return {
+            "ok": True,
+            "bucket": normalized_bucket,
+            "project": mapped_project,
+            "from_override": from_override,
+            "warning": "",
+        }
+
+    if normalized_bucket.startswith("vfx-"):
+        candidate_project = normalize_project_key(normalized_bucket[4:])
+        if not candidate_project:
+            return {
+                "ok": False,
+                "bucket": normalized_bucket,
+                "project": "",
+                "from_override": False,
+                "warning": "Could not infer project key from bucket name.",
+            }
+
+        if candidate_project in snapshot.get("blocked_projects", set()):
+            return {
+                "ok": False,
+                "bucket": normalized_bucket,
+                "project": "",
+                "from_override": False,
+                "warning": _blocked_project_message(snapshot, candidate_project),
+            }
+
+        return {
+            "ok": True,
+            "bucket": normalized_bucket,
+            "project": candidate_project,
+            "from_override": False,
+            "warning": "",
         }
 
     return {
-        "ok": True,
+        "ok": False,
         "bucket": normalized_bucket,
-        "project": project_key,
-        "from_override": from_override,
-        "warning": "",
+        "project": "",
+        "from_override": False,
+        "warning": f"Bucket '{normalized_bucket}' is not mapped to any known project.",
     }
 
 
@@ -219,7 +594,7 @@ def _sanitize_prefix(prefix):
     if not normalized_prefix:
         return True, "", []
 
-    parts = [p.strip() for p in normalized_prefix.split("/") if p.strip()]
+    parts = [part.strip() for part in normalized_prefix.split("/") if part.strip()]
     for part in parts:
         if part in (".", ".."):
             return False, "", []
@@ -232,11 +607,11 @@ def resolve_bucket_from_local_path(local_path, snapshot=None):
     if snapshot is None:
         snapshot = load_snapshot()
 
-    normalized = os.path.normpath(str(local_path or "").strip()).replace("\\", "/")
-    if not normalized:
+    normalized_path = os.path.normpath(str(local_path or "").strip()).replace("\\", "/")
+    if not normalized_path:
         return {"ok": False, "error": "Local path is empty."}
 
-    parts = [p.strip() for p in normalized.split("/") if p.strip()]
+    parts = [part.strip() for part in normalized_path.split("/") if part.strip()]
     project_folder_index = -1
     for index, part in enumerate(parts):
         if part.upper().startswith("VFX-"):
@@ -251,13 +626,17 @@ def resolve_bucket_from_local_path(local_path, snapshot=None):
 
     project_key = normalize_project_key(parts[project_folder_index])
     if not project_key:
-        return {"ok": False, "error": "Could not normalize project name from local path."}
+        return {
+            "ok": False,
+            "error": "Could not normalize project name from local path.",
+        }
 
     bucket_result = resolve_bucket_for_project(project_key, snapshot=snapshot)
     if not bucket_result.get("ok"):
         return {
             "ok": False,
-            "error": bucket_result.get("warning") or "Could not resolve project bucket.",
+            "error": bucket_result.get("warning")
+            or "Could not resolve project bucket.",
         }
 
     raw_prefix = "/".join(parts[project_folder_index + 1 :])

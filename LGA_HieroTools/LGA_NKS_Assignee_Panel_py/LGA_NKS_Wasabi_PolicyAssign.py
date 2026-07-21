@@ -1,7 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.97 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v0.98 | Lega
+
+  v0.98 (2026-07-21)
+  - Propaga errores fail-closed del resolver de buckets con mensajes
+    accionables por ruta al preparar la policy.
 
   v0.97 (2026-07-21)
   - Migra la resolución de bucket/proyecto a LGA_NKS_BucketResolver
@@ -206,13 +210,17 @@ class WasabiWorker(QRunnable):
 
             # Parsear todas las rutas
             paths_info = []
+            parse_errors = []
             for file_path in file_paths:
                 parsed = parse_path_for_policy(file_path)
-                if parsed:
-                    paths_info.append(parsed)
+                if parsed.get("ok"):
+                    paths_info.append(parsed["value"])
+                else:
+                    parse_errors.append(parsed.get("error") or "Error desconocido de parseo")
 
             if not paths_info:
-                self.signals.error.emit("No se pudieron parsear las rutas.")
+                first_error = parse_errors[0] if parse_errors else "No se pudieron parsear las rutas."
+                self.signals.error.emit(first_error)
                 return
 
             # Enviar las rutas para actualizar la ventana
@@ -239,18 +247,28 @@ def parse_path_for_policy(file_path):
         file_path (str): Ruta completa del archivo
 
     Returns:
-        tuple: (bucket_name, folder_path, subfolder_path) o None si no se puede parsear
+        dict: {"ok": bool, "value": tuple|None, "error": str}
     """
     try:
         resolution = resolve_bucket_from_local_path(file_path)
         if not resolution.get("ok"):
-            debug_print(f"No se pudo resolver bucket/prefix: {resolution.get('error')}")
-            return None
+            error_message = resolution.get("error") or "No se pudo resolver bucket/prefix."
+            debug_print(f"No se pudo resolver bucket/prefix: {error_message}")
+            return {
+                "ok": False,
+                "value": None,
+                "error": f"Ruta bloqueada por mapping inválido: {file_path} | {error_message}",
+            }
 
         prefix_parts = list(resolution.get("prefix_parts") or [])
         if len(prefix_parts) < 2:
-            debug_print("Ruta sin suficientes segmentos para folder/subfolder de policy")
-            return None
+            message = "Ruta sin suficientes segmentos para folder/subfolder de policy"
+            debug_print(message)
+            return {
+                "ok": False,
+                "value": None,
+                "error": f"{message}: {file_path}",
+            }
 
         bucket_name = resolution.get("bucket", "")
         folder_path = prefix_parts[0]
@@ -260,11 +278,15 @@ def parse_path_for_policy(file_path):
         debug_print(f"Carpeta: {folder_path}")
         debug_print(f"Subcarpeta: {subfolder_path}")
 
-        return bucket_name, folder_path, subfolder_path
+        return {"ok": True, "value": (bucket_name, folder_path, subfolder_path), "error": ""}
 
     except Exception as e:
         debug_print(f"Error parseando ruta: {e}")
-        return None
+        return {
+            "ok": False,
+            "value": None,
+            "error": f"Error parseando ruta '{file_path}': {e}",
+        }
 
 
 def get_selected_clips_paths():

@@ -23,7 +23,8 @@ existentes:
   - `get_context_mode()`
   - `get_secure_config_path()`
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/SecureConfig_Reader.py`
-  - `read_secure_config()`
+  - `read_secure_config_with_status()`
+  - lectura con shared lock para evitar lecturas parciales de `config.secure`.
 
 Schema esperado (opcional):
 
@@ -51,13 +52,20 @@ Funciones clave:
 - `resolve_project_folder_from_bucket_and_prefix(bucket_name, prefix, snapshot=None)`
 - `normalize_and_validate_overrides(raw_overrides)`
 - `load_snapshot(config_dict=None)`
+- `build_snapshot_from_raw_value(raw_overrides_value, overrides_field_present, known_projects=None)`
 
 Reglas aplicadas:
 
 - proyecto normalizado a uppercase, `VFX-` opcional;
+- clave vacía después de normalizar conservada como warning global;
 - bucket normalizado a lowercase + validación DNS/S3;
-- fallback legacy `vfx-{project_lower}`;
-- rechazo explícito de overrides inválidos o colisiones.
+- fallback legacy solo si no hay entrada explícita para el proyecto;
+- entrada explícita inválida => fail-closed (proyecto bloqueado);
+- schema no-object en `ProjectBucketOverrides` => fail-closed global;
+- colisiones por bucket efectivo (override + fallback de conocidos) también
+  bloquean reverse mapping ambiguo;
+- ante error transitorio leyendo `config.secure`, el runtime conserva el último
+  snapshot válido en vez de volver silenciosamente al fallback.
 
 ## Integración runtime en Assignee Panel
 

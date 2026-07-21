@@ -1,18 +1,30 @@
 """
-Usado por runtime activo:
-- LGA_NKS_ViewerTL_Panel.py
-- LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py
-- LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py
-- LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assignee.py
-- LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py
-- LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Clear_Assignees.py
-- LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py
-- LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py
-- LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign_CompletedShots.py
-- LGA_NKS_Assignee_Panel_py/wasabi_policy_utils.py
-- LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py
-- LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py
-- LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py
+____________________________________________________________________
+
+  SecureConfig_Reader v1.01 | Lega
+
+  v1.01 (2026-07-21)
+  - Agrega lectura bloqueada (shared lock) para evitar lecturas parciales
+    de config.secure y expone read_secure_config_with_status().
+
+  v1.00:
+  - Lectura y desencriptado de config.secure por contexto.
+
+  Usado por runtime activo:
+  - LGA_NKS_ViewerTL_Panel.py
+  - LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py
+  - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assignee.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Clear_Assignees.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign_CompletedShots.py
+  - LGA_NKS_Assignee_Panel_py/wasabi_policy_utils.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py
+____________________________________________________________________
 """
 
 import sys
@@ -20,9 +32,20 @@ import json
 import base64
 from pathlib import Path
 import hashlib
+from contextlib import contextmanager
 from LGA_NKS_ContextProfile import get_key_path as get_context_key_path
 from LGA_NKS_ContextProfile import get_lga_appdata_root
 from LGA_NKS_ContextProfile import get_secure_config_path
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - no Windows lock available
+    msvcrt = None
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - no POSIX lock available
+    fcntl = None
 
 
 # Variable global para activar o desactivar los prints de debug
@@ -33,6 +56,55 @@ def debug_print(message):
     """Función de debug simple que imprime directamente si DEBUG está activado"""
     if DEBUG:
         print(f"[SecureConfig_Reader] {message}")
+
+
+def _acquire_shared_lock(file_obj):
+    if msvcrt is not None:
+        file_obj.seek(0)
+        try:
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_RLCK, 0x7FFFFFFF)
+        except OSError:
+            return False
+        return True
+
+    if fcntl is not None:
+        try:
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_SH)
+        except OSError:
+            return False
+        return True
+
+    return True
+
+
+def _release_shared_lock(file_obj):
+    if msvcrt is not None:
+        file_obj.seek(0)
+        try:
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 0x7FFFFFFF)
+        except OSError:
+            return False
+        return True
+
+    if fcntl is not None:
+        try:
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            return False
+        return True
+
+    return True
+
+
+@contextmanager
+def _locked_config_reader(config_path):
+    with open(config_path, "r", encoding="utf-8") as file_obj:
+        if not _acquire_shared_lock(file_obj):
+            raise RuntimeError("Could not acquire shared lock for config.secure")
+        try:
+            yield file_obj
+        finally:
+            _release_shared_lock(file_obj)
 
 
 def get_config_path():
@@ -114,25 +186,32 @@ def decrypt(encrypted_text, key):
         return ""
 
 
-def read_secure_config():
-    """Lee la configuración segura y devuelve un diccionario con los valores."""
+def read_secure_config_with_status():
+    """Lee config.secure activo y devuelve (config_dict, error_message)."""
     try:
         config_path = get_config_path()
         key_path = get_key_path()
         debug_print(
-            f"[SecureConfig_Reader::read_secure_config] Ruta de configuración segura: {config_path}"
+            f"[SecureConfig_Reader::read_secure_config_with_status] Ruta de configuración segura: {config_path}"
         )
-
-        return _read_secure_config_from_paths(config_path, key_path)
-
+        config = _read_secure_config_from_paths(config_path, key_path)
+        if config is None:
+            return None, "Could not read or decrypt config.secure."
+        return config, ""
     except Exception as e:
         debug_print(
-            f"[SecureConfig_Reader::read_secure_config] Error al leer la configuración segura: {str(e)}"
+            f"[SecureConfig_Reader::read_secure_config_with_status] Error al leer la configuración segura: {str(e)}"
         )
         import traceback
 
         debug_print(traceback.format_exc())
-        return None
+        return None, str(e)
+
+
+def read_secure_config():
+    """Lee la configuración segura y devuelve un diccionario con los valores."""
+    config, _ = read_secure_config_with_status()
+    return config
 
 
 def _read_secure_config_from_paths(config_path, key_path):
@@ -151,8 +230,8 @@ def _read_secure_config_from_paths(config_path, key_path):
     else:
         key = generate_key()
 
-    with open(config_path, "r") as f:
-        encrypted_data = f.read()
+    with _locked_config_reader(config_path) as file_obj:
+        encrypted_data = file_obj.read()
 
     json_data = decrypt(encrypted_data, key)
     if not json_data:

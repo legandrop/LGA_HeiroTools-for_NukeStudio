@@ -1,3 +1,8 @@
+v3.80:
+        - Assignee Panel / Wasabi: el resolver conserva y reporta las claves de proyecto que quedan vacias despues de normalizar, en vez de ignorarlas como si el mapping fuera valido. [ Wasabi Policy - Corregir diagnostico de clave de proyecto vacia ]
+
+        - Assignee Panel / Wasabi (`LGA_NKS_Wasabi_PolicyAssign v0.98`, `LGA_NKS_BucketResolver v1.01`, `SecureConfig_Reader v1.01`): el mapping proyecto<->bucket adopta contrato fail-closed (schema no-object, non-string, duplicados/colisiones y ambigüedad reverse bloquean la resolución), se preserva último snapshot válido ante fallos transitorios de lectura y `parse_path_for_policy` propaga errores accionables por ruta en lugar de continuar silenciosamente. `SecureConfig_Reader` agrega lectura con shared lock y API `read_secure_config_with_status()` para evitar lecturas parciales de `config.secure`. [ Wasabi Policy - Fail-closed y lectura bloqueada de config ]
+
 v3.79:
         - Assignee Panel / Wasabi (`LGA_NKS_Wasabi_PolicyAssign v0.97`, `LGA_NKS_BucketResolver v1.00`): se agrega un resolver central de bucket por contexto (Studio/Client) leyendo `ProjectBucketOverrides` desde `config.secure` activo. La generación de policies deja de derivar bucket con `parts[1].lower()` y usa el mapping lógico->físico sin cambiar `VFX-*`, proyecto Flow ni shot codes. Se documenta el contrato en `docs/Doc_ProjectBucketResolver.md`. [ Wasabi Policy - Resolver bucket contextual para Assignee ]
 
