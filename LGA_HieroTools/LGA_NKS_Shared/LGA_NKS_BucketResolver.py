@@ -1,7 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BucketResolver v1.01 | Lega
+  LGA_NKS_BucketResolver v1.02 | Lega
+
+  v1.02 (2026-07-21)
+  - Aísla cache runtime por ruta/perfil/contexto para evitar fugas Studio↔Client.
+  - Valida project keys como segmento local seguro en snapshot y resolución.
 
   v1.01 (2026-07-21)
   - Endurece ProjectBucketOverrides con contrato fail-closed, detección
@@ -16,12 +20,13 @@ import copy
 import os
 import re
 
-from SecureConfig_Reader import read_secure_config_with_status
+from SecureConfig_Reader import read_secure_config_with_runtime_metadata
 
 
 _BUCKET_ALLOWED_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*[a-z0-9]$")
 _BUCKET_IPV4_RE = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
-_LAST_VALID_RUNTIME_SNAPSHOT = None
+_PROJECT_ALLOWED_RE = re.compile(r"^[A-Z0-9][A-Z0-9_-]{0,63}$")
+_LAST_VALID_RUNTIME_SNAPSHOTS = {}
 
 
 def _new_snapshot():
@@ -98,7 +103,8 @@ def _normalize_known_projects(known_projects):
     normalized = set()
     for project in known_projects or []:
         project_key = normalize_project_key(project)
-        if project_key:
+        is_valid, _ = is_valid_project_key(project_key)
+        if is_valid:
             normalized.add(project_key)
     return normalized
 
@@ -130,10 +136,32 @@ def normalize_project_key(project_name):
     return normalized.upper()
 
 
+def is_valid_project_key(project_name):
+    """Valida que la clave sea un único segmento seguro de carpeta local."""
+    project_key = normalize_project_key(project_name)
+    if not project_key:
+        return False, "Project key is empty."
+    if project_key in (".", ".."):
+        return False, "Project key cannot be '.' or '..'."
+    if "/" in project_key or "\\" in project_key:
+        return False, "Project key cannot contain '/' or '\\'. Use a single folder segment."
+    for char in project_key:
+        code_point = ord(char)
+        if code_point < 32 or code_point == 127:
+            return False, "Project key cannot contain control characters."
+    if not _PROJECT_ALLOWED_RE.match(project_key):
+        return (
+            False,
+            "Project key can only contain letters, numbers, '-' and '_' (1-64 chars).",
+        )
+    return True, ""
+
+
 def project_folder_for_project(project_name):
     """Construye carpeta local canónica VFX-{PROJECT}."""
     project_key = normalize_project_key(project_name)
-    if not project_key:
+    is_valid, _ = is_valid_project_key(project_key)
+    if not is_valid:
         return ""
     return f"VFX-{project_key}"
 
@@ -165,7 +193,8 @@ def is_valid_bucket_name(bucket_name):
 def default_bucket_for_project(project_name):
     """Fallback legacy: vfx-{project_lower}."""
     project_key = normalize_project_key(project_name)
-    if not project_key:
+    is_valid_project, _ = is_valid_project_key(project_key)
+    if not is_valid_project:
         return ""
     candidate = f"vfx-{project_key.lower()}"
     is_valid, _ = is_valid_bucket_name(candidate)
@@ -191,10 +220,13 @@ def build_snapshot_from_raw_value(
 
     for raw_project_key, raw_bucket_value in raw_object.items():
         project_key = normalize_project_key(raw_project_key)
-        if not project_key:
+        is_valid_project, project_error = is_valid_project_key(project_key)
+        if not is_valid_project:
             _append_unique(
                 snapshot["general_errors"],
-                f"Project override key '{raw_project_key}' is empty after normalization.",
+                "Project override key "
+                f"'{raw_project_key}' is invalid after normalization "
+                f"('{project_key}'): {project_error}",
             )
             continue
 
@@ -357,7 +389,8 @@ def _discover_known_projects_from_local_root(config_dict):
         if isinstance(raw_overrides, dict):
             for raw_project in raw_overrides.keys():
                 project_key = normalize_project_key(raw_project)
-                if project_key:
+                is_valid, _ = is_valid_project_key(project_key)
+                if is_valid:
                     known_projects.add(project_key)
 
     app_cfg = config_dict.get("App", {})
@@ -379,7 +412,8 @@ def _discover_known_projects_from_local_root(config_dict):
             if not folder_name.upper().startswith("VFX-"):
                 continue
             project_key = normalize_project_key(folder_name)
-            if project_key:
+            is_valid, _ = is_valid_project_key(project_key)
+            if is_valid:
                 known_projects.add(project_key)
     except Exception:
         return known_projects
@@ -394,15 +428,28 @@ def load_snapshot(config_dict=None, known_projects=None):
     - Si falla la lectura de config en runtime, conserva el último snapshot válido.
     - Si no hay snapshot previo, devuelve snapshot inválido (fail-closed).
     """
-    global _LAST_VALID_RUNTIME_SNAPSHOT
+    global _LAST_VALID_RUNTIME_SNAPSHOTS
 
     runtime_mode = config_dict is None
     config_error = ""
+    runtime_metadata = {
+        "cache_key": "manual|snapshot",
+        "context_identity": "manual|snapshot",
+        "config_path": "",
+    }
     if runtime_mode:
-        config_dict, config_error = read_secure_config_with_status()
+        config_dict, config_error, runtime_metadata = (
+            read_secure_config_with_runtime_metadata()
+        )
+        runtime_cache_key = str(runtime_metadata.get("cache_key") or "").strip()
+        if not runtime_cache_key:
+            runtime_cache_key = str(runtime_metadata.get("context_identity") or "").strip()
+        if not runtime_cache_key:
+            runtime_cache_key = "runtime|unknown"
         if config_dict is None:
-            if _LAST_VALID_RUNTIME_SNAPSHOT is not None:
-                snapshot = copy.deepcopy(_LAST_VALID_RUNTIME_SNAPSHOT)
+            cached_snapshot = _LAST_VALID_RUNTIME_SNAPSHOTS.get(runtime_cache_key)
+            if cached_snapshot is not None:
+                snapshot = copy.deepcopy(cached_snapshot)
                 detail = config_error.strip() or "unknown error"
                 _append_unique(
                     snapshot["warnings"],
@@ -420,6 +467,8 @@ def load_snapshot(config_dict=None, known_projects=None):
             )
             _append_unique(snapshot["warnings"], snapshot["schema_error"])
             return snapshot
+    else:
+        runtime_cache_key = "manual|snapshot"
 
     config = config_dict if isinstance(config_dict, dict) else {}
     wasabi_cfg = config.get("Wasabi", {}) if isinstance(config, dict) else {}
@@ -435,9 +484,14 @@ def load_snapshot(config_dict=None, known_projects=None):
     snapshot = build_snapshot_from_raw_value(
         raw_overrides_value, overrides_field_present, discovered_known_projects
     )
+    snapshot["runtime_metadata"] = {
+        "cache_key": runtime_cache_key,
+        "context_identity": runtime_metadata.get("context_identity", ""),
+        "config_path": runtime_metadata.get("config_path", ""),
+    }
 
     if runtime_mode and snapshot.get("overrides_schema_valid", True):
-        _LAST_VALID_RUNTIME_SNAPSHOT = copy.deepcopy(snapshot)
+        _LAST_VALID_RUNTIME_SNAPSHOTS[runtime_cache_key] = copy.deepcopy(snapshot)
     return snapshot
 
 
@@ -447,12 +501,13 @@ def resolve_bucket_for_project(project_name, snapshot=None):
         snapshot = load_snapshot()
 
     project_key = normalize_project_key(project_name)
-    if not project_key:
+    is_valid_project, project_error = is_valid_project_key(project_key)
+    if not is_valid_project:
         return {
             "ok": False,
             "project": "",
             "bucket": "",
-            "warning": "Project name is empty.",
+            "warning": project_error,
         }
 
     if not snapshot.get("overrides_schema_valid", True):
@@ -553,13 +608,14 @@ def resolve_project_for_bucket(bucket_name, snapshot=None):
 
     if normalized_bucket.startswith("vfx-"):
         candidate_project = normalize_project_key(normalized_bucket[4:])
-        if not candidate_project:
+        is_valid_project, project_error = is_valid_project_key(candidate_project)
+        if not is_valid_project:
             return {
                 "ok": False,
                 "bucket": normalized_bucket,
                 "project": "",
                 "from_override": False,
-                "warning": "Could not infer project key from bucket name.",
+                "warning": project_error,
             }
 
         if candidate_project in snapshot.get("blocked_projects", set()):
@@ -625,10 +681,11 @@ def resolve_bucket_from_local_path(local_path, snapshot=None):
         }
 
     project_key = normalize_project_key(parts[project_folder_index])
-    if not project_key:
+    is_valid_project, project_error = is_valid_project_key(project_key)
+    if not is_valid_project:
         return {
             "ok": False,
-            "error": "Could not normalize project name from local path.",
+            "error": project_error,
         }
 
     bucket_result = resolve_bucket_for_project(project_key, snapshot=snapshot)

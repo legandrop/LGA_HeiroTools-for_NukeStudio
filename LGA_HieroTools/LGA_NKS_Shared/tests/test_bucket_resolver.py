@@ -1,5 +1,10 @@
 import os
 import sys
+import json
+import threading
+import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -8,6 +13,7 @@ if SHARED_DIR not in sys.path:
     sys.path.insert(0, SHARED_DIR)
 
 from LGA_NKS_BucketResolver import (  # noqa: E402
+    is_valid_project_key,
     build_snapshot_from_raw_value,
     load_snapshot,
     normalize_and_validate_overrides,
@@ -16,6 +22,8 @@ from LGA_NKS_BucketResolver import (  # noqa: E402
     resolve_project_folder_from_bucket_and_prefix,
     resolve_project_for_bucket,
 )
+import LGA_NKS_BucketResolver as bucket_resolver  # noqa: E402
+import SecureConfig_Reader as secure_reader  # noqa: E402
 
 
 def _expect(condition, message):
@@ -129,6 +137,24 @@ def run():
         "Clave de proyecto vacía tras normalizar debe devolver warning",
     )
 
+    valid_project_key, project_key_error = is_valid_project_key("ERSO/../../X")
+    _expect(not valid_project_key, "Project key insegura debe rechazarse")
+    _expect(bool(project_key_error), "Project key insegura debe devolver error accionable")
+
+    unsafe_key_snapshot = build_snapshot_from_raw_value(
+        {"ERSO/../../X": "vfx-ers0"},
+        True,
+    )
+    _expect(
+        bool(unsafe_key_snapshot["warnings"]),
+        "Project key insegura en overrides debe producir warning",
+    )
+    unsafe_key_result = resolve_bucket_for_project("ERSO/../../X", unsafe_key_snapshot)
+    _expect(
+        not unsafe_key_result["ok"],
+        "Project key insegura debe fallar cerrado en resolución directa",
+    )
+
     schema_invalid_snapshot = build_snapshot_from_raw_value(
         "not-an-object",
         True,
@@ -212,6 +238,128 @@ def run():
         and erso_without_ers0_reverse["project"] == "ERSO",
         "Reverse vfx-ers0 debe resolver ERSO en caso no ambiguo",
     )
+
+    original_reader = bucket_resolver.read_secure_config_with_runtime_metadata
+    try:
+        bucket_resolver._LAST_VALID_RUNTIME_SNAPSHOTS.clear()
+        responses = [
+            (
+                {"Wasabi": {"ProjectBucketOverrides": {"ERSO": "vfx-ers0"}}},
+                "",
+                {
+                    "cache_key": "studio-key",
+                    "context_identity": "pipesync|studio",
+                    "config_path": "studio/config.secure",
+                },
+            ),
+            (
+                None,
+                "config lock busy",
+                {
+                    "cache_key": "studio-key",
+                    "context_identity": "pipesync|studio",
+                    "config_path": "studio/config.secure",
+                },
+            ),
+            (
+                None,
+                "config lock busy",
+                {
+                    "cache_key": "client-key",
+                    "context_identity": "pipesyncclient|client",
+                    "config_path": "client/config.secure",
+                },
+            ),
+        ]
+
+        def _fake_reader():
+            if not responses:
+                raise RuntimeError("No fake responses left")
+            return responses.pop(0)
+
+        bucket_resolver.read_secure_config_with_runtime_metadata = _fake_reader
+
+        studio_runtime_snapshot = load_snapshot()
+        _expect(
+            resolve_bucket_for_project("ERSO", studio_runtime_snapshot)["bucket"] == "vfx-ers0",
+            "Runtime studio snapshot debe cargar override",
+        )
+
+        studio_fallback_snapshot = load_snapshot()
+        _expect(
+            resolve_bucket_for_project("ERSO", studio_fallback_snapshot)["bucket"] == "vfx-ers0",
+            "Fallo de lectura en mismo contexto debe reutilizar snapshot válido",
+        )
+
+        client_failure_snapshot = load_snapshot()
+        client_failure_result = resolve_bucket_for_project("ERSO", client_failure_snapshot)
+        _expect(
+            not client_failure_result["ok"],
+            "Fallo de lectura en otro contexto no debe heredar snapshot Studio",
+        )
+    finally:
+        bucket_resolver.read_secure_config_with_runtime_metadata = original_reader
+
+    with TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        config_path = temp_path / "config.secure"
+        key_path = temp_path / ".key"
+        key = b"test-key-123456"
+        key_path.write_bytes(key)
+
+        def _atomic_write(payload_dict, retries=50):
+            encrypted = secure_reader.encrypt(json.dumps(payload_dict), key)
+            tmp_path = config_path.with_suffix(".tmp")
+            tmp_path.write_text(encrypted, encoding="utf-8")
+            last_error = None
+            for _ in range(max(1, int(retries))):
+                try:
+                    os.replace(str(tmp_path), str(config_path))
+                    return
+                except PermissionError as exc:
+                    last_error = exc
+                    time.sleep(0.003)
+            if last_error is not None:
+                raise last_error
+
+        payload_a = {"Wasabi": {"ProjectBucketOverrides": {"ERSO": "vfx-ers0"}}, "Version": 1}
+        payload_b = {"Wasabi": {"ProjectBucketOverrides": {"ERSO": "vfx-ers1"}}, "Version": 2}
+        _atomic_write(payload_a)
+
+        stop_flag = {"stop": False}
+        observed_versions = set()
+        read_errors = []
+        writer_errors = []
+
+        def _writer():
+            try:
+                for index in range(40):
+                    _atomic_write(payload_a if index % 2 == 0 else payload_b)
+                    time.sleep(0.005)
+            except Exception as exc:  # pragma: no cover - rama defensiva
+                writer_errors.append(str(exc))
+            finally:
+                stop_flag["stop"] = True
+
+        writer_thread = threading.Thread(target=_writer)
+        writer_thread.start()
+
+        while not stop_flag["stop"]:
+            config_data, _, _ = secure_reader._read_secure_config_from_paths(  # noqa: SLF001
+                config_path, key_path
+            )
+            if config_data is None:
+                continue
+            version_value = config_data.get("Version")
+            if version_value not in (1, 2):
+                read_errors.append(version_value)
+                break
+            observed_versions.add(version_value)
+
+        writer_thread.join()
+        _expect(not writer_errors, "Writer concurrente no debe fallar al reemplazar config")
+        _expect(not read_errors, "Lectura concurrente no debe devolver payload parcial")
+        _expect(observed_versions.issubset({1, 2}), "Solo se deben leer payloads completos")
 
 
 if __name__ == "__main__":

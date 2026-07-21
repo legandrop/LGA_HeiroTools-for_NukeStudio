@@ -1,7 +1,12 @@
 """
 ____________________________________________________________________
 
-  SecureConfig_Reader v1.01 | Lega
+  SecureConfig_Reader v1.02 | Lega
+
+  v1.02 (2026-07-21)
+  - Reemplaza byte-lock local por lectura estable con fingerprint+retry
+    compatible con reemplazo atómico de QSaveFile.
+  - Expone metadata contextual runtime para cache seguro por perfil.
 
   v1.01 (2026-07-21)
   - Agrega lectura bloqueada (shared lock) para evitar lecturas parciales
@@ -32,20 +37,12 @@ import json
 import base64
 from pathlib import Path
 import hashlib
-from contextlib import contextmanager
+import time
 from LGA_NKS_ContextProfile import get_key_path as get_context_key_path
 from LGA_NKS_ContextProfile import get_lga_appdata_root
 from LGA_NKS_ContextProfile import get_secure_config_path
-
-try:
-    import msvcrt
-except ImportError:  # pragma: no cover - no Windows lock available
-    msvcrt = None
-
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - no POSIX lock available
-    fcntl = None
+from LGA_NKS_ContextProfile import get_pipesync_profile_folder
+from LGA_NKS_ContextProfile import get_context_mode
 
 
 # Variable global para activar o desactivar los prints de debug
@@ -58,53 +55,51 @@ def debug_print(message):
         print(f"[SecureConfig_Reader] {message}")
 
 
-def _acquire_shared_lock(file_obj):
-    if msvcrt is not None:
-        file_obj.seek(0)
+def _canonical_path(path_value):
+    try:
+        return str(Path(path_value).resolve())
+    except Exception:
+        return str(Path(path_value))
+
+
+def _config_fingerprint(config_path):
+    path_obj = Path(config_path)
+    if not path_obj.exists():
+        return {"exists": False, "size": -1, "mtime_ns": -1}
+    stat = path_obj.stat()
+    return {
+        "exists": True,
+        "size": int(stat.st_size),
+        "mtime_ns": int(getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1e9))),
+    }
+
+
+def _read_stable_config_payload(config_path, attempts=5, pause_seconds=0.03):
+    last_error = ""
+    for _ in range(max(1, int(attempts))):
+        before = _config_fingerprint(config_path)
+        if not before["exists"]:
+            return None, before, "Config file does not exist."
+
         try:
-            msvcrt.locking(file_obj.fileno(), msvcrt.LK_RLCK, 0x7FFFFFFF)
-        except OSError:
-            return False
-        return True
+            with open(config_path, "r", encoding="utf-8") as file_obj:
+                encrypted_data = file_obj.read()
+        except OSError as exc:
+            last_error = str(exc)
+            time.sleep(pause_seconds)
+            continue
 
-    if fcntl is not None:
-        try:
-            fcntl.flock(file_obj.fileno(), fcntl.LOCK_SH)
-        except OSError:
-            return False
-        return True
+        after = _config_fingerprint(config_path)
+        if before == after and after["exists"]:
+            return encrypted_data, after, ""
 
-    return True
+        last_error = "Config changed while reading."
+        time.sleep(pause_seconds)
 
-
-def _release_shared_lock(file_obj):
-    if msvcrt is not None:
-        file_obj.seek(0)
-        try:
-            msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 0x7FFFFFFF)
-        except OSError:
-            return False
-        return True
-
-    if fcntl is not None:
-        try:
-            fcntl.flock(file_obj.fileno(), fcntl.LOCK_UN)
-        except OSError:
-            return False
-        return True
-
-    return True
-
-
-@contextmanager
-def _locked_config_reader(config_path):
-    with open(config_path, "r", encoding="utf-8") as file_obj:
-        if not _acquire_shared_lock(file_obj):
-            raise RuntimeError("Could not acquire shared lock for config.secure")
-        try:
-            yield file_obj
-        finally:
-            _release_shared_lock(file_obj)
+    final_fp = _config_fingerprint(config_path)
+    if not final_fp["exists"]:
+        return None, final_fp, "Config file disappeared during read."
+    return None, final_fp, last_error or "Could not obtain stable config snapshot."
 
 
 def get_config_path():
@@ -115,6 +110,24 @@ def get_config_path():
 def get_key_path():
     """Obtiene la ruta del archivo de clave."""
     return get_context_key_path()
+
+
+def get_runtime_context_metadata():
+    """Devuelve metadata contextual canónica del config.secure activo."""
+    config_path = get_config_path()
+    canonical_config_path = _canonical_path(config_path)
+    profile_folder = str(get_pipesync_profile_folder() or "").strip() or "PipeSync"
+    context_mode = str(get_context_mode() or "").strip().lower()
+    if context_mode != "client":
+        context_mode = "studio"
+    context_identity = f"{profile_folder.lower()}|{context_mode}"
+    return {
+        "config_path": canonical_config_path,
+        "profile_folder": profile_folder,
+        "context_mode": context_mode,
+        "context_identity": context_identity,
+        "cache_key": f"{canonical_config_path}|{context_identity}",
+    }
 
 
 def get_system_identifier():
@@ -188,16 +201,29 @@ def decrypt(encrypted_text, key):
 
 def read_secure_config_with_status():
     """Lee config.secure activo y devuelve (config_dict, error_message)."""
+    config, error, _ = read_secure_config_with_runtime_metadata()
+    return config, error
+
+
+def read_secure_config_with_runtime_metadata():
+    """
+    Lee config.secure activo y devuelve:
+    (config_dict | None, error_message, runtime_metadata)
+    """
     try:
         config_path = get_config_path()
         key_path = get_key_path()
+        metadata = get_runtime_context_metadata()
         debug_print(
             f"[SecureConfig_Reader::read_secure_config_with_status] Ruta de configuración segura: {config_path}"
         )
-        config = _read_secure_config_from_paths(config_path, key_path)
+        config, read_error, fingerprint = _read_secure_config_from_paths(
+            config_path, key_path
+        )
+        metadata["config_fingerprint"] = fingerprint
         if config is None:
-            return None, "Could not read or decrypt config.secure."
-        return config, ""
+            return None, (read_error or "Could not read or decrypt config.secure."), metadata
+        return config, "", metadata
     except Exception as e:
         debug_print(
             f"[SecureConfig_Reader::read_secure_config_with_status] Error al leer la configuración segura: {str(e)}"
@@ -205,7 +231,7 @@ def read_secure_config_with_status():
         import traceback
 
         debug_print(traceback.format_exc())
-        return None, str(e)
+        return None, str(e), get_runtime_context_metadata()
 
 
 def read_secure_config():
@@ -222,7 +248,7 @@ def _read_secure_config_from_paths(config_path, key_path):
         debug_print(
             f"[SecureConfig_Reader::_read_secure_config_from_paths] Archivo no encontrado en: {config_path}"
         )
-        return None
+        return None, "Config file does not exist.", _config_fingerprint(config_path)
 
     if key_path.exists():
         with open(key_path, "rb") as f:
@@ -230,17 +256,31 @@ def _read_secure_config_from_paths(config_path, key_path):
     else:
         key = generate_key()
 
-    with _locked_config_reader(config_path) as file_obj:
-        encrypted_data = file_obj.read()
+    encrypted_data, fingerprint, read_error = _read_stable_config_payload(config_path)
+    if encrypted_data is None:
+        debug_print(
+            "[SecureConfig_Reader::_read_secure_config_from_paths] "
+            f"No se pudo obtener lectura estable: {read_error}"
+        )
+        return None, read_error, fingerprint
 
     json_data = decrypt(encrypted_data, key)
     if not json_data:
         debug_print(
             "[SecureConfig_Reader::_read_secure_config_from_paths] No se pudo desencriptar la configuración"
         )
-        return None
+        return None, "Could not decrypt config.secure.", fingerprint
 
-    return json.loads(json_data)
+    try:
+        parsed = json.loads(json_data)
+    except Exception as exc:
+        debug_print(
+            "[SecureConfig_Reader::_read_secure_config_from_paths] "
+            f"JSON inválido: {exc}"
+        )
+        return None, "Config JSON is corrupt.", fingerprint
+
+    return parsed, "", fingerprint
 
 
 def read_secure_config_for_profile(profile_folder):
@@ -259,7 +299,8 @@ def read_secure_config_for_profile(profile_folder):
     key_path = get_lga_appdata_root() / folder / ".key"
 
     try:
-        return _read_secure_config_from_paths(config_path, key_path)
+        config, _, _ = _read_secure_config_from_paths(config_path, key_path)
+        return config
     except Exception as e:
         debug_print(
             f"[SecureConfig_Reader::read_secure_config_for_profile] Error leyendo perfil {folder}: {e}"

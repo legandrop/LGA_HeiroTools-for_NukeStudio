@@ -24,7 +24,9 @@ existentes:
   - `get_secure_config_path()`
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/SecureConfig_Reader.py`
   - `read_secure_config_with_status()`
-  - lectura con shared lock para evitar lecturas parciales de `config.secure`.
+  - `read_secure_config_with_runtime_metadata()`
+  - lectura estable por fingerprint+retry compatible con reemplazo atómico de
+    `config.secure` (sin lock de bytes sobre el archivo objetivo).
 
 Schema esperado (opcional):
 
@@ -57,6 +59,8 @@ Funciones clave:
 Reglas aplicadas:
 
 - proyecto normalizado a uppercase, `VFX-` opcional;
+- project key validada como segmento local seguro (`[A-Z0-9_-]`, sin
+  separadores/control chars ni `.`/`..`);
 - clave vacía después de normalizar conservada como warning global;
 - bucket normalizado a lowercase + validación DNS/S3;
 - fallback legacy solo si no hay entrada explícita para el proyecto;
@@ -65,7 +69,9 @@ Reglas aplicadas:
 - colisiones por bucket efectivo (override + fallback de conocidos) también
   bloquean reverse mapping ambiguo;
 - ante error transitorio leyendo `config.secure`, el runtime conserva el último
-  snapshot válido en vez de volver silenciosamente al fallback.
+  snapshot válido en vez de volver silenciosamente al fallback;
+- el snapshot runtime se cachea por `ruta canónica + perfil/contexto`, evitando
+  reutilizar Studio para Client (o viceversa).
 
 ## Integración runtime en Assignee Panel
 
