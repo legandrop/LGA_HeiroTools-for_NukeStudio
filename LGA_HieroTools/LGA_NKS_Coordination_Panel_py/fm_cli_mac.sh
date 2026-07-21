@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_DEV_APP="/Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManager.app"
-DEFAULT_PROD_APP="/Applications/FileManager.app"
-DEFAULT_LOCAL_APP="$SCRIPT_DIR/build/FileManager.app"
+DEFAULT_DEV_APP="/Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManagerS3.app"
+DEFAULT_PROD_APP="/Applications/FileManagerS3.app"
+DEFAULT_LOCAL_APP="$SCRIPT_DIR/build/FileManagerS3.app"
 
 if [ -n "${FILEMANAGER_APP_PATH:-}" ]; then
     APP_PATH="$FILEMANAGER_APP_PATH"
@@ -17,7 +17,7 @@ else
 fi
 
 if [ ! -d "$APP_PATH" ]; then
-    echo "FileManager.app no encontrada en: $APP_PATH"
+    echo "FileManagerS3.app no encontrada en: $APP_PATH"
     echo "Definí FILEMANAGER_APP_PATH con la ruta del .app (build o deploy)."
     exit 1
 fi
