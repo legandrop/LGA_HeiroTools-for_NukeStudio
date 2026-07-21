@@ -50,6 +50,7 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - `LGA_HieroTools_context.ini`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ContextProfile.py`
 - `LGA_HieroTools/LGA_NKS_Shared/SecureConfig_Reader.py`
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_BucketResolver.py`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_PipeSyncPaths.py`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_PipeSyncPreflight.py`
 - `LGA_HieroTools/docs/Docu_Context_Profile.md`

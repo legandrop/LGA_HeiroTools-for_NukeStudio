@@ -1,7 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.96 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v0.97 | Lega
+
+  v0.97 (2026-07-21)
+  - Migra la resolución de bucket/proyecto a LGA_NKS_BucketResolver
+    para respetar ProjectBucketOverrides por contexto.
 
   Crea y asigna políticas IAM de Wasabi basadas en rutas de clips seleccionados
 ____________________________________________________________________
@@ -43,6 +47,7 @@ sys.path.insert(0, flow_shared_dir)
 import boto3
 from boto3 import Session
 from SecureConfig_Reader import get_s3_credentials
+from LGA_NKS_BucketResolver import resolve_bucket_from_local_path
 
 # Configuracion
 DEBUG = False
@@ -237,25 +242,19 @@ def parse_path_for_policy(file_path):
         tuple: (bucket_name, folder_path, subfolder_path) o None si no se puede parsear
     """
     try:
-        # Normalizar la ruta y dividir en partes
-        normalized_path = os.path.normpath(file_path)
-        parts = normalized_path.split(os.sep)
-
-        debug_print(f"Ruta original: {file_path}")
-        debug_print(f"Partes de la ruta: {parts}")
-
-        # Buscar el indice donde empieza la estructura que nos interesa
-        # Descartamos la unidad (T:\ por ejemplo)
-        if len(parts) < 4:
-            debug_print("Ruta demasiado corta para parsear")
+        resolution = resolve_bucket_from_local_path(file_path)
+        if not resolution.get("ok"):
+            debug_print(f"No se pudo resolver bucket/prefix: {resolution.get('error')}")
             return None
 
-        # El bucket será la primera carpeta después de la unidad, en minúsculas
-        bucket_name = parts[1].lower()  # VFX-ETDM -> vfx-etdm
+        prefix_parts = list(resolution.get("prefix_parts") or [])
+        if len(prefix_parts) < 2:
+            debug_print("Ruta sin suficientes segmentos para folder/subfolder de policy")
+            return None
 
-        # Las dos carpetas siguientes
-        folder_path = parts[2]  # 103
-        subfolder_path = parts[3]  # ETDM_3003_0090_DeAging_Cocina
+        bucket_name = resolution.get("bucket", "")
+        folder_path = prefix_parts[0]
+        subfolder_path = prefix_parts[1]
 
         debug_print(f"Bucket: {bucket_name}")
         debug_print(f"Carpeta: {folder_path}")
