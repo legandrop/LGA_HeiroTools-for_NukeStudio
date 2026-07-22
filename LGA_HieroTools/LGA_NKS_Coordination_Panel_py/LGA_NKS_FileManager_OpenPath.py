@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManager_OpenPath v1.00 | Lega
+  LGA_NKS_FileManager_OpenPath v1.01 | Lega
 
   Abre la carpeta del shot seleccionado en FileManager usando CLI.
   Extrae la ruta del shot tomando las primeras 4 partes: unidad/proyecto/grupo/shot.
   Soporta modo desarrollo con variable Desarrollo = True y verificación automática.
+
+  v1.01: migra al helper central FileManagerS3 + --context studio/client.
 ____________________________________________________________________
 """
 
@@ -26,6 +28,10 @@ if utils_path.exists():
     sys.path.insert(0, str(utils_path))
     from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process
     from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
+    from LGA_NKS_Shared.LGA_NKS_FileManagerLauncher import (
+        build_filemanager_command,
+        resolve_context_mode,
+    )
 
 # Variables globales de logging (valores por defecto)
 DEBUG = True
@@ -183,46 +189,19 @@ def get_shot_path(file_path):
 
 
 def build_filemanager_cmd(shot_path):
-    if sys.platform == "darwin":
-        wrapper_path = Path(__file__).parent / "fm_cli_mac.sh"
-        if wrapper_path.exists():
-            debug_print("Usando wrapper fm_cli_mac.sh (macOS)")
-            return ["bash", str(wrapper_path), "--path", shot_path]
-
-        dev_app = "/Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManager.app"
-        prod_app = "/Applications/FileManager.app"
-
-        if Desarrollo and os.path.exists(dev_app):
-            app_path = dev_app
-            debug_print("Usando versión de desarrollo (macOS)")
-        else:
-            app_path = prod_app
-            if Desarrollo:
-                debug_print(
-                    "Versión de desarrollo no encontrada, usando producción (macOS)"
-                )
-            else:
-                debug_print("Usando versión de producción (macOS)")
-
-        if not os.path.exists(app_path):
-            debug_print(f"No se encontró FileManager en: {app_path}")
-            return None
-
-        # -na fuerza entrega de args aunque la app ya esté abierta
-        return ["open", "-na", app_path, "--args", "--path", shot_path]
-
-    if Desarrollo:
-        dev_exe = r"C:\Portable\LGA_FileManager\build\FileManager.exe"
-        if os.path.exists(dev_exe):
-            filemanager_exe = dev_exe
-            debug_print("Usando versión de desarrollo")
-        else:
-            filemanager_exe = r"C:\Portable\LGA\FileManager\FileManager.exe"
-            debug_print("Versión de desarrollo no encontrada, usando producción")
-    else:
-        filemanager_exe = r"C:\Portable\LGA\FileManager\FileManager.exe"
-
-    return [filemanager_exe, "--path", shot_path]
+    try:
+        context_mode = resolve_context_mode()
+        cmd = build_filemanager_command(
+            ["--path", shot_path],
+            desarrollo=Desarrollo,
+            script_dir=Path(__file__).parent,
+            context_mode=context_mode,
+        )
+        debug_print(f"Contexto FileManager resuelto: {context_mode}")
+        return cmd
+    except Exception as exc:
+        debug_print(f"No se pudo construir comando de FileManagerS3: {exc}", level="error")
+        return None
 
 def main():
     """Función principal que abre FileManager con la ruta del shot seleccionado"""

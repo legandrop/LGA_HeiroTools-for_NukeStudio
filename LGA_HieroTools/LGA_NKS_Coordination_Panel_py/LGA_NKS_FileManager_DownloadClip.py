@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManager_DownloadClip v1.00 | Lega
+  LGA_NKS_FileManager_DownloadClip v1.01 | Lega
 
   Descarga el/los clip(s) seleccionado(s) desde Wasabi S3 usando
   FileManager CLI. A diferencia de "Download Shot", descarga solo el
@@ -14,6 +14,9 @@ ____________________________________________________________________
   Pasa --notify-completion para que FileManager escriba un marcador al terminar
   cada descarga; el watcher LGA_NKS_DownloadClip_Watcher.py lo detecta y reconecta
   el clip offline automaticamente.
+
+  v1.01: migra al helper central FileManagerS3 + --context studio/client.
+         Conserva --notify-completion y modo latest.
 
   v1.00: Soporta modo latest (Shift+Click) para descargar la version mas nueva
          via CLI de FileManager (--download-latest / --download-latest-file).
@@ -43,6 +46,16 @@ from logging.handlers import QueueHandler, QueueListener
 import datetime
 import time
 import traceback
+
+# Agregar ruta de shared modules
+utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
+if utils_path.exists() and str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+from LGA_NKS_Shared.LGA_NKS_FileManagerLauncher import (
+    build_filemanager_command,
+    resolve_context_mode,
+)
 
 # Variables globales de logging
 DEBUG = False
@@ -282,20 +295,6 @@ def _path_has_vfx_root(path):
     return any(p.upper().startswith("VFX-") for p in parts)
 
 
-def get_filemanager_exe():
-    """Devuelve la ruta del ejecutable de FileManager (Windows) o None en macOS."""
-    if sys.platform == "darwin":
-        return None
-
-    if Desarrollo:
-        dev_exe = r"C:\Portable\LGA_FileManager\build\FileManager.exe"
-        if os.path.exists(dev_exe):
-            debug_print("Usando version de desarrollo")
-            return dev_exe
-        debug_print("Version de desarrollo no encontrada, usando produccion")
-    return r"C:\Portable\LGA\FileManager\FileManager.exe"
-
-
 def _dedupe_preserve_order(paths):
     """Devuelve la lista sin duplicados preservando el orden de aparicion."""
     seen = set()
@@ -342,21 +341,22 @@ def build_filemanager_cmd(folder_paths, file_paths, notify_dir=None, download_la
         cli_args.append("--notify-completion")
         cli_args.append(notify_dir)
 
-    if sys.platform == "darwin":
-        wrapper_path = Path(__file__).parent / "fm_cli_mac.sh"
-        if wrapper_path.exists():
-            debug_print("Usando wrapper fm_cli_mac.sh (macOS)")
-            return ["bash", str(wrapper_path)] + cli_args
-        debug_print("Wrapper fm_cli_mac.sh no encontrado (macOS)", level="error")
-        return None
-
-    filemanager_exe = get_filemanager_exe()
-    if not os.path.exists(filemanager_exe):
+    try:
+        context_mode = resolve_context_mode()
+        cmd = build_filemanager_command(
+            cli_args,
+            desarrollo=Desarrollo,
+            script_dir=Path(__file__).parent,
+            context_mode=context_mode,
+        )
+        debug_print(f"Contexto FileManager resuelto: {context_mode}")
+        return cmd
+    except Exception as exc:
         debug_print(
-            f"No se encontro FileManager en: {filemanager_exe}", level="error"
+            f"No se pudo construir comando de FileManagerS3: {exc}",
+            level="error",
         )
         return None
-    return [filemanager_exe] + cli_args
 
 
 def main(download_latest=False):
