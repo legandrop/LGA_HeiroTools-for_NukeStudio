@@ -49,13 +49,13 @@ import traceback
 
 # Agregar ruta de shared modules
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
-if utils_path.exists() and str(utils_path) not in sys.path:
-    sys.path.insert(0, str(utils_path))
-
-from LGA_NKS_Shared.LGA_NKS_FileManagerLauncher import (
-    build_filemanager_command,
-    resolve_context_mode,
-)
+if utils_path.exists():
+    if str(utils_path) not in sys.path:
+        sys.path.insert(0, str(utils_path))
+    from LGA_NKS_Shared.LGA_NKS_FileManagerLauncher import (
+        build_filemanager_command,
+        resolve_context_mode,
+    )
 
 # Variables globales de logging
 DEBUG = False

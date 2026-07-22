@@ -110,6 +110,76 @@ def run():
     )
     _assert_no_legacy_targets(mac_app_cmd)
 
+    _run_empty_arg_cases(win_exists)
+
+
+def _assert_raises(exc_type, func, message):
+    try:
+        func()
+    except exc_type:
+        return
+    except Exception as unexpected:  # noqa: BLE001
+        raise AssertionError(
+            "{0}: se esperaba {1} pero se obtuvo {2}".format(
+                message, exc_type.__name__, type(unexpected).__name__
+            )
+        )
+    raise AssertionError("{0}: no se lanzo {1}".format(message, exc_type.__name__))
+
+
+def _run_empty_arg_cases(win_exists):
+    # Sin args: sigue rechazando.
+    _assert_raises(
+        ValueError,
+        lambda: launcher.build_filemanager_command(
+            [],
+            desarrollo=True,
+            context_mode="studio",
+            platform_name="win32",
+            path_exists=win_exists,
+        ),
+        "Lista de args vacia debe rechazarse",
+    )
+
+    # Valor vacio de un flag: NO debe filtrarse silenciosamente, debe rechazar.
+    _assert_raises(
+        ValueError,
+        lambda: launcher.build_filemanager_command(
+            ["--path", ""],
+            desarrollo=True,
+            context_mode="studio",
+            platform_name="win32",
+            path_exists=win_exists,
+        ),
+        "Valor vacio de flag debe lanzar ValueError, no dejar flag colgado",
+    )
+
+    # Arg vacio suelto (sin flag previo) tambien se rechaza.
+    _assert_raises(
+        ValueError,
+        lambda: launcher.build_filemanager_command(
+            ["   ", "--download"],
+            desarrollo=True,
+            context_mode="studio",
+            platform_name="win32",
+            path_exists=win_exists,
+        ),
+        "Arg vacio inicial debe lanzar ValueError",
+    )
+
+    # Args validos con espacios internos legitimos deben preservarse tal cual.
+    ok_cmd = launcher.build_filemanager_command(
+        ["--download", r"T:\VFX-ERSO\shot with space"],
+        desarrollo=True,
+        context_mode="studio",
+        platform_name="win32",
+        path_exists=win_exists,
+    )
+    _expect(
+        ok_cmd[-2:] == ["--download", r"T:\VFX-ERSO\shot with space"],
+        "Args validos deben preservarse sin alteraciones",
+    )
+
 
 if __name__ == "__main__":
     run()

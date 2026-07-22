@@ -70,9 +70,28 @@ def build_filemanager_command(cli_args,
                               platform_name=None,
                               path_exists=None):
     context = normalize_context_mode(context_mode or resolve_context_mode())
-    args = [str(arg) for arg in (cli_args or []) if str(arg).strip()]
-    if not args:
+
+    raw_args = list(cli_args or [])
+    if not raw_args:
         raise ValueError("No CLI arguments were provided for FileManager.")
+
+    # No filtrar silenciosamente: un arg vacio deja flags colgados
+    # (["--path", ""] -> ["--path"]). Validar y rechazar con error claro.
+    args = []
+    for index, raw_arg in enumerate(raw_args):
+        value = str(raw_arg)
+        if not value.strip():
+            preceding = str(raw_args[index - 1]).strip() if index > 0 else ""
+            if preceding.startswith("-"):
+                raise ValueError(
+                    "Empty value for flag '{0}' in FileManager CLI arguments.".format(
+                        preceding
+                    )
+                )
+            raise ValueError(
+                "Empty CLI argument at position {0} for FileManager.".format(index)
+            )
+        args.append(value)
 
     effective_platform = platform_name or sys.platform
     effective_exists = path_exists or os.path.exists
