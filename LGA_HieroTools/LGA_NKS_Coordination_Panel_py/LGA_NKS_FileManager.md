@@ -93,7 +93,7 @@ open -na /Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManagerS3.app --arg
 ```
 
 Notas:
-- `fm_cli_mac.sh` usa por defecto `build/FileManagerS3.app` (dev) o `/Applications/FileManagerS3.app` (prod).
+- `fm_cli_mac.sh` es solo capa de exec: cuando lo lanza `LGA_NKS_FileManagerLauncher`, recibe la ruta ya resuelta segun el flag `Desarrollo` via `--app-path <ruta>`. En uso manual (sin `--app-path`) usa por defecto `build/FileManagerS3.app` (dev) o `/Applications/FileManagerS3.app` (prod).
 - Para deploy, podÃƒÆ’Ã‚Â©s definir `FILEMANAGER_APP_PATH` con la ruta del `.app`.
 
 ## ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â Reglas importantes

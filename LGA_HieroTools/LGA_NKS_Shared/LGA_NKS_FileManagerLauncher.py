@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerLauncher v1.00 | Lega
+  LGA_NKS_FileManagerLauncher v1.01 | Lega
 
   Helper central para lanzar FileManager S3 desde HieroTools.
   Resuelve contexto Studio/Client, rutas dev/prod y comando final
   para Windows/macOS sin usar shell=True.
 
+  v1.01: macOS unifica fuente de verdad: el helper resuelve la ruta del
+         .app segun Desarrollo y la pasa al wrapper via --app-path.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -106,11 +108,22 @@ def build_filemanager_command(cli_args,
 
     if effective_platform == "darwin":
         script_path = Path(script_dir) if script_dir else None
+        # Fuente unica de verdad: el helper resuelve la ruta del .app segun el
+        # flag Desarrollo (_resolve_macos_app). El wrapper queda solo como capa
+        # de exec (open -na) y recibe la ruta ya resuelta via --app-path.
+        app_path = _resolve_macos_app(bool(desarrollo), script_path, effective_exists)
         wrapper_path = script_path / "fm_cli_mac.sh" if script_path else None
         if wrapper_path and effective_exists(str(wrapper_path)):
+            if app_path:
+                return (
+                    ["bash", str(wrapper_path), "--app-path", app_path,
+                     "--context", context]
+                    + args
+                )
+            # Sin candidato resuelto: se delega al wrapper para que honre
+            # FILEMANAGER_APP_PATH y muestre su error guia.
             return ["bash", str(wrapper_path), "--context", context] + args
 
-        app_path = _resolve_macos_app(bool(desarrollo), script_path, effective_exists)
         if not app_path:
             raise FileNotFoundError(
                 "FileManagerS3.app was not found in dev/prod paths."

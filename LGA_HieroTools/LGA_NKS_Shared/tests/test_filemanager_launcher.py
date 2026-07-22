@@ -91,6 +91,89 @@ def run():
     )
     _assert_no_legacy_targets(mac_wrapper_cmd)
 
+    # Wrapper presente + app dev: el helper resuelve la ruta segun Desarrollo y
+    # la inyecta como --app-path; el wrapper queda solo como capa de exec.
+    mac_wrapper_dev_exists = _exists_factory({wrapper_path, launcher.MAC_DEV_APP})
+    mac_wrapper_dev_cmd = launcher.build_filemanager_command(
+        cli_args,
+        desarrollo=True,
+        script_dir=fake_script_dir,
+        context_mode="studio",
+        platform_name="darwin",
+        path_exists=mac_wrapper_dev_exists,
+    )
+    _expect(
+        mac_wrapper_dev_cmd[0:4]
+        == ["bash", wrapper_path, "--app-path", launcher.MAC_DEV_APP],
+        "macOS dev debe inyectar --app-path con la app dev en el wrapper",
+    )
+    _expect(
+        mac_wrapper_dev_cmd[4:6] == ["--context", "studio"],
+        "Wrapper macOS dev debe recibir --context despues de --app-path",
+    )
+    _assert_no_legacy_targets(mac_wrapper_dev_cmd)
+
+    # Wrapper presente + ambas apps, Desarrollo=False: debe ganar la app de
+    # /Applications (prod), no la dev, y el contexto client no cae a studio.
+    mac_wrapper_both_exists = _exists_factory(
+        {wrapper_path, launcher.MAC_DEV_APP, launcher.MAC_PROD_APP}
+    )
+    mac_wrapper_prod_cmd = launcher.build_filemanager_command(
+        cli_args,
+        desarrollo=False,
+        script_dir=fake_script_dir,
+        context_mode="client",
+        platform_name="darwin",
+        path_exists=mac_wrapper_both_exists,
+    )
+    _expect(
+        mac_wrapper_prod_cmd[0:4]
+        == ["bash", wrapper_path, "--app-path", launcher.MAC_PROD_APP],
+        "macOS prod (Desarrollo=False) debe inyectar la app de /Applications",
+    )
+    _expect(
+        "--context" in mac_wrapper_prod_cmd and "client" in mac_wrapper_prod_cmd,
+        "Wrapper macOS prod debe conservar --context client (nunca cae a studio)",
+    )
+    _assert_no_legacy_targets(mac_wrapper_prod_cmd)
+
+    # Wrapper presente + ambas apps, Desarrollo=True: el flag debe tener efecto
+    # y preferir la app dev sobre la de /Applications.
+    mac_wrapper_dev_pref_cmd = launcher.build_filemanager_command(
+        cli_args,
+        desarrollo=True,
+        script_dir=fake_script_dir,
+        context_mode="studio",
+        platform_name="darwin",
+        path_exists=mac_wrapper_both_exists,
+    )
+    _expect(
+        launcher.MAC_DEV_APP in mac_wrapper_dev_pref_cmd
+        and launcher.MAC_PROD_APP not in mac_wrapper_dev_pref_cmd,
+        "macOS con ambas apps y Desarrollo=True debe preferir la dev",
+    )
+    _assert_no_legacy_targets(mac_wrapper_dev_pref_cmd)
+
+    # Wrapper presente pero sin ninguna app resuelta: se delega al wrapper sin
+    # --app-path (para que honre FILEMANAGER_APP_PATH y muestre su error guia).
+    mac_wrapper_only_cmd = launcher.build_filemanager_command(
+        cli_args,
+        desarrollo=True,
+        script_dir=fake_script_dir,
+        context_mode="studio",
+        platform_name="darwin",
+        path_exists=mac_wrapper_exists,
+    )
+    _expect(
+        mac_wrapper_only_cmd[0:2] == ["bash", wrapper_path]
+        and "--app-path" not in mac_wrapper_only_cmd,
+        "Sin app resuelta el helper no debe inyectar --app-path",
+    )
+    _expect(
+        mac_wrapper_only_cmd[2:4] == ["--context", "studio"],
+        "Wrapper sin --app-path debe recibir --context directo",
+    )
+
     mac_app_exists = _exists_factory({launcher.MAC_DEV_APP})
     mac_app_cmd = launcher.build_filemanager_command(
         cli_args,
