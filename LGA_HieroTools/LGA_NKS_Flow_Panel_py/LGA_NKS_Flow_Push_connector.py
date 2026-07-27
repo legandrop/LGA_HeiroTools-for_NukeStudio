@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.03 | Lega
+  LGA_NKS_Flow_Push_connector v1.04 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,14 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.04: Limpieza de codigo muerto: se eliminan las operaciones inalcanzables del
+         dispatcher (find_shot_and_tasks, find_highest_version, update_task,
+         update_version, get_task_assignee, add_comment, attach_images,
+         check_version; quedan list_versions_for_task y execute_full_push), el
+         segundo bloque "except ImportError" con el fallback de naming que nunca
+         se ejecutaba y los metodos get_task_assignee/get_project_id_from_version.
+         El import de naming ahora falla explicito con raise en vez de seguir
+         hasta un NameError posterior.
   v1.03: update_task_status y update_version_status devuelven (ok, error) en vez
          de tragarse los errores. execute_full_push aborta si falla la Task y
          devuelve el dict "applied" con lo realmente escrito en Flow, para que
@@ -30,7 +38,6 @@ import re
 import sys
 import tempfile
 import shutil
-from pathlib import Path
 
 # Agregar la ruta de shotgun_api3 al sys.path
 script_dir = os.path.dirname(__file__)
@@ -77,87 +84,9 @@ try:
     )
     debug_print("✅ Usando funciones del módulo LGA_NKS_Flow_NamingUtils")
 except ImportError as e:
-    debug_print(f"⚠️ ImportError: {e} - Usando funciones fallback")
-    # Fallback si no se puede importar (por si acaso)
-    # Implementa la misma lógica que LGA_NKS_Flow_NamingUtils.py
-except ImportError:
-    # Fallback si no se puede importar (por si acaso)
-    # Implementa la misma lógica que LGA_NKS_Flow_NamingUtils.py
-
-    _VERSION_RE = re.compile(r"^v\d+$", re.IGNORECASE)
-
-    def _strip_version_suffix(parts):
-        if parts and _VERSION_RE.match(parts[-1]):
-            return parts[:-1]
-        return parts
-
-    def _is_numeric_block(value):
-        return bool(value) and value[0].isdigit()
-
-    def _is_series_format(parts):
-        return len(parts) >= 4 and all(_is_numeric_block(p) for p in parts[1:4])
-
-    def _is_vendor_format(parts):
-        return (
-            len(parts) >= 4
-            and parts[1].isalpha()
-            and _is_numeric_block(parts[2])
-            and _is_numeric_block(parts[3])
-        )
-
-    def _analyze_shotname(base_name):
-        if not base_name:
-            return [], False, False, 0
-        parts = base_name.split("_")
-        core_parts = _strip_version_suffix(parts)
-        if not core_parts:
-            return [], False, False, 0
-        is_series = _is_series_format(core_parts) or _is_vendor_format(core_parts)
-        base_count = 4 if is_series else 3
-        has_description = len(core_parts) >= (base_count + 2)
-        return core_parts, is_series, has_description, base_count
-
-    def detect_shotname_format(base_name):
-        """
-        Detecta si el shotname contiene descripción (5/6 bloques).
-        """
-        core_parts, _, has_description, _ = _analyze_shotname(base_name)
-        if not core_parts:
-            return False
-        return has_description
-
-    def extract_shot_code(base_name):
-        """
-        Extrae el shot_code detectando automáticamente formato y serie.
-        """
-        core_parts, _, has_description, base_count = _analyze_shotname(base_name)
-        if not core_parts:
-            return ""
-
-        desc_count = 2 if has_description else 0
-        target_count = base_count + desc_count
-        if len(core_parts) >= target_count:
-            return "_".join(core_parts[:target_count])
-
-        return "_".join(core_parts)
-
-    def extract_project_name(base_name):
-        return base_name.split("_")[0] if base_name else ""
-
-    def extract_task_name(base_name):
-        """
-        Extrae el nombre de la tarea del nombre base del archivo.
-        """
-        core_parts, _, has_description, base_count = _analyze_shotname(base_name)
-        if not core_parts:
-            return None
-
-        task_index = base_count + (2 if has_description else 0)
-        if len(core_parts) > task_index:
-            return core_parts[task_index]
-
-        return None
-        return None
+    # No hay fallback local: el conector depende de LGA_NKS_Flow_NamingUtils.
+    debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Flow_NamingUtils no disponible")
+    raise
 
 
 # Diccionario de traduccion de estados (igual que en el script principal)
@@ -492,11 +421,6 @@ class ShotGridManager:
             debug_print(f"Error al obtener los asignados de la tarea: {e}")
             return []
 
-    def get_task_assignee(self, task_id):
-        # Compatibilidad con callers legacy.
-        assignees = self.get_task_assignees(task_id)
-        return assignees[0] if assignees else None
-
     def add_comment_to_version(
         self, version_id, project_id, comment, user_id, task_assignee_ids=None, shot_id=None
     ):
@@ -700,24 +624,6 @@ class ShotGridManager:
         except Exception as e:
             debug_print(f"Error extrayendo numero de frame de {image_path}: {e}")
             return "0001"
-
-    def get_project_id_from_version(self, version_id):
-        """
-        Obtiene el ID del proyecto a partir del ID de una version.
-        """
-        if not self.sg:
-            debug_print("ShotGrid no inicializado")
-            return None
-        try:
-            version = self.sg.find_one(
-                "Version", [["id", "is", version_id]], ["project"]
-            )
-            if version and version.get("project"):
-                return version["project"]["id"]
-            return None
-        except Exception as e:
-            debug_print(f"Error obteniendo project_id de version {version_id}: {e}")
-            return None
 
 
 def execute_full_push_operation(
@@ -1082,104 +988,7 @@ def execute_flow_operation(operation, **kwargs):
         # Crear manager
         sg_manager = ShotGridManager(url, login, password)
 
-        if operation == "find_shot_and_tasks":
-            project_name = kwargs.get("project_name")
-            shot_code = kwargs.get("shot_code")
-            project, shot, tasks = sg_manager.find_shot_and_tasks(
-                project_name, shot_code
-            )
-
-            # Convertir objetos datetime a strings para JSON serialization
-            def convert_datetime(obj):
-                if isinstance(obj, dict):
-                    return {
-                        k: (v.isoformat() if hasattr(v, "isoformat") else v)
-                        for k, v in obj.items()
-                    }
-                elif isinstance(obj, list):
-                    return [convert_datetime(item) for item in obj]
-                else:
-                    return obj
-
-            return {
-                "success": True,
-                "project": convert_datetime(project) if project else None,
-                "shot": convert_datetime(shot) if shot else None,
-                "tasks": convert_datetime(tasks) if tasks else [],
-            }
-
-        elif operation == "find_highest_version":
-            shot_id = kwargs.get("shot_id")
-            version, version_num, user_id = sg_manager.find_highest_version_for_shot(
-                shot_id
-            )
-
-            # Convertir objetos datetime a strings para JSON serialization
-            if version:
-                version = {
-                    k: (v.isoformat() if hasattr(v, "isoformat") else v)
-                    for k, v in version.items()
-                }
-
-            return {
-                "success": True,
-                "version": version,
-                "version_number": version_num,
-                "user_id": user_id,
-            }
-
-        elif operation == "update_task":
-            task_id = kwargs.get("task_id")
-            status = kwargs.get("status")
-            ok, error = sg_manager.update_task_status(task_id, status)
-            return {"success": ok} if ok else {"success": False, "error": error}
-
-        elif operation == "update_version":
-            project_name = kwargs.get("project_name")
-            shot_code = kwargs.get("shot_code")
-            version_str = kwargs.get("version_str")
-            status = kwargs.get("status")
-            ok, error = sg_manager.update_version_status(
-                project_name, shot_code, version_str, status
-            )
-            return {"success": ok} if ok else {"success": False, "error": error}
-
-        elif operation == "get_task_assignee":
-            task_id = kwargs.get("task_id")
-            assignee_id = sg_manager.get_task_assignee(task_id)
-            return {"success": True, "assignee_id": assignee_id}
-
-        elif operation == "add_comment":
-            version_id = kwargs.get("version_id")
-            project_id = kwargs.get("project_id")
-            comment = kwargs.get("comment")
-            user_id = kwargs.get("user_id")
-            task_assignee_ids = kwargs.get("task_assignee_ids")
-            if task_assignee_ids is None:
-                legacy_assignee_id = kwargs.get("task_assignee_id")
-                task_assignee_ids = [legacy_assignee_id] if legacy_assignee_id else []
-            shot_id = kwargs.get("shot_id")
-            note = sg_manager.add_comment_to_version(
-                version_id, project_id, comment, user_id, task_assignee_ids, shot_id
-            )
-
-            # Convertir objetos datetime a strings para JSON serialization
-            if note:
-                note = {
-                    k: (v.isoformat() if hasattr(v, "isoformat") else v)
-                    for k, v in note.items()
-                }
-
-            return {"success": True, "note": note}
-
-        elif operation == "attach_images":
-            note_id = kwargs.get("note_id")
-            version_id = kwargs.get("version_id")
-            image_paths = kwargs.get("image_paths", [])
-            success = sg_manager.attach_images_to_note(note_id, version_id, image_paths)
-            return {"success": success}
-
-        elif operation == "list_versions_for_task":
+        if operation == "list_versions_for_task":
             base_name = kwargs.get("base_name", "")
             original_file_name = kwargs.get("original_file_name")
             file_path_lv = kwargs.get("file_path")
@@ -1241,101 +1050,6 @@ def execute_flow_operation(operation, **kwargs):
                 target_version_number=target_version_number,
                 allow_task_only=allow_task_only,
             )
-
-        elif operation == "check_version":
-            # Verificación de versiones para evitar congelar UI
-            base_name = kwargs.get("base_name")
-            original_file_name = kwargs.get("original_file_name")
-
-            # Si original_file_name tiene la versión, usarlo para detección correcta del formato
-            base_name_for_detection = base_name
-            if original_file_name:
-                version_match = re.search(r"_v(\d+)", original_file_name)
-                if version_match:
-                    # Si base_name no tiene versión pero original_file_name sí, usar original_file_name para detección
-                    if not any(
-                        part.startswith("v") and part[1:].isdigit()
-                        for part in base_name.split("_")
-                    ):
-                        # Construir base_name_for_detection con la versión
-                        base_name_for_detection = (
-                            f"{base_name}_{version_match.group(0)}"
-                        )
-                        debug_print(
-                            f"check_version: Usando base_name con versión para detección: {base_name_for_detection}"
-                        )
-
-            # Extraer project_name desde el segmento "VFX-NOMBRE" de la ruta (fallback al filename)
-            file_path_cv = kwargs.get("file_path")
-            project_name = extract_project_name_from_path(file_path_cv)
-            if not project_name:
-                project_name = extract_project_name(base_name_for_detection)
-            shot_code = extract_shot_code(base_name_for_detection)
-
-            # Extraer número de versión
-            parts = base_name.split("_")
-            version_number_str = None
-            for part in parts:
-                if part.startswith("v") and part[1:].isdigit():
-                    version_number_str = part
-                    break
-
-            # Si no encontramos versión en base_name, intentar extraerla de original_file_name
-            if not version_number_str and original_file_name:
-                debug_print(
-                    f"check_version: No se encontró versión en base_name, intentando extraer de original_file_name: {original_file_name}"
-                )
-                version_match = re.search(r"_v(\d+)", original_file_name)
-                if version_match:
-                    version_number_str = f"v{version_match.group(1)}"
-                    debug_print(
-                        f"check_version: Versión extraída de original_file_name: {version_number_str}"
-                    )
-                    # Actualizar base_name para incluir la versión para el diálogo
-                    base_name = f"{base_name}_{version_number_str}"
-                    debug_print(
-                        f"check_version: base_name actualizado para diálogo: {base_name}"
-                    )
-
-            if not version_number_str:
-                return {
-                    "success": True,
-                    "needs_confirmation": False,
-                }  # Continuar sin verificación
-
-            local_version = int(version_number_str.replace("v", ""))
-
-            # Buscar shot en Flow
-            project, shot, _ = sg_manager.find_shot_and_tasks(project_name, shot_code)
-            if not shot:
-                return {
-                    "success": True,
-                    "needs_confirmation": False,
-                }  # Continuar sin verificación
-
-            # Extraer task_name y normalizar aliases para comparar con la versión correcta
-            check_task = extract_task_name(base_name)
-            check_task_name = normalize_task_name(check_task) if check_task else "comp"
-
-            # Buscar versión más alta de la task activa
-            sg_highest_version, sg_version_number, _ = (
-                sg_manager.find_highest_version_for_shot(shot["id"], check_task_name)
-            )
-
-            if (
-                sg_highest_version
-                and sg_version_number
-                and int(sg_version_number) > local_version
-            ):
-                return {
-                    "success": True,
-                    "needs_confirmation": True,
-                    "local_version": local_version,
-                    "flow_version": int(sg_version_number),
-                    "base_name": base_name,
-                }
-
-            return {"success": True, "needs_confirmation": False}
 
         else:
             return {"success": False, "error": f"Operación no soportada: {operation}"}

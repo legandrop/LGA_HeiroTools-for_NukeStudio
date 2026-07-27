@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.04 | Lega
+  LGA_NKS_Flow_Push v4.05 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,10 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.05: Limpieza de codigo muerto: se elimina la clase ShotGridManager del panel
+         (nunca se instanciaba, el push va siempre por el conector), el dialogo
+         MultipleShotsDialog, _show_task_selection_dialog, DBManager.find_project
+         y los imports sin uso tempfile/shotgun_api3.
   v4.04: La DB local se escribe solo con lo que Flow confirmó (dict "applied"
          del conector). Si falla el estado de la Task en Flow, el push falla y
          no se escribe nada en la DB. El estado de Version se replica tal cual
@@ -56,7 +60,6 @@ import sqlite3
 import platform
 import glob
 import shutil
-import tempfile
 import json
 import logging
 import queue
@@ -75,7 +78,6 @@ import threading
 
 shared_dir = Path(__file__).parent.parent / "LGA_NKS_Shared"
 sys.path.insert(0, str(shared_dir))
-import shotgun_api3
 
 # Importar shareds de dominio Flow
 flow_shared_dir = shared_dir
@@ -553,22 +555,6 @@ class DBManager:
         else:
             debug_print(f"DB file not found at path: {self.db_path}")
             self.conn = None
-
-    def find_project(self, project_name):
-        """Busca un proyecto por nombre en la base de datos."""
-        if not self.conn:
-            debug_print("No hay conexión a la base de datos")
-            return None
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                "SELECT * FROM projects WHERE project_name = ?", (project_name,)
-            )
-            return cur.fetchone()
-        except Exception as e:
-            debug_print(f"Error al buscar proyecto {project_name}: {e}")
-            return None
 
     def find_shot(self, project_name, shot_code):
         """Busca un shot por nombre y código en la base de datos."""
@@ -1238,167 +1224,6 @@ def delete_review_pic_cache():
     except Exception as e:
         debug_print(f"Error borrando carpeta ReviewPic_Cache: {e}")
         return False
-
-
-class ShotGridManager:
-    def __init__(self, url, login, password):
-        debug_print("Inicializando conexion a ShotGrid (usando conector externo)")
-        # Ya no necesitamos inicializar shotgun_api3 aquí
-        # Las operaciones se delegarán al conector externo
-        self.url = url
-        self.login = login
-        self.password = password
-
-    def find_shot_and_tasks(self, project_name, shot_code):
-        debug_print(
-            f"Buscando proyecto y shot usando conector externo: {project_name} / {shot_code}"
-        )
-        result = call_flow_connector(
-            "find_shot_and_tasks", project_name=project_name, shot_code=shot_code
-        )
-
-        if result["success"]:
-            project = result.get("project")
-            shot = result.get("shot")
-            tasks = result.get("tasks")
-            debug_print(
-                f"Resultado: project={project is not None}, shot={shot is not None}, tasks={len(tasks) if tasks else 0}"
-            )
-            return project, shot, tasks
-        else:
-            debug_print(
-                f"Error en find_shot_and_tasks: {result.get('error', 'Unknown error')}"
-            )
-            return None, None, None
-
-    def find_tasks_for_shot(self, shot_id):
-        debug_print(f"Buscando tareas para shot_id {shot_id} usando conector externo")
-        # Este método se llama desde find_shot_and_tasks, así que las tareas ya están incluidas en el resultado
-        # Por simplicidad, devolveremos una lista vacía ya que no necesitamos este método por separado
-        debug_print(
-            "find_tasks_for_shot: método simplificado, tareas obtenidas en find_shot_and_tasks"
-        )
-        return []
-
-    def find_highest_version_for_shot(self, shot_id):
-        debug_print(
-            f"Buscando versión más alta para shot_id {shot_id} usando conector externo"
-        )
-        result = call_flow_connector("find_highest_version", shot_id=shot_id)
-
-        if result["success"]:
-            version = result.get("version")
-            version_number = result.get("version_number")
-            user_id = result.get("user_id")
-            debug_print(f"Versión encontrada: {version_number}, user_id: {user_id}")
-            return version, version_number, user_id
-        else:
-            debug_print(
-                f"Error en find_highest_version_for_shot: {result.get('error', 'Unknown error')}"
-            )
-            return None, None, None
-
-    def update_task_status(self, task_id, new_status):
-        debug_print(
-            f"Actualizando tarea {task_id} a {new_status} usando conector externo"
-        )
-        result = call_flow_connector("update_task", task_id=task_id, status=new_status)
-
-        if not result["success"]:
-            debug_print(
-                f"Error en update_task_status: {result.get('error', 'Unknown error')}"
-            )
-
-    def update_version_status(self, project_name, shot_code, version_str, new_status):
-        debug_print(
-            f"Actualizando versión {version_str} de {shot_code} a {new_status} usando conector externo"
-        )
-        result = call_flow_connector(
-            "update_version",
-            project_name=project_name,
-            shot_code=shot_code,
-            version_str=version_str,
-            status=new_status,
-        )
-
-        if not result["success"]:
-            debug_print(
-                f"Error en update_version_status: {result.get('error', 'Unknown error')}"
-            )
-
-    def get_task_assignee(self, task_id):
-        debug_print(f"Obteniendo asignado de tarea {task_id} usando conector externo")
-        result = call_flow_connector("get_task_assignee", task_id=task_id)
-
-        if result["success"]:
-            return result.get("assignee_id")
-        else:
-            debug_print(
-                f"Error en get_task_assignee: {result.get('error', 'Unknown error')}"
-            )
-            return None
-
-    def add_comment_to_version(
-        self, version_id, project_id, comment, user_id, task_assignee_id, shot_id=None
-    ):
-        debug_print(
-            f"Agregando comentario a versión {version_id} usando conector externo"
-        )
-        result = call_flow_connector(
-            "add_comment",
-            version_id=version_id,
-            project_id=project_id,
-            comment=comment,
-            user_id=user_id,
-            task_assignee_id=task_assignee_id,
-            shot_id=shot_id,
-        )
-
-        if result["success"]:
-            return result.get("note")
-        else:
-            debug_print(
-                f"Error en add_comment_to_version: {result.get('error', 'Unknown error')}"
-            )
-            return None
-
-    def attach_images_to_note(self, note_id, version_id, image_paths):
-        debug_print(
-            f"Adjuntando {len(image_paths)} imágenes a nota {note_id} usando conector externo"
-        )
-        result = call_flow_connector(
-            "attach_images",
-            note_id=note_id,
-            version_id=version_id,
-            image_paths=image_paths,
-        )
-
-        if result["success"]:
-            debug_print("Imágenes adjuntadas exitosamente")
-            return True
-        else:
-            debug_print(
-                f"Error en attach_images_to_note: {result.get('error', 'Unknown error')}"
-            )
-            return False
-
-    def extract_frame_number_from_path(self, image_path):
-        """
-        Método simplificado - la lógica real está en el conector externo
-        """
-        debug_print("extract_frame_number_from_path: método simplificado")
-        return "0001"
-
-    def get_project_id_from_version(self, version_id):
-        """
-        Método simplificado - obtiene el ID del proyecto usando conector externo
-        """
-        debug_print(
-            f"Obteniendo project_id de versión {version_id} usando conector externo"
-        )
-        # Este método no se usa frecuentemente, devolver None por simplicidad
-        debug_print("get_project_id_from_version: método simplificado, retornando None")
-        return None
 
 
 ##### Funciones para comunicación con XYplorer (copiadas de Pull)
@@ -2103,44 +1928,6 @@ class MessageBoxManager:
         self.message_boxes.append(msg_box)
 
 
-class MultipleShotsDialog(QDialog):
-    """Diálogo para informar sobre múltiples shots encontrados"""
-
-    def __init__(self, shots, shot_code, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Múltiples Shots Encontrados")
-        self.setModal(True)
-
-        layout = QVBoxLayout(self)
-
-        # Mensaje principal
-        msg = QLabel(f"Se encontraron {len(shots)} shots con el nombre '{shot_code}':")
-        msg.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(msg)
-
-        # Lista de shots con sus IDs
-        for shot in shots:
-            shot_info = QLabel(f"• Shot ID: {shot['id']} - {shot['code']}")
-            shot_info.setStyleSheet("margin-left: 20px; margin-bottom: 5px;")
-            layout.addWidget(shot_info)
-
-        # Mensaje de error
-        error_msg = QLabel(
-            "No se puede proceder con la operación cuando existen múltiples shots con el mismo nombre."
-        )
-        error_msg.setStyleSheet(
-            "color: #B95C5C; margin-top: 10px; margin-bottom: 10px;"
-        )
-        layout.addWidget(error_msg)
-
-        # Botón OK
-        ok_btn = QPushButton("OK")
-        ok_btn.clicked.connect(self.accept)
-        layout.addWidget(ok_btn)
-
-        self.adjustSize()
-
-
 def extract_version_number_from_string(version_str):
     """Extrae el número de versión de una cadena como 'LC_4007_010_DeAging_Pamela_comp_v05'."""
     # Buscar el patrón _v\d+ al final del nombre (igual que en LGA_NKS_Flow_Pull.py)
@@ -2723,52 +2510,6 @@ def print_resumen():
     if DEBUG_RESUMEN and resumen_messages:
         print("\n".join(resumen_messages))
         resumen_messages.clear()  # Limpiar mensajes después de imprimir
-
-
-def _show_task_selection_dialog(button_name, task_names):
-    """
-    Muestra dialog de selección de task cuando hay clips de múltiples tasks presentes.
-    Retorna set de tasks seleccionadas, o None si el usuario canceló.
-    """
-    QRadioButton = QtWidgets.QRadioButton
-
-    dialog = QDialog()
-    dialog.setWindowTitle("Seleccionar Task")
-    layout = QVBoxLayout(dialog)
-
-    label = QLabel(f"¿A qué task aplicar <b>{button_name}</b>?")
-    label.setTextFormat(Qt.RichText)
-    layout.addWidget(label)
-
-    radio_buttons = {}
-    for i, task in enumerate(sorted(task_names)):
-        rb = QRadioButton(task)
-        if i == 0:
-            rb.setChecked(True)
-        layout.addWidget(rb)
-        radio_buttons[task] = rb
-
-    rb_all = QRadioButton("Todas")
-    layout.addWidget(rb_all)
-
-    btn_layout = QHBoxLayout()
-    ok_btn = QPushButton("OK")
-    cancel_btn = QPushButton("Cancelar")
-    ok_btn.clicked.connect(dialog.accept)
-    cancel_btn.clicked.connect(dialog.reject)
-    btn_layout.addWidget(ok_btn)
-    btn_layout.addWidget(cancel_btn)
-    layout.addLayout(btn_layout)
-
-    if dialog.exec_() != QDialog.Accepted:
-        return None
-
-    if rb_all.isChecked():
-        return set(task_names)
-    for task, rb in radio_buttons.items():
-        if rb.isChecked():
-            return {task}
-    return None
 
 
 def _describe_clip_for_log(clip):
