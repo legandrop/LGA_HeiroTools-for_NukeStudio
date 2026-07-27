@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FlowPlaylist_Push v0.02 | Lega
+  LGA_NKS_FlowPlaylist_Push v0.03 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,10 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v0.03: La DB local se escribe solo con lo que Flow confirmó (dict "applied"
+         del conector). Si falla el estado de la Task en Flow, el push falla y
+         no se escribe nada en la DB. El estado de Version se replica tal cual
+         lo aplicó Flow y la nota local solo se agrega si Flow creó la nota.
   v0.02: project_name se extrae del segmento "VFX-NOMBRE" de la ruta
          (extract_project_name_from_path); fallback al primer bloque del filename.
          file_path se propaga por InputDialog/Worker/Push_Task_Status y al conector
@@ -1561,8 +1565,13 @@ class Worker(QRunnable):
                     )
                 success = True
 
-                # Si fue exitoso, actualizar también la base de datos local
-                self.update_local_database(db_manager)
+                # Warnings de Flow: partes del push que no se escribieron.
+                for warning in result.get("warnings") or []:
+                    debug_print(f"Worker: Advertencia de Flow: {warning}")
+
+                # Si fue exitoso, actualizar también la base de datos local.
+                # La DB es cache de Flow: solo se escribe lo que Flow confirmó.
+                self.update_local_database(db_manager, result.get("applied"))
                 
                 # Aplicar tag en xyplorer después de actualizar exitosamente
                 self.apply_xyplorer_tag()
@@ -1630,9 +1639,21 @@ class Worker(QRunnable):
         # Ejecutar el nuevo Worker
         QThreadPool.globalInstance().start(new_worker)
 
-    def update_local_database(self, db_manager):
-        """Actualiza la base de datos local con los cambios"""
+    def update_local_database(self, db_manager, applied=None):
+        """Actualiza la base de datos local (cache de Flow) con los cambios.
+
+        Solo se escribe lo que Flow confirmó como aplicado (`applied`).
+        Si Flow no informa `applied` no se escribe nada: es preferible dejar
+        la DB desactualizada (el Pull la refresca) antes que dejarla con
+        información que Flow nunca recibió.
+        """
         try:
+            if not applied:
+                debug_print(
+                    "Worker: Flow no informó qué se aplicó; no se escribe la DB local"
+                )
+                return
+
             # Extraer project_name desde el segmento "VFX-NOMBRE" de la ruta.
             # Fallback: primer bloque del filename (comportamiento anterior).
             project_name = extract_project_name_from_path(
@@ -1688,23 +1709,27 @@ class Worker(QRunnable):
                 )
                 return
 
-            # Actualizar estado de tarea local
-            debug_print(
-                f"Worker: Actualizando estado de tarea local (ID: {db_task['id']}) a: {sg_status}"
-            )
-            db_manager.update_task_status(db_task["id"], sg_status)
+            # Actualizar estado de tarea local (solo si Flow lo aplicó)
+            if applied.get("task_status"):
+                debug_print(
+                    f"Worker: Actualizando estado de tarea local (ID: {db_task['id']}) a: {sg_status}"
+                )
+                db_manager.update_task_status(db_task["id"], sg_status)
+            else:
+                debug_print(
+                    "Worker: Flow no aplicó el estado de la task; no se actualiza en la DB local"
+                )
 
             # Obtener la última versión para esta tarea
             latest_version = db_manager.find_latest_version(db_task["id"])
             if latest_version:
-                # Decidir qué estado aplicar a la versión dependiendo del estado de la tarea
-                version_status = None
-                if sg_status in ["rev_di", "corr", "revcha"]:
-                    version_status = "vwd"
-                elif sg_status == "rev_su":
-                    version_status = "rev"
-                elif sg_status == "revleg":
-                    version_status = "unvleg"
+                # El estado de versión se replica tal cual lo aplicó Flow,
+                # para no reintroducir divergencias de traducción de estados.
+                version_status = (
+                    applied.get("version_status_value")
+                    if applied.get("version_status")
+                    else None
+                )
 
                 if version_status:
                     debug_print(
@@ -1715,13 +1740,21 @@ class Worker(QRunnable):
                         latest_version["version_number"],
                         version_status,
                     )
+                else:
+                    debug_print(
+                        "Worker: Flow no aplicó estado de versión; no se actualiza en la DB local"
+                    )
 
-                # Añadir nota si hay mensaje
-                if self.message:
+                # Añadir nota solo si Flow creó la nota
+                if self.message and applied.get("note"):
                     debug_print(
                         f"Worker: Añadiendo nota a versión local (ID: {latest_version['id']})"
                     )
                     db_manager.add_version_note(latest_version["id"], self.message)
+                elif self.message:
+                    debug_print(
+                        "Worker: Flow no creó la nota; no se agrega a la DB local"
+                    )
 
         except Exception as e:
             debug_print(f"Worker: Error actualizando base de datos local: {e}")

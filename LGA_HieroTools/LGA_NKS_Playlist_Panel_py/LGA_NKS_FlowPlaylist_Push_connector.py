@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FlowPlaylist_Push_connector v0.02 | Lega
+  LGA_NKS_FlowPlaylist_Push_connector v0.03 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,10 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v0.03: update_task_status y update_version_status devuelven (ok, error) en vez
+         de tragarse los errores. execute_full_push aborta si falla la Task y
+         devuelve el dict "applied" con lo realmente escrito en Flow, para que
+         la DB local (cache de Flow) nunca guarde algo que Flow no recibió.
   v0.02: project_name se extrae del segmento "VFX-NOMBRE" de la ruta
          (extract_project_name_from_path); fallback al primer bloque del filename.
          file_path se recibe vía JSON (kwargs) en execute_full_push y check_version.
@@ -332,21 +336,34 @@ class ShotGridManager:
         return None, None, None
 
     def update_task_status(self, task_id, new_status):
+        """Actualiza el estado de la Task en Flow.
+
+        Devuelve (ok, error). La DB local es un cache de Flow: solo debe
+        escribirse si esta escritura devolvió ok=True.
+        """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
-            return
+            return False, "ShotGrid no inicializado"
         try:
             debug_print(
                 f"Actualizando estado de la tarea (ID: {task_id}) a: {new_status}"
             )
             self.sg.update("Task", task_id, {"sg_status_list": new_status})
+            return True, None
         except Exception as e:
             debug_print(f"Error al actualizar el estado de la tarea: {e}")
+            return False, f"Error al actualizar el estado de la tarea: {e}"
 
     def update_version_status(self, project_name, shot_code, version_str, new_status):
+        """Actualiza el estado de la/las Version en Flow.
+
+        Devuelve (ok, error). Si no se encontró ninguna Version que coincida
+        se considera fallo: no hubo escritura real en Flow y por lo tanto la
+        DB local no debe reflejar el nuevo estado.
+        """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
-            return
+            return False, "ShotGrid no inicializado"
         try:
             debug_print(
                 f"Actualizando estado de la version para el Shot: {shot_code}, Version: {version_str} a: {new_status}"
@@ -357,13 +374,22 @@ class ShotGridManager:
                 ["code", "contains", version_str],
             ]
             versions = self.sg.find("Version", filters, ["id"])
+            if not versions:
+                msg = (
+                    f"No se encontró ninguna Version en Flow para {shot_code} "
+                    f"{version_str}"
+                )
+                debug_print(msg)
+                return False, msg
             for version in versions:
                 debug_print(
                     f"Actualizando version (ID: {version['id']}) a estado: {new_status}"
                 )
                 self.sg.update("Version", version["id"], {"sg_status_list": new_status})
+            return True, None
         except Exception as e:
             debug_print(f"Error al actualizar el estado de la version: {e}")
+            return False, f"Error al actualizar el estado de la version: {e}"
 
     def get_task_assignee(self, task_id):
         if not self.sg:
@@ -726,13 +752,29 @@ def execute_full_push_operation(
         for task in tasks:
             if task["content"].lower() == task_name:
                 debug_print(f"Actualizando tarea: {task['content']} (ID: {task['id']})")
-                sg_manager.update_task_status(task["id"], sg_status)
+                # La DB local es cache de Flow: si falla la escritura en Flow
+                # se aborta el push y el caller no escribe nada en la DB.
+                task_ok, task_error = sg_manager.update_task_status(
+                    task["id"], sg_status
+                )
+                if not task_ok:
+                    return {"success": False, "error": task_error}
                 task_id = task["id"]
                 task_assignee_id = sg_manager.get_task_assignee(task_id)
                 break
 
         if not task_id:
             return {"success": False, "error": f"No se encontró la tarea {task_name}"}
+
+        # applied refleja qué se escribió realmente en Flow. El caller usa esto
+        # para actualizar la DB local solo con lo confirmado.
+        applied = {
+            "task_status": True,
+            "version_status": False,
+            "version_status_value": None,
+            "note": False,
+        }
+        warnings = []
 
         # Buscar versión específica correspondiente al clip actual para agregar comentarios
         sg_specific_version, sg_version_number_str, user_id = (
@@ -750,9 +792,14 @@ def execute_full_push_operation(
 
         if sg_status in ["rev_di", "corr", "revleg", "revcha", "revjua", "revjav"]:
             debug_print(f"Actualizando versión a vwd")
-            sg_manager.update_version_status(
+            version_ok, version_error = sg_manager.update_version_status(
                 project_name, shot_code, version_number_str, "vwd"
             )
+            if version_ok:
+                applied["version_status"] = True
+                applied["version_status_value"] = "vwd"
+            else:
+                warnings.append(version_error)
 
             # Agregar comentario si hay mensaje - usar la versión específica, no la más alta
             if message and sg_specific_version:
@@ -796,48 +843,63 @@ def execute_full_push_operation(
                     debug_print(
                         f"execute_full_push: Resultado de attach_images_to_note: {attach_result} imágenes adjuntadas"
                     )
+                    applied["note"] = True
                     # Retornar información sobre imágenes adjuntadas en el resultado
                     return {
                         "success": True,
                         "message": "Push completado exitosamente",
                         "images_attached": attach_result,  # attach_result ahora es el número de imágenes adjuntadas
+                        "applied": applied,
+                        "warnings": warnings,
                     }
                 elif created_note and not review_images:
                     debug_print(
                         f"execute_full_push: Nota creada pero no hay imágenes para adjuntar"
                     )
+                    applied["note"] = True
                     return {
                         "success": True,
                         "message": "Push completado exitosamente",
                         "images_attached": 0,
+                        "applied": applied,
+                        "warnings": warnings,
                     }
                 elif not created_note and review_images:
                     debug_print(
                         f"⚠️  ADVERTENCIA: Hay {len(review_images)} imágenes pero no se creó la nota, no se pueden adjuntar"
                     )
+                    warnings.append(
+                        "No se pudo crear la nota en Flow; imágenes no adjuntadas"
+                    )
                     return {
                         "success": True,
                         "message": "Push completado exitosamente (nota no creada, imágenes no adjuntadas)",
                         "images_attached": 0,
+                        "applied": applied,
+                        "warnings": warnings,
                     }
+                else:
+                    # No se creó la nota y no había imágenes.
+                    warnings.append("No se pudo crear la nota en Flow")
 
         elif sg_status == "rev_su":
             debug_print(f"Actualizando versión a rev")
-            sg_manager.update_version_status(
+            version_ok, version_error = sg_manager.update_version_status(
                 project_name, shot_code, version_number_str, "rev"
             )
-
-        elif sg_status == "revleg":
-            debug_print(f"Actualizando versión a unvleg")
-            sg_manager.update_version_status(
-                project_name, shot_code, version_number_str, "unvleg"
-            )
+            if version_ok:
+                applied["version_status"] = True
+                applied["version_status_value"] = "rev"
+            else:
+                warnings.append(version_error)
 
         debug_print("execute_full_push: Push completado exitosamente")
         return {
             "success": True,
             "message": "Push completado exitosamente",
             "images_attached": 0,  # No hay imágenes para este tipo de estado
+            "applied": applied,
+            "warnings": warnings,
         }
 
     except Exception as e:
@@ -913,18 +975,18 @@ def execute_flow_operation(operation, **kwargs):
         elif operation == "update_task":
             task_id = kwargs.get("task_id")
             status = kwargs.get("status")
-            sg_manager.update_task_status(task_id, status)
-            return {"success": True}
+            ok, error = sg_manager.update_task_status(task_id, status)
+            return {"success": ok} if ok else {"success": False, "error": error}
 
         elif operation == "update_version":
             project_name = kwargs.get("project_name")
             shot_code = kwargs.get("shot_code")
             version_str = kwargs.get("version_str")
             status = kwargs.get("status")
-            sg_manager.update_version_status(
+            ok, error = sg_manager.update_version_status(
                 project_name, shot_code, version_str, status
             )
-            return {"success": True}
+            return {"success": ok} if ok else {"success": False, "error": error}
 
         elif operation == "get_task_assignee":
             task_id = kwargs.get("task_id")

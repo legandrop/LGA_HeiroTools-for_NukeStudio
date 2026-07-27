@@ -106,7 +106,9 @@ Al hacer Ctrl+Shift+Click en un botón de usuario, el panel llama al script de g
 ## Funciones Principales
 
 ### Scripts de Asignación y Limpieza
-Los scripts llamados por los botones principales ahora actualizan tanto Flow Production Tracking como la base de datos local pipesync.db:
+Los scripts llamados por los botones principales ahora actualizan tanto Flow Production Tracking como la base de datos local pipesync.db.
+
+**Orden de escritura (regla del pipeline)**: la fuente de verdad es Flow y `pipesync.db` es solo un cache. Nunca se escribe en la DB local antes que en Flow: primero se hace la escritura en Flow, se verifica que haya sido exitosa y recién entonces se replica en la DB. Si la escritura en Flow falla, se aborta sin tocar la DB (queda desactualizada, que se corrige con un Pull, en vez de quedar con información incorrecta).
 
 #### `LGA_NKS_Flow/LGA_NKS_Flow_Assign_Assignee.py`
 - Asigna usuario a task comp en Flow y añade asignación en DB local
