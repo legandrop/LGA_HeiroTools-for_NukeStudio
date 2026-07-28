@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.81 | Lega
+  LGA_ReviewPanel v2.82 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.82: Movido boton Self ReplaceClip al Edit Panel.
   v2.81: Agregados botones Next Annotation y Previous Annotation para navegar
          las anotaciones del clip seleccionado.
   v2.80: Agregado boton Contact Sheet para pegar clips seleccionados en NukeX
@@ -201,7 +202,6 @@ class ReviewPanel(QtWidgets.QWidget):
         # Crear botones y agregarlos al layout
         self.buttons = [
             ("ON Clips | OFF v00", self.execute_EnableOrDisableClips, "#0e1f3a", None, "Click: Activa todos los clips del timeline y desactiva los clips v00\nShift+Click: Solo en los clips seleccionados"),
-            ("Self ReplaceClip", self.execute_SelfReplaceClip, "#0e1f3a", None, "Crea una nueva versión duplicada del clip seleccionado para que sea única (a veces arregla problemas"),
             ("ON OFF _comp_", self.execute_DisableEXR, "#0e1f3a", "Shift+D", "Shift+D\nHabilita/deshabilita el clip del track _comp_"),
             ("ON OFF _roto_", self.execute_DisableRoto, "#0e1f3a", "Ctrl+Shift+D", "Ctrl+Shift+D\nHabilita/deshabilita el clip del track _roto_"),
             (
@@ -446,9 +446,6 @@ class ReviewPanel(QtWidgets.QWidget):
             debug_print(f"Script no encontrado en la ruta: {script_path}")
 
     # Handlers para cada boton que ejecutan scripts externos
-    def execute_SelfReplaceClip(self):
-        self.execute_external_script_from_edit("LGA_NKS_SelfReplaceClip.py")
-
     def execute_EnableOrDisableClips(self):
         self.execute_external_script("LGA_NKS_ON_Clips_OFF_v00-Clips.py")
     

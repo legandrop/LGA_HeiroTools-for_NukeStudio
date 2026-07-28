@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.01 | Lega
+  LGA_EditToolsPanel v3.02 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.02: Movido boton Self ReplaceClip desde el Review Panel, debajo de Reconnect Media.
   v3.01: Nuevo boton de import shot
   v3.00: Reconnect colapsado en un solo botón con submenu flotante (T>N, N>T, Win>Mac)
   v2.99: Create v000
@@ -323,6 +324,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 "Alt+M",
                 "Alt+M\nAbre un diálogo para reconectar media manualmente",
             ),
+            ("Self ReplaceClip", self.execute_SelfReplaceClip, "#4a4329", None, "Crea una nueva versión duplicada del clip seleccionado para que sea única (a veces arregla problemas)"),
             (
                 "Clear Tag",
                 self.run_clear_tag_script,
@@ -987,6 +989,10 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
 
         for track_item in selected_track_items:
             track_item.reconnectMedia(search_path)
+
+    ###### Self ReplaceClip
+    def execute_SelfReplaceClip(self):
+        self.execute_external_script("LGA_NKS_SelfReplaceClip.py")
 
     ###### Clean Project
     def clean_project(self):

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.24 | Lega
+  LGA_NKS_Flow_FlowProd_Panel v1.25 | Lega
   Panel para operaciones de producción con Flow:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -10,6 +10,8 @@ ________________________________________________________________________________
   - Integración con FileManager (Open, Download, Upload)
 
 
+  v1.25: Invertido comportamiento del boton Download Clip:
+         Click ahora descarga la ultima version, Shift+Click la version seleccionada.
   v1.24: El boton "Thumbnail" ahora soporta Shift+Click: reemplaza el thumbnail
          del shot en Flow con un snapshot del viewer, mostrando una ventana de
          comparacion (actual vs nuevo) y subiendo en un hilo separado.
@@ -291,10 +293,10 @@ class FlowProdPanel(QtWidgets.QWidget):
             ),
             (
                 "Download Clip",
-                self.download_clip_from_filemanager,
+                self.download_latest_clip_from_filemanager,
                 "gradient_magenta_violet",
                 None,
-                "Click: Descargar clip seleccionado\nShift+Click: Descargar ultima version del clip",
+                "Click: Descargar ultima version del clip\nShift+Click: Descargar clip seleccionado",
             ),
             (
                 "Reveal in Flow",
@@ -414,8 +416,8 @@ class FlowProdPanel(QtWidgets.QWidget):
                 button.setShiftClickHandler(self.open_shot_in_pipesync)
             elif name == "Download Clip":
                 button = CustomButton(name)
-                button.setCustomClickHandler(self.download_clip_from_filemanager)
-                button.setShiftClickHandler(self.download_latest_clip_from_filemanager)
+                button.setCustomClickHandler(self.download_latest_clip_from_filemanager)
+                button.setShiftClickHandler(self.download_clip_from_filemanager)
             else:
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
