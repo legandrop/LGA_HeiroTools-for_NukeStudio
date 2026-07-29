@@ -1,15 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.57 | Lega
+  LGA_NKS_Flow_Pull v3.56 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
-
-  v3.57: Documentado por que sigue el color de "Rev Dir Den" en hiero_status_dict
-         aunque el boton ya no exista: los clips pintados con el siguen en
-         timelines viejos y sin la entrada saldrian como "Unknown".
 
   v3.56: task_status_dict, los nombres visibles y los colores de review pasan a
          LGA_NKS_Flow_Status_Config. El catalogo NO se filtra por contexto: la DB

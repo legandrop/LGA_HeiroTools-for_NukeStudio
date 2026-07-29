@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Status_Config v1.00 | Lega
+  LGA_NKS_Flow_Status_Config v1.01 | Lega
 
   Fuente unica de los estados de Task de Flow para HieroTools: codigo,
   nombre visible, color de clip, tag de XYplorer y en que contexto
@@ -29,6 +29,13 @@ ____________________________________________________________________
   los nombres tambien, salvo las divergencias declaradas en
   docs/Docu_Flow_Estados_Colores.md.
 
+  v1.01: Se elimina el boton Rev Dir Den (empujaba el mismo rev_di que Rev Dir).
+         La cola de entrega pasa a pubsh -> check -> apr, con apr como FINAL, y
+         apr se muestra "Delivery Apr" en vez de "Delivery OK", que era casi
+         identico al "OK for Delivery" de pubsh. El orden de PUSH_BUTTONS y de
+         los CODES_BY_MODE acompana al de Flow y al de PipeSync (revjua antes
+         que revjav). Nombres del catalogo alineados con Flow. revprd toma el
+         mismo tag de XYplorer que rev_di.
   v1.00: Version inicial.
 ____________________________________________________________________
 

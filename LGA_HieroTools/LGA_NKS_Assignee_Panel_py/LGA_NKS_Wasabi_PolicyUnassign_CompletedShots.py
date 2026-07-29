@@ -5,8 +5,9 @@ ____________________________________________________________________
 
   Limpia policies de Wasabi para shots ya entregados.
 
-  v1.02: Titulo y botones de la ventana con los nombres nuevos de la cola:
-         "Delivered" y "Delivery Apr".
+  v1.02: Los nombres visibles de la cola de entrega pasan a "Delivered" (check) y
+         "Delivery Apr" (apr), en el titulo de la ventana, en los dos botones de
+         seleccion y en el mapa de labels de la tabla.
 
   v1.01: Reconoce pubsh (OK for Delivery) como shot terminado, y pbshed por si
          quedo data vieja de erso, que lo usaba antes de pasar a check.
