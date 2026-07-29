@@ -1,9 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.01 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.02 | Lega
 
   Limpia policies de Wasabi para shots ya entregados.
+
+  v1.02: Titulo y botones de la ventana con los nombres nuevos de la cola:
+         "Delivered" y "Delivery Apr".
 
   v1.01: Reconoce pubsh (OK for Delivery) como shot terminado, y pbshed por si
          quedo data vieja de erso, que lo usaba antes de pasar a check.
@@ -343,7 +346,7 @@ class CleanWorker(QRunnable):
 class CompletedShotsPolicyWindow(QDialog):
     def __init__(self, parent=None):
         super(CompletedShotsPolicyWindow, self).__init__(parent)
-        self.setWindowTitle("Wasabi Policy Cleanup - Approved/Delivery Checked")
+        self.setWindowTitle("Wasabi Policy Cleanup - Delivered / Delivery Apr")
         self.setModal(False)
         self.setMinimumWidth(980)
         self.resize(980, 520)
@@ -389,7 +392,7 @@ class CompletedShotsPolicyWindow(QDialog):
         self.invert_button.clicked.connect(self.invert_selection)
         buttons_layout.addWidget(self.invert_button)
 
-        self.select_approved_button = QPushButton("Seleccionar Approved")
+        self.select_approved_button = QPushButton("Seleccionar Delivery Apr")
         self.select_approved_button.setEnabled(False)
         self.select_approved_button.setStyleSheet(
             "QPushButton { background-color: #555555; color: #DDDDDD; border: none; padding: 6px 10px; }"
@@ -398,7 +401,7 @@ class CompletedShotsPolicyWindow(QDialog):
         self.select_approved_button.clicked.connect(self.select_approved)
         buttons_layout.addWidget(self.select_approved_button)
 
-        self.select_delivery_button = QPushButton("Seleccionar Delivery Ok")
+        self.select_delivery_button = QPushButton("Seleccionar Delivered")
         self.select_delivery_button.setEnabled(False)
         self.select_delivery_button.setStyleSheet(
             "QPushButton { background-color: #555555; color: #DDDDDD; border: none; padding: 6px 10px; }"

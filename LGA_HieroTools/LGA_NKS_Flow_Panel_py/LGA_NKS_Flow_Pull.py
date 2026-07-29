@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.56 | Lega
+  LGA_NKS_Flow_Pull v3.57 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.57: Documentado por que sigue el color de "Rev Dir Den" en hiero_status_dict
+         aunque el boton ya no exista: los clips pintados con el siguen en
+         timelines viejos y sin la entrada saldrian como "Unknown".
 
   v3.56: task_status_dict, los nombres visibles y los colores de review pasan a
          LGA_NKS_Flow_Status_Config. El catalogo NO se filtra por contexto: la DB
@@ -1375,6 +1379,9 @@ class HieroOperations:
     def __init__(self, shotgrid_manager, gui_table):
         self.sg_manager = shotgrid_manager
         self.gui_table = gui_table  # Almacenar la referencia a GUI_Table
+        # Colores de clip que NO salen de un status de Flow. "Rev Dir Den" era un
+        # boton del panel que ya no existe, pero los clips que pinto siguen en
+        # timelines viejos: sin esta entrada el Pull los mostraria como "Unknown".
         self.hiero_status_dict = {
             "v_00": "#8a8a8a",
             "Rev Dir Den": "#4d21a8",

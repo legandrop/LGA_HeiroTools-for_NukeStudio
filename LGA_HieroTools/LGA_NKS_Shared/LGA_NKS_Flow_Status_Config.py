@@ -143,9 +143,9 @@ LEGACY_LABEL_ALIASES = {
 # esta en la lista del sitio falla con "'xxx' is not a valid status", asi que
 # todo dropdown o boton que ESCRIBA estado tiene que filtrar por aca.
 #
-# Ojo con las trampas: `revleg` en erso se llama "Review Sup" y es el unico
-# reviewer del sitio; y el estado de shot "entregado" es `check` en wanka pero
-# `pbshed` en erso.
+# Ojo: `revleg` en erso se llama "Review Sup" y es el unico reviewer del sitio.
+# Las listas de Shot son identicas en los dos; las de Task se diferencian solo en
+# los reviewers por persona (studio) y en `revprd` (client).
 TASK_STATUS_CODES_BY_MODE = {
     MODE_STUDIO: (
         "noread", "omit", "ready", "progre", "corr",
