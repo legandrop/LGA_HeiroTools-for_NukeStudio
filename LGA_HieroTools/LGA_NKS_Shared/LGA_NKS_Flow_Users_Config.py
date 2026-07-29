@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Users_Config v2.00 | Lega
+  LGA_NKS_Flow_Users_Config v2.01 | Lega
 
   Usuarios de Flow (nombre, color y usuario de Wasabi) para HieroTools.
 
@@ -21,6 +21,8 @@ ____________________________________________________________________
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py
 
+  v2.01: el orden de los usuarios sale de `panel_order`: los que lo tienen van
+         primero por ese numero, el resto alfabetico.
   v2.00: la fuente pasa a ser pipesync_stats.db; se elimina el JSON local.
   v1.00: Version inicial (JSON local).
 ____________________________________________________________________
@@ -58,13 +60,20 @@ def load_flow_users(assignable_only=True):
     if not os.path.exists(db_path):
         return []
 
+    # El orden lo decide `panel_order`: los > 0 primero por ese numero, el resto
+    # alfabetico. Se resuelve en el SQL con un CASE porque 0 significa "sin orden" y
+    # ordenar por el numero crudo pondria a esos primeros. Es la MISMA regla que aplica
+    # PipeSync en `FlowUsersStore::assignableNames()`.
     query = (
         "SELECT user_name, color, vendor_color, wasabi_user, short_name "
         "FROM flow_users"
     )
     if assignable_only:
         query += " WHERE assignable = 1 AND status = 'act'"
-    query += " ORDER BY user_name COLLATE NOCASE"
+    query += (
+        " ORDER BY CASE WHEN panel_order > 0 THEN panel_order ELSE 999999 END,"
+        " user_name COLLATE NOCASE"
+    )
 
     connection = None
     try:

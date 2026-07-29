@@ -38,6 +38,16 @@ cada sync, y HieroTools la lee en **modo read-only**: nunca escribe ahi.
 - **Solo Studio.** El envelope de PipeSync no existe en el sitio Client; ahi los colores
   salen de los Vendor Groups y este panel no se usa.
 
+### Orden de los botones
+
+Lo decide el campo `List order` de cada persona en el Projects tab de PipeSync:
+
+1. los que tienen un numero (1, 2, 3...) van primero, en ese orden;
+2. despues todo el resto, alfabetico.
+
+Es exactamente el mismo orden que usa PipeSync en su popover de assignees — sale del
+mismo dato, no de dos listas que hay que mantener sincronizadas a mano.
+
 ### Que usuarios aparecen como botones
 Los que estan **activos** en Flow y tienen `assignable` en true en su envelope. Alguien
 puede tener color y `wasabi_user` sin ser assignable (por ejemplo un producer): no
@@ -69,6 +79,7 @@ fila de la persona. La seccion `PipeSync` del dialogo tiene:
 | `Wasabi user` | Nombre de usuario **IAM** de Wasabi (ej. `lega`). Con el se arma la policy `<usuario>_policy`. **No es una credencial**: las access/secret key siguen en el `config.secure` de cada maquina. |
 | `Short name` | Nombre corto, opcional. |
 | `Assignable` | Si aparece como boton en este panel. |
+| `List order` | Posicion fija en la lista. `Alphabetical` = sin posicion fija. |
 
 Para dar de alta a alguien nuevo se lo crea en Flow (o desde el mismo card) y se le
 completa esa seccion. Para sacarlo del panel alcanza con destildar `Assignable` o
