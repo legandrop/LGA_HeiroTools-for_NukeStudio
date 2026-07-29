@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assign_Assignee v1.25 | Lega
+  LGA_NKS_Flow_Assign_Assignee v1.26 | Lega
 
   Asigna un usuario a una tarea en ShotGrid (Flow) a partir del base_name y nombre de usuario
 
+  v1.26: los usuarios salen de la DB de PipeSync (tabla flow_users), no del JSON local.
   v1.25: Recibe file_path desde el panel para extraer project_name desde el
          segmento VFX-NOMBRE del path (corrige proyectos como MORLASP con
          prefijo MOR en el filename). Normaliza default_task para aliases
@@ -27,7 +28,7 @@ import sqlite3
 import platform
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
-from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import get_flow_users_config_path
+from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_name
 
 # Reasignar clases para compatibilidad con código existente
 QRunnable = QtCore.QRunnable
@@ -208,7 +209,7 @@ def prepare_tasks_for_selection(tasks):
 
 def get_user_info_from_config(user_name):
     """
-    Obtiene información del usuario desde el archivo de configuración.
+    Obtiene nombre y color desde la DB de PipeSync (tabla flow_users).
 
     Args:
         user_name (str): Nombre del usuario en Flow
@@ -217,24 +218,13 @@ def get_user_info_from_config(user_name):
         tuple: (user_name, user_color) o (user_name, "#666666") si no se encuentra
     """
     try:
-        config_path = get_flow_users_config_path(
-            os.path.dirname(os.path.dirname(__file__))
-        )
-
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                users = config.get("users", [])
-
-                for user in users:
-                    if user.get("name") == user_name:
-                        return user.get("name", user_name), user.get("color", "#666666")
-
-        # Si no se encuentra, usar valores por defecto
+        user = find_user_by_name(user_name)
+        if user:
+            return user["name"], user["color"]
         return user_name, "#666666"
 
     except Exception as e:
-        debug_print(f"Error leyendo configuración de usuarios: {e}")
+        debug_print(f"Error leyendo usuarios de PipeSync: {e}")
         return user_name, "#666666"
 
 

@@ -1,11 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.56 | Lega
+  LGA_NKS_Flow_Assignee_Panel v1.57 | Lega
 
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 
+  v1.57: los botones de usuario salen de la DB de PipeSync (flow_users); se elimina el JSON local y la config por defecto.
   v1.56: Propaga file_path junto con base_name a los tres scripts del panel
          para permitir extracción de project_name desde el segmento VFX-NOMBRE
          del path (corrige proyectos como MORLASP con prefijo MOR en el filename).
@@ -43,8 +44,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_GetClip import get_clips_to_process
 from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import (
-    get_flow_users_config_paths,
-    load_flow_users_config,
+    get_flow_users_db_path,
+    load_flow_users,
 )
 
 # Importar funciones de utilidad de estilos
@@ -261,39 +262,28 @@ class AssigneePanel(QtWidgets.QWidget):
         self.update_scrollbar_policy()
 
     def load_users_from_config(self):
-        """Carga la lista de usuarios desde el archivo JSON de configuracion"""
-        startup_dir = os.path.dirname(__file__)
-        local_config_path, _ = get_flow_users_config_paths(startup_dir)
-        try:
-            config, config_path = load_flow_users_config(startup_dir)
-            if config is not None:
-                debug_print(f"Archivo de configuracion cargado: {config_path}")
-                return config.get("users", [])
+        """
+        Carga los usuarios desde la DB de PipeSync (tabla flow_users).
 
-            debug_print(f"Archivo de configuracion no encontrado: {local_config_path}")
-            # Crear archivo de configuracion local por defecto si no existe nada
-            self.create_default_config(local_config_path)
-            return self.load_users_from_config()  # Intentar cargar nuevamente
+        La fuente de verdad es Flow y se edita desde el Projects tab de PipeSync.
+        No hay JSON local ni lista por defecto: si no hay datos, el panel se queda
+        sin botones de usuario y lo avisa, en vez de mostrar una lista compilada que
+        puede estar anos desactualizada.
+        """
+        try:
+            users = load_flow_users(assignable_only=True)
         except Exception as e:
-            debug_print(f"Error al cargar configuracion de usuarios: {e}")
+            debug_print(f"Error al cargar usuarios desde PipeSync: {e}")
             return []
 
-    def create_default_config(self, config_path):
-        """Crea un archivo de configuracion por defecto"""
-        default_config = {
-            "users": [
-                {"name": "Lega Pugliese", "color": "#69135e"},
-                {"name": "Sebas Romano", "color": "#bd7f9f"},
-                {"name": "Patricio Barreiro", "color": "#19335D"},
-                {"name": "Mariel Falco", "color": "#665621"},
-            ]
-        }
-        try:
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(default_config, f, indent=4, ensure_ascii=False)
-            debug_print(f"Archivo de configuracion creado: {config_path}")
-        except Exception as e:
-            debug_print(f"Error al crear archivo de configuracion: {e}")
+        if not users:
+            debug_print(
+                "Sin usuarios en la DB de PipeSync "
+                f"({get_flow_users_db_path()}). Abri PipeSync y esperá un sync."
+            )
+        else:
+            debug_print(f"{len(users)} usuarios cargados desde {get_flow_users_db_path()}")
+        return users
 
     def reload_config(self):
         """Recarga la configuracion de usuarios y actualiza los botones"""

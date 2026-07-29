@@ -1,7 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.98 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v0.99 | Lega
+
+  v0.99
+  - El nombre y el color del usuario se resuelven por wasabi_user contra la
+    DB de PipeSync (tabla flow_users), en vez del JSON local.
 
   v0.98 (2026-07-21)
   - Propaga errores fail-closed del resolver de buckets con mensajes
@@ -22,7 +26,7 @@ import hiero.core
 import hiero.ui
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
-from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import get_flow_users_config_path
+from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_wasabi_user
 
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
@@ -713,35 +717,25 @@ def create_and_manage_policy(username, paths_info):
 
 def get_user_info_from_config(wasabi_user):
     """
-    Obtiene información del usuario desde el archivo de configuración.
+    Obtiene nombre y color de una persona a partir de su usuario de Wasabi.
 
-    Args:
-        wasabi_user (str): Nombre del usuario de Wasabi
+    La fuente es la DB de PipeSync (tabla flow_users), alimentada desde Flow. Si la
+    persona no esta ahi, se devuelve el propio wasabi_user y el gris neutro: la policy
+    se puede asignar igual, solo se pierde el color en la ventana de estado.
 
     Returns:
-        tuple: (user_name, user_color) o (wasabi_user, "#666666") si no se encuentra
+        tuple: (user_name, user_color)
     """
     try:
-        config_path = get_flow_users_config_path(
-            os.path.dirname(os.path.dirname(__file__))
+        user = find_user_by_wasabi_user(wasabi_user)
+        if user:
+            return user["name"], user["color"]
+        debug_print(
+            f"'{wasabi_user}' no esta en la DB de PipeSync; se usa el nombre crudo."
         )
-
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                users = config.get("users", [])
-
-                for user in users:
-                    if user.get("wasabi_user") == wasabi_user:
-                        return user.get("name", wasabi_user), user.get(
-                            "color", "#666666"
-                        )
-
-        # Si no se encuentra, usar valores por defecto
         return wasabi_user, "#666666"
-
     except Exception as e:
-        debug_print(f"Error leyendo configuración de usuarios: {e}")
+        debug_print(f"Error leyendo usuarios de PipeSync: {e}")
         return wasabi_user, "#666666"
 
 

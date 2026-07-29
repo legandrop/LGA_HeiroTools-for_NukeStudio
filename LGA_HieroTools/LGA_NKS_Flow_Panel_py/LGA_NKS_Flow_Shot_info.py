@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.93 | Lega
+  LGA_NKS_Flow_Shot_info v1.94 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.94: Los colores de autor salen de la DB de PipeSync (tabla flow_users). Se
+         eliminan el JSON local, el mapa de colores hardcodeado y el caso
+         especial de Fede Blesa.
   v1.93: Muestra replies de notas como hilos anidados y limita la linea vertical
          al contenedor exterior, sin bordes extra en autor ni contenido.
   v1.92: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
@@ -60,6 +63,7 @@ from pathlib import Path
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QShortcut, QApplication
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
+from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import load_flow_users
 
 # Usar directamente las clases del adapter (ya manejan compatibilidad PySide2/6)
 QCoreApplication = QApplication  # Para compatibilidad
@@ -399,60 +403,51 @@ def _html_escape(text):
 # --------------------------------------------------------------------------- #
 # Colores de autores en notas (port de ShotCard_UI.cpp / getAssigneeReadableTextColor)
 # --------------------------------------------------------------------------- #
-_FALLBACK_USER_COLORS = {
-    "lega pugliese":     "#50214A",
-    "sebas romano":      "#4A2D3C",
-    "mariel falco":      "#3C3809",
-    "patricio barreiro": "#114829",
-    "matias moretti":    "#291148",
-    "ignacio jamilis":   "#481111",
-}
-_USER_COLOR_FEDE_BLESA = "#b084ff"
-_USER_COLOR_UNKNOWN    = "#d6c94a"
+_USER_COLOR_UNKNOWN = "#d6c94a"
 
 
-def _load_user_colors_from_json():
-    """Carga colores desde LGA_NKS_Flow_Users.json (mismo archivo que el panel Assignee)."""
-    json_path = Path(__file__).parent.parent / "LGA_NKS_Flow_Users.json"
+def _load_user_colors():
+    """
+    Colores de usuario desde la DB de PipeSync (tabla flow_users).
+
+    Antes esto leia LGA_NKS_Flow_Users.json y ademas tenia un mapa hardcodeado de
+    respaldo con los mismos colores que el C++ de PipeSync. Las tres copias se
+    desincronizaron entre si. Ahora hay una sola fuente y no hay fallback: sin datos,
+    los autores salen en amarillo (_USER_COLOR_UNKNOWN) y eso se ve.
+    """
     colors = {}
     try:
-        if json_path.exists():
-            with open(json_path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            for entry in data.get("users", []):
-                name   = (entry.get("name")        or "").strip()
-                wasabi = (entry.get("wasabi_user")  or "").strip()
-                hex_c  = (entry.get("color")        or "").strip()
-                if not hex_c or not hex_c.startswith("#"):
-                    continue
-                if name:
-                    colors[name.casefold()] = hex_c
-                if wasabi:
-                    colors[wasabi.casefold()] = hex_c
+        for user in load_flow_users(assignable_only=False):
+            hex_color = (user.get("color") or "").strip()
+            if not hex_color.startswith("#"):
+                continue
+            name = (user.get("name") or "").strip()
+            wasabi = (user.get("wasabi_user") or "").strip()
+            if name:
+                colors[name.casefold()] = hex_color
+            if wasabi:
+                colors[wasabi.casefold()] = hex_color
     except Exception as exc:
-        debug_print(f"Error cargando LGA_NKS_Flow_Users.json: {exc}", level="warning")
+        debug_print(f"Error cargando usuarios desde PipeSync: {exc}", level="warning")
     return colors
 
 
 # Cargar una sola vez al importar el modulo
-_USER_COLORS = _load_user_colors_from_json()
+_USER_COLORS = _load_user_colors()
 
 
 def _get_user_text_color(user_name):
     """Devuelve color CSS legible para un autor (port de getAssigneeReadableTextColor).
 
     Reglas:
-    - Fede Blesa: siempre #b084ff.
-    - Buscar en JSON; si no, en fallback hardcodeado.
+    - Buscar el color configurado en Flow.
     - Si no se encuentra: amarillo #d6c94a.
     - El color base se aclara iterativamente hasta brillo percibido >= 155.
     """
     if not user_name:
         return _USER_COLOR_UNKNOWN
     normalized = user_name.strip().casefold()
-    if normalized == "fede blesa":
-        return _USER_COLOR_FEDE_BLESA
-    base_hex = _USER_COLORS.get(normalized) or _FALLBACK_USER_COLORS.get(normalized)
+    base_hex = _USER_COLORS.get(normalized)
     if not base_hex:
         return _USER_COLOR_UNKNOWN
     color = QColor(base_hex)

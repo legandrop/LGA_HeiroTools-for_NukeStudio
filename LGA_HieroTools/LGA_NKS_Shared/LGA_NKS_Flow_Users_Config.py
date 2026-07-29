@@ -1,47 +1,120 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Users_Config v1.00 | Lega
+  LGA_NKS_Flow_Users_Config v2.00 | Lega
 
-  Carga y gestiona la configuración de usuarios para Flow.
+  Usuarios de Flow (nombre, color y usuario de Wasabi) para HieroTools.
+
+  La fuente de verdad es FLOW: cada persona tiene un envelope en
+  `HumanUser.sg_pipesync_user_json` que se edita desde el Projects tab de
+  PipeSync. PipeSync lo baja en su sync y lo deja plano en la tabla
+  `flow_users` de `pipesync_stats.db`, que es lo que lee este modulo.
+
+  NO HAY FALLBACK a un JSON local. Antes existia LGA_NKS_Flow_Users.json y
+  terminaba desincronizado de PipeSync sin que nadie se enterara: cada app
+  mostraba a la misma persona de un color distinto. Si no hay datos, las
+  funciones devuelven una lista vacia y el caller tiene que avisar.
 
   Usado por runtime activo:
-  - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py
-  - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py
+  - LGA_NKS_Assignee_Panel.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py
+  - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py
 
-  v1.00: Versión inicial
+  v2.00: la fuente pasa a ser pipesync_stats.db; se elimina el JSON local.
+  v1.00: Version inicial (JSON local).
 ____________________________________________________________________
 
 """
 
-import json
 import os
+import sqlite3
+
+from LGA_NKS_PipeSyncPaths import get_pipesync_db_path
+
+STATS_DB_FILENAME = "pipesync_stats.db"
+DEFAULT_USER_COLOR = "#666666"
 
 
-LOCAL_USERS_FILENAME = "LGA_NKS_Flow_Users.json"
-DIST_USERS_FILENAME = "LGA_NKS_Flow_Users_dist.json"
+def get_flow_users_db_path():
+    """Ruta a la pipesync_stats.db de la instalacion estandar de PipeSync."""
+    return get_pipesync_db_path(STATS_DB_FILENAME)
 
 
-def get_flow_users_config_paths(startup_dir):
-    startup_dir = os.path.abspath(startup_dir)
-    local_path = os.path.join(startup_dir, LOCAL_USERS_FILENAME)
-    dist_path = os.path.join(startup_dir, DIST_USERS_FILENAME)
-    return local_path, dist_path
+def load_flow_users(assignable_only=True):
+    """
+    Devuelve [{'name', 'color', 'wasabi_user', 'short_name'}, ...] ordenado por nombre.
+
+    `assignable_only` filtra a la gente marcada como assignable y activa en Flow, que
+    es lo que corresponde para el panel de assignees. Los scripts de Wasabi que buscan
+    a una persona puntual pasan False: alguien puede tener policy de Wasabi sin estar
+    en la lista de assignees.
+
+    Devuelve [] cuando no hay datos (PipeSync nunca sincronizo, o la DB no existe).
+    El caller tiene que distinguir ese caso y avisar, no seguir como si simplemente no
+    hubiera usuarios configurados.
+    """
+    db_path = get_flow_users_db_path()
+    if not os.path.exists(db_path):
+        return []
+
+    query = (
+        "SELECT user_name, color, vendor_color, wasabi_user, short_name "
+        "FROM flow_users"
+    )
+    if assignable_only:
+        query += " WHERE assignable = 1 AND status = 'act'"
+    query += " ORDER BY user_name COLLATE NOCASE"
+
+    connection = None
+    try:
+        # Read-only: HieroTools nunca escribe en la DB de PipeSync. Si el archivo
+        # existe pero todavia no tiene la tabla, sqlite levanta OperationalError y se
+        # devuelve [] igual que si no hubiera datos.
+        connection = sqlite3.connect("file:{0}?mode=ro".format(db_path), uri=True)
+        rows = connection.execute(query).fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        if connection is not None:
+            connection.close()
+
+    users = []
+    for user_name, color, vendor_color, wasabi_user, short_name in rows:
+        name = (user_name or "").strip()
+        if not name:
+            continue
+        # El color de vendor gana siempre sobre el personal: misma regla que aplica
+        # PipeSync en las ShotCards (FlowUsersStore::backgroundColorFor).
+        resolved_color = (vendor_color or "").strip() or (color or "").strip()
+        users.append(
+            {
+                "name": name,
+                "color": resolved_color or DEFAULT_USER_COLOR,
+                "wasabi_user": (wasabi_user or "").strip(),
+                "short_name": (short_name or "").strip(),
+            }
+        )
+    return users
 
 
-def get_flow_users_config_path(startup_dir):
-    local_path, dist_path = get_flow_users_config_paths(startup_dir)
-    if os.path.exists(local_path):
-        return local_path
-    if os.path.exists(dist_path):
-        return dist_path
-    return local_path
+def find_user_by_name(user_name):
+    """Busca por nombre de Flow. Devuelve el dict del usuario o None."""
+    target = (user_name or "").strip().casefold()
+    if not target:
+        return None
+    for user in load_flow_users(assignable_only=False):
+        if user["name"].casefold() == target:
+            return user
+    return None
 
 
-def load_flow_users_config(startup_dir):
-    config_path = get_flow_users_config_path(startup_dir)
-    if not os.path.exists(config_path):
-        return None, config_path
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f), config_path
+def find_user_by_wasabi_user(wasabi_user):
+    """Busca por usuario IAM de Wasabi. Devuelve el dict del usuario o None."""
+    target = (wasabi_user or "").strip().casefold()
+    if not target:
+        return None
+    for user in load_flow_users(assignable_only=False):
+        if user["wasabi_user"].casefold() == target:
+            return user
+    return None
