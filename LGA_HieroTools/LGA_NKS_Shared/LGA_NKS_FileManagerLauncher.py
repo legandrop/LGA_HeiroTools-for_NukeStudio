@@ -25,7 +25,12 @@ MODE_STUDIO = "studio"
 MODE_CLIENT = "client"
 
 WINDOWS_DEV_EXE = r"C:\Portable\LGA_FileManager\build\FileManagerS3.exe"
-WINDOWS_PROD_EXE = r"C:\Portable\LGA\FileManager\FileManagerS3.exe"
+# La carpeta instalada paso de `LGA\FileManager` a `LGA\FileManagerS3` en
+# FileManager S3 v0.906: el nombre viejo queda reservado para la app local que
+# viene despues. Requiere que el usuario actualice FileManager S3 y HieroTools
+# juntos; con una sola de las dos partes actualizada el exe no se encuentra.
+# La ruta de DEV no cambia: apunta al build del repo, que conserva su nombre.
+WINDOWS_PROD_EXE = r"C:\Portable\LGA\FileManagerS3\FileManagerS3.exe"
 
 MAC_DEV_APP = "/Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManagerS3.app"
 MAC_PROD_APP = "/Applications/FileManagerS3.app"
