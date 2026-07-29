@@ -1,18 +1,50 @@
 > **Regla de documentacion**: este archivo describe el estado actual del codigo. No es un historial de cambios, changelog ni bitacora temporal.
 > **Regla de documentacion**: este archivo debe incluir una seccion de referencias tecnicas con rutas completas a los archivos mas importantes relacionados, y para cada archivo nombrar las funciones, clases o metodos clave vinculados a este tema.
 
-# LGA_NKS_Flow_Assignee_Panel - Configuración Dinámica de Usuarios
+# LGA_NKS_Flow_Assignee_Panel - Usuarios desde PipeSync
 
-## Descripción
-El panel LGA_NKS_Flow_Assignee_Panel carga dinámicamente la lista de usuarios desde `LGA_NKS_Flow_Users.json` si existe localmente; si no, usa `LGA_NKS_Flow_Users_dist.json` como configuración distribuible, permitiendo agregar, modificar o eliminar usuarios sin necesidad de editar el código fuente.
+## Descripcion
+El panel carga la lista de usuarios desde la **base de datos de PipeSync**, que a su vez
+la baja de Flow. No hay ningun archivo de configuracion local que editar: agregar gente,
+cambiarle el color o el usuario de Wasabi se hace desde el **tab PROJECTS de PipeSync**,
+card `Users & Access`.
+
+## De donde salen los usuarios
+
+```
+Flow (sitio Studio)
+  HumanUser.sg_pipesync_user_json  ->  { color, wasabi_user, short_name, assignable }
+        |  lo edita el Projects tab de PipeSync
+        v
+pipesync_stats.db  ->  tabla flow_users        (la escribe el sync de PipeSync)
+        |
+        +--> PipeSync   (colores de assignee en ShotCards, Review y Prod)
+        +--> ESTE PANEL (botones de usuario, y los scripts de policies de Wasabi)
+```
+
+La fuente de verdad es **Flow**. La DB es solo un cache que PipeSync reescribe entero en
+cada sync, y HieroTools la lee en **modo read-only**: nunca escribe ahi.
+
+### Consecuencias practicas
+
+- **Los cambios necesitan un sync de PipeSync.** Si cambias un color en el Projects tab,
+  el panel lo toma cuando PipeSync haya sincronizado y vos recargues el panel. PipeSync
+  refresca su cache solo al guardar; Hiero lo lee la proxima vez que abre el panel.
+- **PipeSync tiene que haber corrido al menos una vez** en esa maquina. Sin
+  `pipesync_stats.db` no hay usuarios: el panel se queda **sin botones de usuario** y lo
+  deja en el log. **No hay fallback** a una lista compilada — antes lo habia (un JSON
+  local mas una config por defecto en el codigo) y el resultado era que la misma persona
+  se veia de un color en Hiero y de otro en PipeSync, sin que nadie se enterara.
+- **Solo Studio.** El envelope de PipeSync no existe en el sitio Client; ahi los colores
+  salen de los Vendor Groups y este panel no se usa.
+
+### Que usuarios aparecen como botones
+Los que estan **activos** en Flow y tienen `assignable` en true en su envelope. Alguien
+puede tener color y `wasabi_user` sin ser assignable (por ejemplo un producer): no
+aparece como boton, pero los scripts de Wasabi lo siguen encontrando, porque buscan por
+`wasabi_user` sin filtrar por assignable.
 
 ## Funcionalidades Principales
-
-### 1. Configuración Dinámica de Usuarios
-- Los usuarios se cargan desde `Python/Startup/LGA_NKS_Flow_Users.json` si existe localmente
-- Si no existe ese archivo local, se usa `Python/Startup/LGA_NKS_Flow_Users_dist.json`
-- Cada usuario tiene nombre, color y usuario de Wasabi configurables
-- El sistema crea automáticamente el archivo de configuración si no existe
 
 ### 2. Funcionalidad Triple de Botones de Usuario
 - **Click normal**: Asigna el usuario a la task comp en Flow Production Tracking y actualiza la base de datos local pipesync.db
@@ -26,66 +58,26 @@ El panel LGA_NKS_Flow_Assignee_Panel carga dinámicamente la lista de usuarios d
   - `Nombre de policy | Nombre de shot | Estado del shot`
 - Todas las filas aparecen con checkbox activo por defecto y el botón **Limpiar policies** elimina las líneas correspondientes en policies para los items seleccionados
 
-## Archivo de Configuración: LGA_NKS_Flow_Users.json / LGA_NKS_Flow_Users_dist.json
+## Como se administran los usuarios
 
-```json
-{
-    "users": [
-        {
-            "name": "Lega Pugliese",
-            "color": "#69135e",
-            "wasabi_user": "lega"
-        },
-        {
-            "name": "Sebas Romano", 
-            "color": "#bd7f9f",
-            "wasabi_user": "Sebastian_Romano"
-        },
-        {
-            "name": "Patricio Barreiro",
-            "color": "#19335D",
-            "wasabi_user": "Pato_Barreiro"
-        },
-        {
-            "name": "Mariel Falco",
-            "color": "#665621",
-            "wasabi_user": "mariel"
-        }
-    ]
-}
-```
+**Todo se hace desde PipeSync**, tab `PROJECTS`, card `Users & Access`, en el `…` de la
+fila de la persona. La seccion `PipeSync` del dialogo tiene:
 
-## Cómo Agregar un Nuevo Usuario
+| Campo | Que hace |
+|---|---|
+| `Assignee color` | Color del label del assignee. Se usa como **fondo**, asi que conviene un tono oscuro; el dialogo muestra un preview con el nombre real encima. |
+| `Wasabi user` | Nombre de usuario **IAM** de Wasabi (ej. `lega`). Con el se arma la policy `<usuario>_policy`. **No es una credencial**: las access/secret key siguen en el `config.secure` de cada maquina. |
+| `Short name` | Nombre corto, opcional. |
+| `Assignable` | Si aparece como boton en este panel. |
 
-1. Abrir el archivo `Python/Startup/LGA_NKS_Flow_Users.json`
-2. Agregar un nuevo objeto al array `users`:
-   ```json
-   {
-       "name": "Nuevo Usuario",
-       "color": "#ff6600",
-       "wasabi_user": "nuevo_usuario"
-   }
-   ```
-3. Guardar el archivo
-4. Reiniciar Hiero o recargar el panel
-
-## Cómo Modificar un Usuario Existente
-
-1. Abrir el archivo `LGA_NKS_Flow_Users.json`
-2. Modificar el `name` o `color` del usuario deseado
-3. Guardar el archivo
-4. Reiniciar Hiero o recargar el panel
-
-## Cómo Eliminar un Usuario
-
-1. Abrir el archivo `LGA_NKS_Flow_Users.json`
-2. Eliminar el objeto correspondiente al usuario del array `users`
-3. Guardar el archivo
-4. Reiniciar Hiero o recargar el panel
+Para dar de alta a alguien nuevo se lo crea en Flow (o desde el mismo card) y se le
+completa esa seccion. Para sacarlo del panel alcanza con destildar `Assignable` o
+desactivarlo en Flow — no hace falta borrar nada.
 
 ## Formato de Campos
-- **Colores**: Formato hexadecimal (`#69135e`, `#ff6600`, `#19335D`)
-- **wasabi_user**: Nombre exacto del usuario en Wasabi (case-sensitive)
+- **Colores**: hexadecimal `#RRGGBB` (`#69135e`, `#19335D`). Se valida al guardar; un
+  valor invalido se rechaza en vez de escribirse.
+- **wasabi_user**: nombre exacto del usuario en Wasabi (case-sensitive).
 
 ## Integración con Wasabi
 
@@ -137,8 +129,10 @@ Los scripts llamados por los botones principales ahora actualizan tanto Flow Pro
 - Ubicación: `Python/Startup/LGA_NKS_Assignee_Panel.py`
 
 ### `reload_config()`
-- Recarga la configuración sin reiniciar Hiero
-- Útil para desarrollo y pruebas
+- Vuelve a leer los usuarios desde `pipesync_stats.db` y reconstruye los botones, sin
+  reiniciar Hiero.
+- Es lo que hay que usar despues de cambiar algo en el Projects tab de PipeSync y de que
+  PipeSync haya sincronizado.
 
 ## Método de Selección de Clips
 
@@ -210,10 +204,47 @@ Esta sincronización bidireccional asegura consistencia entre ambas fuentes de d
 **Referencia**: Lista completa de tasks en `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.md` sección "Tasks Disponibles".
 
 ## Notas Técnicas
-- El archivo de configuración se busca en la misma carpeta que el script del panel
-- Si el archivo no existe, se crea automáticamente con la configuración por defecto
+- Los usuarios se leen de `pipesync_stats.db` (tabla `flow_users`) en modo read-only. La
+  ruta la resuelve `LGA_NKS_PipeSyncPaths.get_pipesync_db_path()`, que apunta SIEMPRE a
+  la instalacion estandar de PipeSync, nunca a un build de desarrollo.
+- Si la DB no existe o la tabla esta vacia, el panel se queda sin botones de usuario y lo
+  deja en el log. No se crea ningun archivo de configuración por defecto.
 - Los errores se muestran en la consola de debug (activar DEBUG = False en el script)
 - El sistema es compatible con caracteres Unicode (nombres con acentos, etc.)
 - Las funcionalidades de Flow y Wasabi utilizan credenciales seguras desde PipeSync (SecureConfig_Reader)
 - Los botones de usuario utilizan `CustomButton` para manejar Shift+Click y Ctrl+Shift+Click
 - Las ventanas de Wasabi son no-modales y se cierran manualmente con botón Close 
+
+## Referencias tecnicas
+
+### En este repo
+- `LGA_NKS_Shared/LGA_NKS_Flow_Users_Config.py`
+  - `load_flow_users(assignable_only)`: lee `flow_users` de `pipesync_stats.db`. Con
+    `assignable_only=True` (default) devuelve los botones del panel; con `False`, todos.
+  - `find_user_by_name()` / `find_user_by_wasabi_user()`: lookup puntual para los scripts.
+  - `get_flow_users_db_path()`: ruta de la DB.
+  - Aplica la misma precedencia de color que PipeSync: **el color de vendor gana** sobre
+    el personal.
+- `LGA_NKS_Shared/LGA_NKS_PipeSyncPaths.py`
+  - `get_pipesync_db_path(filename)`: resuelve la instalacion estandar de PipeSync por
+    plataforma y contexto, ignorando a proposito el `CachePath` del `config.secure`.
+- `LGA_NKS_Assignee_Panel.py`
+  - `load_users_from_config()`: carga los usuarios; sin datos devuelve lista vacia.
+  - `create_user_buttons()` / `reload_config()`.
+- `LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py` y `…_PolicyUnassign.py`
+  - `get_user_info_from_config(wasabi_user)`: nombre y color por `wasabi_user`.
+- `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py`, `…_Flow_Assignee.py`,
+  `…_Flow_Clear_Assignees.py`
+  - `get_user_info_from_config(user_name)`: nombre y color por nombre de Flow.
+- `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py`
+  - `_load_user_colors()` / `_get_user_text_color()`: colores de autor en las notas.
+
+### En el repo de PipeSync (`LGA_PipeSync_2`)
+- `Docs/Doc_Assignee_User_Colors.md` — **doc principal de todo este sistema**: el envelope
+  de Flow, la tabla `flow_users`, la regla de resolucion de color, el corte Studio/Client
+  y la invalidacion del cache.
+- `py_scr/get_Flow_info_stats.py::fetch_flow_users()` — el fetch que llena la tabla.
+- `py_scr/bootstrap_pipesync_user_field.py` — crea el custom field en Flow. One-shot,
+  a mano, solo en el sitio Studio.
+- `src/features/settings/components/ProjectSettingsTab.cpp::editPeopleUser()` — el
+  dialogo donde se editan color, `wasabi_user`, short name y `assignable`.
