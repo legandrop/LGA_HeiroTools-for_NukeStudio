@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.05 | Lega
+  LGA_NKS_Flow_Push v4.06 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -11,6 +11,9 @@ ____________________________________________________________________
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v4.06: status_translation y task_status_dict salen de LGA_NKS_Flow_Status_Config,
+         que es la misma fuente que usa el panel para armar los botones.
 
   v4.05: Limpieza de codigo muerto: se elimina la clase ShotGridManager del panel
          (nunca se instanciaba, el push va siempre por el conector), el dialogo
@@ -119,6 +122,10 @@ else:
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, QShortcut
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import validate_push_preflight
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
+    get_status_translation,
+    get_task_status_dict,
+)
 
 # Reasignar clases para compatibilidad con código existente
 QRunnable = QtCore.QRunnable
@@ -142,48 +149,11 @@ QKeySequence = QtGui.QKeySequence
 QPixmap = QtGui.QPixmap
 QIcon = QtGui.QIcon
 
-# Diccionario de traduccion de estados
-status_translation = {
-    "Corrections": "corr",
-    "Corrs_Lega": "revleg",
-    "Rev Sebas": "rev_su",
-    "Rev Charly": "revcha",
-    "Rev Juano": "revjua",
-    "Rev Javi": "revjav",
-    "Rev Lega": "revleg",
-    "Rev Dir": "rev_di",
-    "Approved": "apr",
-    "Delivery Ok": "check",
-    "Rev Dir Den": "rev_di",
-    "Rev Hold": "revhld",
-}
-
-# Diccionario de estados con tags de xyplorer (igual que en Pull)
-# El orden de los valores es:
-# (nombre en Flow/ShotGrid, color_hex[, tag XYplorer])
-task_status_dict = {
-    "noread": ("Not Ready To Start", "#000000", None),
-    "wts": ("Waiting to start", "#000000", None),
-    "ready": ("Ready To Start", "#8a8a8a", None),
-    "progre": ("In Progress", "#7d4cff", None),
-    "corr": ("Corrections", "#2e77d4", "Corrections"),
-    "rev_su": ("Review Sup", "#bd7f9f", "Rev_Sup"),
-    "revcha": ("Review Charly", "#a9909d", "Rev_Sup"),
-    "review_charly": ("Review Charly", "#a9909d", "Rev_Sup"),
-    "revjua": ("Review Juano", "#7F4B69", "Rev_Sup"),
-    "revjav": ("Review Javi", "#9c3e5e", "Rev_Sup"),
-    "revleg": ("Review Lega", "#69135e", "Rev_Lega"),
-    "revhld": ("Review Hold", "#933100", "Rev Hold"),
-    "rev_di": ("Review Dir", "#98c054", "ReviewDir"),
-    "pubsh": ("Publish", "#244c19", "Approved"),
-    "pbshed": ("Published", "#244c19", "Approved"),
-    "apr": ("Approved", "#244c19", "Approved"),
-    "check": ("Delivery Checked", "#52c233", "Approved"),
-    "omit": ("Omitted", "#244c19", "Approved"),
-    "enviad": ("Enviado", "#000000", "Approved"),
-    "rev": ("Pending Review", "#000000", None),
-    "vwd": ("Viewed", "#000000", None),
-}
+# Traduccion label -> codigo de Flow y catalogo de estados. La fuente unica es
+# LGA_NKS_Flow_Status_Config: antes esto estaba copiado aca, en el conector y en
+# Pull, y las copias se desincronizaron (colores distintos para el mismo estado).
+status_translation = get_status_translation()
+task_status_dict = get_task_status_dict()
 
 # Variable global para activar/desactivar tags de XYplorer
 XYPlorer_Tags = True

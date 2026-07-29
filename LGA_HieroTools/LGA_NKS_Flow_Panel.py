@@ -1,13 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.54 | Lega
+  LGA_NKS_Flow_Panel v2.55 | Lega
 
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v2.55: Los botones de estado salen de LGA_NKS_Flow_Status_Config y se filtran
+         por contexto: en Client desaparecen los cuatro reviewers que erso no
+         tiene y aparece Rev Prod. Suma OK for Delivery y renombra Approved ->
+         Delivery OK y Delivery Ok -> Delivered, como se llaman en Flow.
 
   v2.54: Despues de un Push exitoso, avisa a ventanas abiertas del Pull para
          actualizar la fila del shot si esta visible en la tabla.
@@ -41,6 +46,9 @@ from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import (
     validate_pull_preflight,
     validate_push_preflight,
 )
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
+from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_change
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_push_buttons
 
 # Importar utilidades de naming
 sys.path.append(str(Path(__file__).parent / "LGA_NKS_Shared"))
@@ -212,8 +220,37 @@ class ColorChangeWidget(QtWidgets.QWidget):
         self.scroll_widget.setLayout(self.layout)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        # Crear botones y agregarlos al layout con coordenadas especificas
-        self.buttons = [
+        # Los botones de estado dependen del contexto: los dos sitios de Flow no
+        # tienen la misma lista de statuses y empujar uno que no existe falla.
+        self.context_mode = get_context_mode()
+        self.buttons = self.build_buttons(self.context_mode)
+
+        self.num_columns = 1  # Inicialmente una columna
+        self.button_width_hint = 0
+        self.create_buttons()
+
+        # Solo se conecta para el usuario que tiene el switch Studio/Client; para
+        # el resto es un no-op y no queda ningun callback vivo.
+        subscribe_context_change(self.on_context_changed)
+
+        # Conectar la senal de cambio de tamano del widget al metodo correspondiente
+        self.adjust_columns_on_resize()
+        self.resizeEvent = self.adjust_columns_on_resize
+
+    def showEvent(self, event):
+        super(ColorChangeWidget, self).showEvent(event)
+        # Asegurar tamanos reales al mostrarse el panel
+        self.adjust_columns_on_resize()
+        self.update_scrollbar_policy()
+
+    def build_buttons(self, mode):
+        """
+        Botones fijos + botones de estado del contexto.
+
+        Los de estado salen de LGA_NKS_Flow_Status_Config, que es la misma fuente
+        que usan el push y el conector para traducir el label a codigo de Flow.
+        """
+        buttons = [
             {
                 "name": "Flow Pull",
                 "color": None,
@@ -233,88 +270,36 @@ class ColorChangeWidget(QtWidgets.QWidget):
                 "style": "#1f1f1f",
                 "action": "review_pic",
             },  # Reemplazado Clear Tag
-            {
-                "name": "Corrections",
-                "color": QtGui.QColor(46, 119, 212),
-                "style": "#2e77d4",
-                "action": "color",
-            },
-            # {"name": "Corrs_Lega", "color": QtGui.QColor(105, 19, 94), "style": "#69135e", "action": "color"},
-            {
-                "name": "Rev Sebas",
-                "color": QtGui.QColor(189, 127, 159),
-                "style": "#bd7f9f",
-                "action": "color",
-            },
-            {
-                "name": "Rev Charly",
-                "color": QtGui.QColor(169, 144, 157),
-                "style": "#a9909d",
-                "action": "color",
-            },
-            {
-                "name": "Rev Juano",
-                "color": QtGui.QColor(127, 75, 105),
-                "style": "#7F4B69",
-                "action": "color",
-            },
-            {
-                "name": "Rev Javi",
-                "color": QtGui.QColor(156, 62, 94),
-                "style": "#9c3e5e",
-                "action": "color",
-            },
-            {
-                "name": "Rev Lega",
-                "color": QtGui.QColor(105, 19, 94),
-                "style": "#69135e",
-                "action": "color",
-            },
-            {
-                "name": "Rev Hold",
-                "color": QtGui.QColor(147, 49, 0),
-                "style": "#933100",
-                "action": "color",
-            },
-            {
-                "name": "Rev Dir",
-                "color": QtGui.QColor(152, 192, 84),
-                "style": "#98c054",
-                "action": "color",
-            },
-            {
-                "name": "Approved",
-                "color": QtGui.QColor(36, 76, 25),
-                "style": "#244c19",
-                "action": "color",
-            },
-            {
-                "name": "Delivery Ok",
-                "color": QtGui.QColor(82, 194, 51),
-                "style": "#52C233",
-                "action": "color",
-            },
-            {
-                "name": "Rev Dir Den",
-                "color": QtGui.QColor(77, 33, 168),
-                "style": "#4d21a8",
-                "action": "color",
-            },
         ]
 
-        self.num_columns = 1  # Inicialmente una columna
+        for status_button in get_push_buttons(mode):
+            color_hex = status_button["color"]
+            buttons.append(
+                {
+                    "name": status_button["label"],
+                    "color": QtGui.QColor(color_hex),
+                    "style": color_hex,
+                    "action": "color",
+                }
+            )
+
+        debug_print(
+            f"build_buttons: mode={mode} status_buttons={len(buttons) - 3}"
+        )
+        return buttons
+
+    def on_context_changed(self, mode):
+        """Reconstruye los botones de estado al cambiar de contexto."""
+        if mode == self.context_mode:
+            return
+        debug_print(f"Contexto cambiado: {self.context_mode} -> {mode}")
+        self.context_mode = mode
+        self.buttons = self.build_buttons(mode)
+        # El ancho medido corresponde al set de botones anterior; recalcularlo
+        # evita que un label mas corto deje columnas de mas.
         self.button_width_hint = 0
         self.create_buttons()
-
-        # Conectar la senal de cambio de tamano del widget al metodo correspondiente
         self.adjust_columns_on_resize()
-        self.resizeEvent = self.adjust_columns_on_resize
-
-    def showEvent(self, event):
-        super(ColorChangeWidget, self).showEvent(event)
-        # Asegurar tamanos reales al mostrarse el panel
-        self.adjust_columns_on_resize()
-        self.update_scrollbar_policy()
 
     def create_buttons(self):
         debug_print("=== create_buttons ===")
@@ -788,8 +773,6 @@ class ColorChangeWidget(QtWidgets.QWidget):
                         )
                         status_name = status_info[0] if status_info else button_name
                         status_color = status_info[1] if status_info else color.name()
-                        if status_code == "rev_su":
-                            status_name = "Review Sebas"
                         return status_code, status_name, status_color
 
                     def _notify_open_pull_windows():

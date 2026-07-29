@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.43 | Lega
+  LGA_NKS_Flow_CreateShot v1.44 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
+
+  v1.44: Los dropdowns de estado se filtran por contexto contra los codigos reales
+         de cada sitio de Flow. Suma OK for Delivery, Review Prod y Delivered
+         (pbshed, el "entregado" de erso) y alinea los colores de la cola verde.
 
   v1.43: Popup de los dropdowns: fondo uniforme #272727 con una bolita del color
          del estado a la izquierda de cada nombre (en vez de cada fila coloreada),
@@ -143,6 +147,8 @@ if utils_path.exists():
     # La sincronización de DEBUG se hace después de su definición (ver más abajo)
 
 from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import AVAILABLE_TASKS
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import filter_states_for_mode
 
 # Importar módulo de creación de carpetas
 folders_path = Path(__file__).parent
@@ -482,19 +488,29 @@ def create_shot_thumbnail():
 # Clase de ventana de configuracion para shots
 # ============================================================================
 # Estados de Flow para los dropdowns (nombre visible, codigo SG, color UI).
-# Fuente de verdad: docs/Docu_Flow_Estados_Colores.md
+#
+# Los colores son los del dropdown y NO los del clip del timeline: son dos
+# paletas distintas a proposito (ver docs/Docu_Flow_Estados_Colores.md). Lo que
+# si sale de la fuente compartida es QUE codigos existen en cada contexto:
+# los dos sitios de Flow no tienen la misma lista y escribir uno que el sitio no
+# tiene falla con "'xxx' is not a valid status".
+#
+# Las listas de abajo son el superset de los dos sitios; `filter_states_for_mode`
+# deja los del contexto activo.
 # ============================================================================
-SHOT_STATES = [
+ALL_SHOT_STATES = [
     ("Not ready", "noread", "#d3d3d3"),
     ("Omited", "omit", "#78b487"),
     ("Ready to start", "ready", "#c2b234"),
     ("In progress", "progre", "#6443bf"),
     ("In playlist", "plylst", "#99c153"),
-    ("Approved", "apr", "#244c19"),
-    ("Delivery Ok", "check", "#52c233"),
+    ("OK for Delivery", "pubsh", "#50bfc7"),
+    ("Delivered", "pbshed", "#52c233"),
+    ("Delivery OK", "apr", "#266612"),
+    ("Delivery Checked", "check", "#38a138"),
 ]
 
-TASK_STATES = [
+ALL_TASK_STATES = [
     ("Not ready", "noread", "#d3d3d3"),
     ("Omited", "omit", "#78b487"),
     ("Ready to start", "ready", "#c2b234"),
@@ -502,14 +518,24 @@ TASK_STATES = [
     ("Corrections", "corr", "#2e77d4"),
     ("Review Sebas", "rev_su", "#a65680"),
     ("Review Charly", "revcha", "#a9909d"),
-    ("Review Juano", "revjua", "#7f4b69"),
     ("Review Javi", "revjav", "#8f3f72"),
+    ("Review Juano", "revjua", "#7f4b69"),
     ("Review Lega", "revleg", "#68135d"),
     ("Review Hold", "revhld", "#9e6a15"),
-    ("Review Dir", "rev_di", "#99c153"),
-    ("Approved", "apr", "#244c19"),
-    ("Delivery Ok", "check", "#52c233"),
+    ("Review Prod", "revprd", "#8cbf3f"),
+    ("Review Dir", "rev_di", "#b5db4b"),
+    ("OK for Delivery", "pubsh", "#50bfc7"),
+    ("Delivery OK", "apr", "#266612"),
+    ("Delivery Checked", "check", "#38a138"),
 ]
+
+
+def get_shot_states():
+    return filter_states_for_mode(ALL_SHOT_STATES, get_context_mode(), entity="shot")
+
+
+def get_task_states():
+    return filter_states_for_mode(ALL_TASK_STATES, get_context_mode(), entity="task")
 
 # Estado por defecto en Create Shot (shot y task)
 DEFAULT_STATE_CODE = "ready"
@@ -910,7 +936,7 @@ class ShotConfigDialog(QDialog):
         shot_status_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 5px;")
         shot_status_layout.addWidget(shot_status_label)
 
-        self.shot_status_combo = ColoredStatusComboBox(SHOT_STATES)
+        self.shot_status_combo = ColoredStatusComboBox(get_shot_states())
         self.shot_status_combo.set_code(DEFAULT_STATE_CODE)  # Ready to start por defecto
         shot_status_layout.addWidget(self.shot_status_combo)
         status_priority_column_layout.addLayout(shot_status_layout)
@@ -1151,7 +1177,7 @@ class ShotConfigDialog(QDialog):
         status_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 0px;")
         status_layout.addWidget(status_label)
 
-        task_status_combo = ColoredStatusComboBox(TASK_STATES)
+        task_status_combo = ColoredStatusComboBox(get_task_states())
         task_status_combo.set_code(DEFAULT_STATE_CODE)  # Ready to start por defecto
         status_layout.addWidget(task_status_combo)
         task_layout.addWidget(status_widget, 1)

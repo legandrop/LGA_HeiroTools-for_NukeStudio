@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.55 | Lega
+  LGA_NKS_Flow_Pull v3.56 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.56: task_status_dict, los nombres visibles y los colores de review pasan a
+         LGA_NKS_Flow_Status_Config. El catalogo NO se filtra por contexto: la DB
+         puede tener codigos del otro sitio y filtrarlos los haria desaparecer.
 
   v3.55: Registra las ventanas abiertas del Pull y permite que un Push exitoso
          actualice la fila existente moviendo New Status a Previous Status y
@@ -416,6 +420,11 @@ from LGA_NKS_Shared.LGA_NKS_TaskMismatchDialog import (
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import validate_pull_preflight
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
+    get_personal_review_colors,
+    get_status_info,
+    get_task_status_dict,
+)
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -613,23 +622,22 @@ def _color_name(color):
     return None
 
 
+# Codigos que no son de Flow y por eso no estan en el catalogo compartido: son
+# de sistemas viejos y siguen apareciendo en data historica.
+_LEGACY_STATUS_DISPLAY = {
+    "ip": "In Progress",
+    "rts": "Ready To Start",
+    "n_rdy": "Not Ready To Start",
+}
+
+
 def _status_display_from_code(status_code, fallback_name):
-    status_display = {
-        "rev_su": "Review Sebas",
-        "revleg": "Review Lega",
-        "revjua": "Review Juano",
-        "revjav": "Review Javi",
-        "revcha": "Review Charly",
-        "review_charly": "Review Charly",
-        "rev_di": "Review Dir",
-        "corr": "Corrections",
-        "revhld": "Review Hold",
-        "rev": "Review",
-        "ip": "In Progress",
-        "rts": "Ready To Start",
-        "n_rdy": "Not Ready To Start",
-    }
-    return status_display.get(status_code, fallback_name or status_code or "")
+    info = get_status_info(status_code)
+    if info:
+        return info[0]
+    if status_code in _LEGACY_STATUS_DISPLAY:
+        return _LEGACY_STATUS_DISPLAY[status_code]
+    return fallback_name or status_code or ""
 
 
 def update_open_pull_windows_after_push(
@@ -710,32 +718,11 @@ class ShotGridManager:
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
-        # Importante: Los colores deben ser en formato hexadecimal con minúsculas
-        # El orden de los valores es: 
-        # (nombre en Flow/ShotGrid, color_hex[, tag XYplorer])
-        self.task_status_dict = {
-            "noread": ("Not Ready To Start", "#000000", None),
-            "wts": ("Waiting to start", "#000000", None),
-            "ready": ("Ready To Start", "#8a8a8a", None),
-            "progre": ("In Progress", "#7d4cff", None),
-            "corr": ("Corrections", "#2e77d4", "Corrections"),
-            "rev_su": ("Review Sebas", "#bd7f9f", "Rev_Sup"),
-            "revcha": ("Review Charly", "#a9909d", "Rev_Sup"),
-            "review_charly": ("Review Charly", "#a9909d", "Rev_Sup"),
-            "revjua": ("Review Juano", "#7F4B69", "Rev_Sup"),
-            "revjav": ("Review Javi", "#9c3e5e", "Rev_Sup"),
-            "revleg": ("Review Lega", "#69135e", "Rev_Lega"),
-            "revhld": ("Review Hold", "#933100", "Rev Hold"),
-            "rev_di": ("Review Dir", "#98c054", "ReviewDir"),
-            "pubsh": ("Publish", "#244c19", "Approved"),
-            "pbshed": ("Published", "#244c19", "Approved"),
-            "apr": ("Approved", "#244c19", "Approved"),
-            "check": ("Delivery Checked", "#52c233", "Approved"),
-            "omit": ("Omitted", "#244c19", "Approved"),
-            "enviad": ("Enviado", "#000000", "Approved"),
-            "rev": ("Pending Review", "#000000", None),
-            "vwd": ("Viewed", "#000000", None),
-        }
+        # Catalogo de estados desde la fuente unica compartida con Push y con el
+        # panel. NO se filtra por contexto: la DB puede tener codigos del otro
+        # sitio de Flow y filtrarlos los mostraria crudos o los haria desaparecer.
+        # Los colores tienen que compararse en minusculas (ver v3.52).
+        self.task_status_dict = get_task_status_dict()
 
     def find_project(self, project_name):
         """Busca un proyecto por nombre en la base de datos."""
@@ -2086,14 +2073,10 @@ class HieroOperations:
                 debug_print("No active sequence found for enable/disable operation")
                 return
             
-            # Estados de review que deben habilitarse
-            review_status_colors = {
-                "#bd7f9f",  # rev_su - Review Sup
-                "#a9909d",  # revcha - Review Charly
-                "#7F4B69",  # revjua - Review Juano
-                "#9c3e5e",  # revjav - Review Javi
-                "#69135e",  # revleg - Review Lega
-            }
+            # Estados de review por persona que deben habilitarse. Sale del
+            # catalogo compartido para no volver a quedar desfasado de los
+            # colores reales de los clips.
+            review_status_colors = get_personal_review_colors()
             
             for item in selected_clips:
                 if not isinstance(item, hiero.core.EffectTrackItem):

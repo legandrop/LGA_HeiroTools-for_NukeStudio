@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.57 | Lega
+  LGA_NKS_Flow_Assignee_Panel v1.58 | Lega
 
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
+
+  v1.58: En contexto Client el panel queda deshabilitado con el motivo a la vista.
+         Antes mostraba los dos botones fijos y ningun usuario, indistinguible
+         de "PipeSync todavia no sincronizo". Tampoco abre ya la DB en Client.
 
   v1.57: los botones de usuario salen de la DB de PipeSync (flow_users); se elimina el JSON local y la config por defecto.
   v1.56: Propaga file_path junto con base_name a los tres scripts del panel
@@ -47,6 +51,8 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import (
     get_flow_users_db_path,
     load_flow_users,
 )
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import MODE_CLIENT, get_context_mode
+from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_change
 
 # Importar funciones de utilidad de estilos
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
@@ -163,6 +169,18 @@ SCROLL_OVERLAP_THRESHOLD_PX = 6
 # Controla visibilidad de la barra de scroll (True = visible cuando corresponde)
 SCROLLBAR_VISIBLE = False
 
+# Textos del panel deshabilitado en contexto Client. Van por constante y no
+# hardcodeados en el widget para que la migracion a tooltips bilingues sea un
+# cambio de datos. Texto visible en ingles, tooltip en castellano.
+CLIENT_NOTICE_TEXT = "Assignees are not available in Client mode."
+CLIENT_NOTICE_TOOLTIP = (
+    "En Client no hay assignees: el sitio de Flow del cliente no tiene el campo "
+    "del envelope de usuario, todos los usuarios llegan sin marcar como "
+    "assignable, y el acceso a Wasabi se resuelve con Vendor Groups en vez de "
+    "policies por shot.\n\n"
+    "Asignaciones y policies se manejan desde el contexto Studio."
+)
+
 
 def debug_print(*message, level="info"):
     global script_start_time
@@ -218,9 +236,13 @@ class AssigneePanel(QtWidgets.QWidget):
         self.scroll_widget.setLayout(self.layout)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        # Cargar usuarios desde el archivo JSON
-        self.users = self.load_users_from_config()
-        debug_print(f"Usuarios cargados: {self.users}")
+        # En Client el panel entero queda deshabilitado, asi que ni siquiera se
+        # abre la DB de PipeSync para buscar usuarios que no van a existir.
+        self.context_mode = get_context_mode()
+        self.users = (
+            [] if self.is_client_context() else self.load_users_from_config()
+        )
+        debug_print(f"Contexto: {self.context_mode} | usuarios cargados: {self.users}")
 
         # Sincronizar debug con el módulo de clips
         clip_utils.DEBUG = DEBUG and DEBUG_CONSOLE
@@ -245,7 +267,7 @@ class AssigneePanel(QtWidgets.QWidget):
         ]
 
         # Crear la lista completa de botones (fijos + usuarios)
-        self.buttons = self.fixed_buttons + self.create_user_buttons()
+        self.buttons = self.build_buttons()
 
         self.num_columns = 1  # Inicialmente una columna
         self.button_width_hint = 0
@@ -254,6 +276,34 @@ class AssigneePanel(QtWidgets.QWidget):
         # Conectar la senal de cambio de tamano del widget al metodo correspondiente
         self.adjust_columns_on_resize()
         self.resizeEvent = self.adjust_columns_on_resize
+
+        # Solo se conecta para el usuario que tiene el switch Studio/Client; para
+        # el resto es un no-op y no queda ningun callback vivo.
+        subscribe_context_change(self.on_context_changed)
+
+    def is_client_context(self):
+        return self.context_mode == MODE_CLIENT
+
+    def build_buttons(self):
+        """Botones fijos + de usuario. En Client no hay ninguno: el panel se deshabilita."""
+        if self.is_client_context():
+            return []
+        return self.fixed_buttons + self.create_user_buttons()
+
+    def on_context_changed(self, mode):
+        """Rearma el panel al cambiar de contexto."""
+        if mode == self.context_mode:
+            return
+        debug_print(f"Contexto cambiado: {self.context_mode} -> {mode}")
+        self.context_mode = mode
+        self.users = (
+            [] if self.is_client_context() else self.load_users_from_config()
+        )
+        self.buttons = self.build_buttons()
+        # El ancho medido corresponde al set anterior de botones.
+        self.button_width_hint = 0
+        self.create_buttons()
+        self.adjust_columns_on_resize()
 
     def showEvent(self, event):
         super(AssigneePanel, self).showEvent(event)
@@ -287,8 +337,11 @@ class AssigneePanel(QtWidgets.QWidget):
 
     def reload_config(self):
         """Recarga la configuracion de usuarios y actualiza los botones"""
-        self.users = self.load_users_from_config()
-        self.buttons = self.fixed_buttons + self.create_user_buttons()
+        self.context_mode = get_context_mode()
+        self.users = (
+            [] if self.is_client_context() else self.load_users_from_config()
+        )
+        self.buttons = self.build_buttons()
         self.create_buttons()
         debug_print("Configuracion de usuarios recargada")
 
@@ -344,6 +397,29 @@ class AssigneePanel(QtWidgets.QWidget):
 
         return normal_callback, shift_callback, ctrl_shift_callback
 
+    def create_client_notice(self):
+        """
+        Panel deshabilitado en Client, con el motivo a la vista.
+
+        Antes en Client no fallaba nada visible: `load_flow_users` devolvia lista
+        vacia y el panel quedaba con los dos botones fijos y ningun usuario, que
+        se lee igual que "todavia no sincronizo PipeSync". Son cosas distintas y
+        la segunda tiene arreglo; esta no.
+        """
+        notice = QtWidgets.QLabel(CLIENT_NOTICE_TEXT)
+        notice.setWordWrap(True)
+        notice.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
+        notice.setStyleSheet("color: #8a8a8a; padding: 8px;")
+        notice.setToolTip(CLIENT_NOTICE_TOOLTIP)
+        self.layout.addWidget(notice, 0, 0, 1, max(1, self.num_columns))
+
+        spacer = QtWidgets.QSpacerItem(
+            20, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
+        )
+        self.layout.addItem(spacer, 1, 0, 1, max(1, self.num_columns))
+        self.update_scrollbar_policy()
+        debug_print("layout: contexto client, panel deshabilitado")
+
     def create_buttons(self):
         debug_print("=== create_buttons ===")
         # Limpiar el layout actual antes de crear nuevos botones
@@ -352,6 +428,10 @@ class AssigneePanel(QtWidgets.QWidget):
             widget = item.widget()
             if widget:
                 widget.deleteLater()
+
+        if self.is_client_context():
+            self.create_client_notice()
+            return
 
         max_button_width = 0
         for index, button_info in enumerate(self.buttons):

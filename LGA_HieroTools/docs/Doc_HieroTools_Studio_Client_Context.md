@@ -25,10 +25,57 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - Si falta `config.secure` o `pipesync.db`, Pull y Push muestran error claro.
 - Push además valida `Flow.Url`, `Flow.Login`, `Flow.Password`.
 - En client no se debe caer en DB studio como fallback funcional.
-- El switch Studio/Client actualiza INI y fuerza recarga del Projects Panel.
+- El switch Studio/Client actualiza INI, fuerza recarga del Projects Panel y
+  avisa por el bus a los paneles suscriptos.
 - Scope de tasks por contexto:
   - `studio`: tasks `comp`, `roto`, `cleanup`.
   - `client`: solo task `comp` (no se consideran `roto`/`cleanup`).
+
+## Paneles dinamicos por contexto
+
+El switch existe para **un solo usuario**. El resto tiene contexto FIJO, definido
+por el zip que instalo (ver Packaging), y nunca lo cambia en caliente. Por eso
+toda la maquinaria dinamica esta detras de un gate:
+
+- `LGA_NKS_Shared/LGA_NKS_ContextSwitch.py` resuelve `has_context_switch()`
+  comparando el `Flow.Login` del perfil PipeSync **normal** contra
+  `SWITCH_USER_LOGIN`. El resultado no cambia durante la sesion, asi que se
+  memoiza: resolverlo implica leer y desencriptar `config.secure`, y antes lo
+  hacian por separado el Projects Panel (dos veces), el UIManager y el ViewerTL.
+- Si el gate da **False**, `subscribe()` y `notify()` no hacen nada: no se
+  instancia el QObject del bus, no se conecta ninguna senal y no queda ningun
+  callback vivo. El panel lee `get_context_mode()` una vez en `__init__` — una
+  lectura de INI que ya ocurria — arma su UI y ahi termina.
+- Si da **True**, recien ahi se crea el bus. `ProjectsPanel.set_context_mode()`
+  emite **despues** de escribir el INI, porque los suscriptos releen el contexto
+  y tienen que ver el valor nuevo.
+
+Paneles suscriptos: Flow Panel (`on_context_changed` -> `build_buttons`) y
+Assignee Panel (`on_context_changed` -> `build_buttons`).
+
+### Estados de Flow por contexto
+
+Los dos sitios de Flow no tienen la misma lista de `sg_status_list`, asi que los
+botones del Flow Panel y los dropdowns de Create Shot se filtran por contexto.
+Detalle completo en [Docu_Flow_Estados_Colores.md](Docu_Flow_Estados_Colores.md).
+
+### Assignee Panel en client
+
+En client el panel queda **deshabilitado**, con el motivo a la vista. No es una
+decision de UI: es que ahi no hay assignees que mostrar.
+
+- El envelope `HumanUser.sg_pipesync_user_json` es un custom field que solo
+  existe en el sitio de studio. En client todos los usuarios llegan con
+  `assignable = 0`.
+- La `pipesync_stats.db` de client tampoco tiene las columnas `panel_order` y
+  `skip_wasabi_policy`, asi que la query de `load_flow_users()` levantaba
+  `OperationalError` y devolvia lista vacia.
+- Las policies de Wasabi por shot no aplican: en client el acceso se resuelve con
+  Vendor Groups y permission rules de Flow.
+
+Antes de este cambio el panel se dibujaba igual, con los dos botones fijos y
+ningun usuario — indistinguible de "PipeSync todavia no sincronizo", que es un
+problema distinto y con arreglo.
 
 ## Impacto en herramientas de Edit
 
@@ -49,6 +96,8 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 
 - `LGA_HieroTools_context.ini`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ContextProfile.py`
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ContextSwitch.py`
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py`
 - `LGA_HieroTools/LGA_NKS_Shared/SecureConfig_Reader.py`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_BucketResolver.py`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_PipeSyncPaths.py`

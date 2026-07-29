@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.04 | Lega
+  LGA_NKS_Flow_Push_connector v1.05 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
+
+  v1.05: status_translation sale de LGA_NKS_Flow_Status_Config en vez de una copia
+         propia que ya se habia desincronizado de la del panel.
 
   v1.04: Limpieza de codigo muerto: se eliminan las operaciones inalcanzables del
          dispatcher (find_shot_and_tasks, find_highest_version, update_task,
@@ -89,21 +92,16 @@ except ImportError as e:
     raise
 
 
-# Diccionario de traduccion de estados (igual que en el script principal)
-status_translation = {
-    "Corrections": "corr",
-    "Corrs_Lega": "revleg",
-    "Rev Sebas": "rev_su",
-    "Rev Charly": "revcha",
-    "Rev Juano": "revjua",
-    "Rev Javi": "revjav",
-    "Rev Lega": "revleg",
-    "Rev Dir": "rev_di",
-    "Approved": "apr",
-    "Delivery Ok": "check",
-    "Rev Dir Den": "rev_di",
-    "Rev Hold": "revhld",
-}
+# Traduccion label -> codigo de Flow. Fuente unica compartida con el panel y con
+# Flow_Push; tener una copia propia aca ya hizo que el conector empujara codigos
+# distintos a los que el panel creia estar mandando.
+try:
+    from LGA_NKS_Flow_Status_Config import get_status_translation
+except ImportError as e:
+    debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Flow_Status_Config no disponible")
+    raise
+
+status_translation = get_status_translation()
 
 
 class ShotGridManager:

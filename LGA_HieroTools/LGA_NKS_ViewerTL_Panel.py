@@ -1,9 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.71 | Lega
+  LGA_ViewerPanel v1.72 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
+
+  v1.72: El login del reviewer local sale del helper memoizado de contexto en vez
+         de repetir el desencriptado de config.secure en el arranque.
 
   v1.71: Identidad del reviewer local se lee siempre del perfil PipeSync
          normal (no del contexto activo), asi los botones dinamicos Prev/Next
@@ -184,9 +187,11 @@ def obtener_usuario_actual():
         str: Login del reviewer local, o None si no se puede determinar
     """
     try:
-        from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import get_normal_pipesync_flow_login
+        # Memoizado por sesion: el Projects Panel resuelve el mismo login y sin
+        # cache cada panel repetia el desencriptado de config.secure.
+        from LGA_NKS_Shared.LGA_NKS_ContextSwitch import get_normal_login
 
-        login = get_normal_pipesync_flow_login()
+        login = get_normal_login()
         if login:
             debug_print(f"Usuario actual (perfil normal) determinado: {login}")
             return login

@@ -2,13 +2,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.24 | Lega
+  LGA_NKS_Projects_Panel v2.25 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (alineado a la derecha del contador) visible para lega@wanka.tv.
+
+  v2.25: El switch de contexto avisa a los demas paneles por LGA_NKS_ContextSwitch
+         y el login de PipeSync normal pasa a leerse memoizado (se resolvia dos
+         veces en el arranque: el panel y el UIManager).
 
   v2.24: Reemplazado el botón de switch por un toggle pill Client/Studio alineado a la derecha
          de la línea de proyectos encontrados. Nuevos métodos set_context_mode() (cambio directo
@@ -34,7 +38,11 @@ import configparser
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode, find_context_ini
-from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import get_normal_pipesync_flow_login
+from LGA_NKS_Shared.LGA_NKS_ContextSwitch import (
+    SWITCH_USER_LOGIN,
+    get_normal_login,
+    notify as notify_context_change,
+)
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -53,7 +61,9 @@ AUTO_CREATE_PANEL = True
 
 # Flag para controlar si mostrar el botón de reimport
 REIMPORT_BUTTON = True
-SWITCH_ALLOWED_LOGIN = "lega@wanka.tv"
+# El login habilitado para el switch vive en LGA_NKS_ContextSwitch, que es lo que
+# consultan los demas paneles para decidir si conectarse al bus de contexto.
+SWITCH_ALLOWED_LOGIN = SWITCH_USER_LOGIN
 
 # Opciones de intervalo de auto-refresh (minutos)
 AUTO_REFRESH_OPTIONS = {
@@ -252,7 +262,7 @@ try:
         switch_login=SWITCH_ALLOWED_LOGIN,
         get_context_fn=get_context_mode,
         find_ini_fn=find_context_ini,
-        get_login_fn=get_normal_pipesync_flow_login
+        get_login_fn=get_normal_login
     )
     debug_print("✅ Módulo LGA_NKS_UIManager importado exitosamente")
 except ImportError as e:
@@ -322,15 +332,11 @@ class ProjectsPanel(QtWidgets.QWidget):
 
 
     def _get_normal_pipesync_login(self):
-        try:
-            result = str(get_normal_pipesync_flow_login() or "").strip().lower()
-            debug_print(f"Login de PipeSync normal: '{result}'")
-            return result
-        except Exception as e:
-            debug_print(f"❌ No se pudo leer login de PipeSync normal: {e}")
-            import traceback
-            debug_print(f"Traceback: {traceback.format_exc()}")
-            return ""
+        # Memoizado en LGA_NKS_ContextSwitch: leerlo implica desencriptar
+        # config.secure y antes se hacia una vez aca y otra en el UIManager.
+        result = get_normal_login()
+        debug_print(f"Login de PipeSync normal: '{result}'")
+        return result
 
     def _get_context_ini_path(self):
         ini_path = find_context_ini()
@@ -394,6 +400,9 @@ class ProjectsPanel(QtWidgets.QWidget):
             self._write_context_mode(new_mode)
             self._reload_after_context_switch()
             self._refresh_context_toggle()
+            # Recien despues de que el INI quedo escrito: los paneles suscriptos
+            # releen el contexto y tienen que ver el valor nuevo, no el viejo.
+            notify_context_change(new_mode)
             debug_print(f"Contexto cambiado a '{new_mode}' desde toggle")
         except Exception as e:
             debug_print(f"Error al cambiar contexto: {e}")

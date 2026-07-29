@@ -4,20 +4,42 @@
 # Estados y Colores de Flow (Shot y Task)
 
 Fuente de verdad de los estados (`sg_status_list`) de **Shot** y **Task** en Flow
-(ShotGrid), sus nombres visibles en la UI de los paneles, los codigos reales de
-Flow, los nombres reales de Flow y el color usado en la UI (dropdowns).
+(ShotGrid), en los **dos sitios**: `wanka` (contexto studio) y `ersovfx`
+(contexto client).
 
-> Los codigos y nombres reales se obtuvieron consultando directamente Flow
-> (`sg.schema_field_read(entity, "sg_status_list")` + entidad `Status`).
-> Script de verificacion: `+Building_Blocks/LGA_Flow_QueryStates_TEMP.py`.
+> Los codigos y nombres reales se obtienen consultando Flow directamente:
+> `sg.schema_field_read(entity, "sg_status_list")["sg_status_list"]["properties"]["valid_values"]["value"]`
+> y la entidad `Status` para nombre y `bg_color`.
+
+## Lo primero que hay que entender: los dos sitios NO tienen la misma lista
+
+Empujar un codigo que el sitio no acepta falla con
+`'xxx' is not a valid status`. No se detecta hasta que alguien aprieta el boton.
+
+| | solo en studio (wanka) | solo en client (ersovfx) |
+|---|---|---|
+| Task | `rev_su`, `revcha`, `revjua`, `revjav` | `revprd` |
+| Shot | `check` | `pbshed` |
+
+Trampas concretas que ya causaron bugs:
+
+- **`revleg` se llama distinto en cada sitio.** En wanka es "RevLega"; en
+  ersovfx es **"Review Sup"**, y es el unico reviewer del sitio.
+- **El "entregado" de shot cambia de codigo.** En wanka es `check`; en ersovfx
+  es `pbshed`. Un filtro que solo mira `check` da vacio en client.
+- **`pubsh` y `pbshed` existen como entidad `Status` en los dos sitios** aunque
+  no esten en el `sg_status_list` de los dos. Que la entidad exista no alcanza:
+  lo que valida Flow al escribir es la lista del campo.
 
 ## Decision de colores
 
-- **Color UI (dropdowns / este MD):** los del PNG de referencia del supervisor.
-- **Color de clips del timeline:** los maneja `task_status_dict` en
-  `LGA_NKS_Flow_Pull.py` / `LGA_NKS_Flow_Push.py`. **No se tocan** (son
-  independientes de los dropdowns).
-- **Color de Flow (`bg_color`):** se documenta solo como referencia; no se usa.
+- **Color de clip del timeline:** `TASK_STATUS_CATALOG` en
+  `LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py`. Fuente unica: la usan el Flow
+  Panel para los botones, el Push y el Pull.
+- **Color UI (dropdowns de Create Shot):** paleta propia en
+  `ALL_SHOT_STATES` / `ALL_TASK_STATES` de `LGA_NKS_Flow_CreateShot.py`. Es
+  deliberadamente distinta de la de los clips.
+- **Color de Flow (`bg_color`):** referencia; es de donde salen los hex nuevos.
 
 Render de los dropdowns (`ColoredStatusComboBox`):
 - **Combo cerrado:** fondo del color del estado, texto contrastado (negro en
@@ -26,45 +48,69 @@ Render de los dropdowns (`ColoredStatusComboBox`):
   color del estado a la izquierda y el nombre en `#cccccc`; hover/seleccion
   aclara la fila (`#3a3a3a`).
 
-## Estados de SHOT (`Shot.sg_status_list`) — 7
+## Estados de TASK
 
-| Nombre visible (UI) | Codigo SG | Nombre real en Flow | Color UI | Color Flow (ref) |
-|---------------------|-----------|---------------------|----------|------------------|
-| Not ready           | `noread`  | Not Ready To Start  | `#d3d3d3` | `#b6b6b6` |
-| Omited              | `omit`    | omitted             | `#78b487` | (sin color) |
-| Ready to start      | `ready`   | Ready To Start      | `#c2b234` | `#f9fe01` |
-| In progress         | `progre`  | In Progress         | `#6443bf` | `#6d00f9` |
-| In playlist         | `plylst`  | In Playlist         | `#99c153` | (sin color) |
-| Approved            | `apr`     | Approved            | `#244c19` | `#19761b` |
-| Delivery Ok         | `check`   | Delivery Checked    | `#52c233` | `#013101` |
+| Nombre visible (UI) | Codigo SG | Nombre real en Flow | Color clip | studio | client |
+|---|---|---|---|:--:|:--:|
+| Not ready | `noread` | Not Ready To Start | `#000000` | si | si |
+| Omited | `omit` | omitted | `#244c19` | si | si |
+| Ready to start | `ready` | Ready To Start | `#8a8a8a` | si | si |
+| In progress | `progre` | In Progress | `#7d4cff` | si | si |
+| Corrections | `corr` | Corrections | `#2e77d4` | si | si |
+| Review Sebas | `rev_su` | Review Sup | `#bd7f9f` | si | **no** |
+| Review Charly | `revcha` | Review Charly | `#a9909d` | si | **no** |
+| Review Juano | `revjua` | Review Juano | `#7F4B69` | si | **no** |
+| Review Javi | `revjav` | review_javi | `#9c3e5e` | si | **no** |
+| Review Lega | `revleg` | RevLega / **Review Sup** en erso | `#69135e` | si | si |
+| Review Hold | `revhld` | Review Hold | `#9E6A15` | si | si |
+| Review Prod | `revprd` | Review Prod | `#8CBF3F` | **no** | si |
+| Review Dir | `rev_di` | Review Dir | `#B5DB4B` | si | si |
+| OK for Delivery | `pubsh` | OK for Delivery | `#50BFC7` | si | si |
+| Delivery OK | `apr` | Delivery OK | `#266612` | si | si |
+| Delivered | `check` | Delivery Checked | `#38A138` | si | si |
 
-**Default en Create Shot:** `ready` (Ready to start).
+`revprd` en Flow viene con `bg_color` `#D7F2B1`, pero ese lima tiene mas
+luminancia que el gris de `noread` (`#d3d3d3`) y en un clip chico se lee como
+blanco. Se usa `#8CBF3F`, el mismo ajuste que ya hizo PipeSync.
 
-## Estados de TASK (`Task.sg_status_list`) — 14
+## Estados de SHOT
 
-| Nombre visible (UI) | Codigo SG | Nombre real en Flow | Color UI | Color Flow (ref) |
-|---------------------|-----------|---------------------|----------|------------------|
-| Not ready           | `noread`  | Not Ready To Start  | `#d3d3d3` | `#b6b6b6` |
-| Omited              | `omit`    | omitted             | `#78b487` | (sin color) |
-| Ready to start      | `ready`   | Ready To Start      | `#c2b234` | `#f9fe01` |
-| In progress         | `progre`  | In Progress         | `#6443bf` | `#6d00f9` |
-| Corrections         | `corr`    | Corrections         | `#2e77d4` | `#0136da` |
-| Review Sebas        | `rev_su`  | Review Sup          | `#a65680` | `#fe7db3` |
-| Review Charly       | `revcha`  | Review Charly       | `#a9909d` | `#8b0195` |
-| Review Juano        | `revjua`  | Review Juano        | `#7f4b69` | `#8b0195` |
-| Review Javi         | `revjav`  | review_javi         | `#8f3f72` | `#fe0062` |
-| Review Lega         | `revleg`  | RevLega             | `#68135d` | `#6b0170` |
-| Review Hold         | `revhld`  | Review Hold         | `#9e6a15` | `#f69b0c` |
-| Review Dir          | `rev_di`  | Review Dir          | `#99c153` | `#a2cf00` |
-| Approved            | `apr`     | Approved            | `#244c19` | `#19761b` |
-| Delivery Ok         | `check`   | Delivery Checked    | `#52c233` | `#013101` |
+| Nombre visible (UI) | Codigo SG | Nombre real en Flow | studio | client |
+|---|---|---|:--:|:--:|
+| Not ready | `noread` | Not Ready To Start | si | si |
+| Omited | `omit` | omitted | si | si |
+| Ready to start | `ready` | Ready To Start | si | si |
+| In progress | `progre` | In Progress | si | si |
+| In playlist | `plylst` | In Playlist | si | si |
+| OK for Delivery | `pubsh` | OK for Delivery | si | si |
+| Delivered | `pbshed` | Delivered | **no** | si |
+| Delivery OK | `apr` | Delivery OK | si | si |
+| Delivered | `check` | Delivery Checked | si | **no** |
 
-**Default en Create Shot:** `ready` (Ready to start).
+**Default en Create Shot:** `ready` (Ready to start), shot y task.
 
-> Nota: el codigo `rev_su` (Flow lo llama "Review Sup") se muestra como
-> **"Review Sebas"** en la UI. Es el estado de review del supervisor Sebas.
+## Botones de push del Flow Panel
 
-## Prioridad de SHOT (`Shot.sg_prioridad`) — 2
+Salen de `PUSH_BUTTONS` y se filtran con `get_push_buttons(mode)`. El **label es
+la clave** con la que viaja el push hasta el conector, asi que el label y el
+codigo tienen que definirse juntos y en un solo lugar.
+
+| studio (12) | client (9) |
+|---|---|
+| Corrections, Rev Sebas, Rev Charly, Rev Juano, Rev Javi, Rev Lega, Rev Hold, Rev Dir, Rev Dir Den, OK for Delivery, Delivery OK, Delivered | Corrections, Rev Lega, Rev Hold, **Rev Prod**, Rev Dir, Rev Dir Den, OK for Delivery, Delivery OK, Delivered |
+
+`Rev Dir Den` empuja el mismo `rev_di` que `Rev Dir` pero pinta el clip de
+`#4d21a8` para distinguir a ojo un rev dir denegado de uno pendiente.
+
+## Que se filtra por contexto y que no
+
+- **Se filtra** todo lo que ESCRIBE estado: botones del Flow Panel y dropdowns
+  de Create Shot. Ofrecer un codigo que el sitio no tiene es un error garantizado.
+- **NO se filtra** el catalogo que solo MUESTRA o pinta (`TASK_STATUS_CATALOG`).
+  La DB local puede tener codigos sincronizados del otro sitio; filtrarlos los
+  haria desaparecer de la tabla del Pull sin ningun aviso.
+
+## Prioridad de SHOT (`Shot.sg_prioridad`)
 
 | Codigo SG | Nombre real en Flow |
 |-----------|---------------------|
@@ -74,7 +120,7 @@ Render de los dropdowns (`ColoredStatusComboBox`):
 ## Reviewers de Task
 
 Los reviewers son **asignaciones de personas** a la task (no un estado). En la UI
-son checkboxes (Lega, Sebas, Juano, Charly, Javi) y se mapean a usuarios de Flow:
+son checkboxes y se mapean a usuarios de Flow:
 
 | Checkbox UI | Clave interna       | Nombre real en Flow |
 |-------------|---------------------|---------------------|
@@ -84,18 +130,32 @@ son checkboxes (Lega, Sebas, Juano, Charly, Javi) y se mapean a usuarios de Flow
 | Charly      | `charly_villafane`  | Charly Villafañe    |
 | Javi        | `javi_bravo`        | Javi Bravo          |
 
+En contexto client no hay assignees: ver
+[Doc_HieroTools_Studio_Client_Context.md](Doc_HieroTools_Studio_Client_Context.md).
+
 ## Referencias tecnicas
 
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
-  - `ShotConfigDialog` — dialogo de creacion/modificacion (dropdowns de estado).
-  - `ColoredStatusComboBox` — combo con items coloreados (texto contrastado).
-  - `create_shot()`, `create_task_for_shot()` — escriben `sg_status_list`.
-  - `SHOT_STATES`, `TASK_STATES` — listas (nombre_visible, codigo, color) usadas por los dropdowns.
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
-  - `ModifyShotWorker` — aplica cambios de estado de shot y tasks.
-  - `LoadShotInfoWorker` — trae shot, tasks y reviewers reales de Flow.
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py` — **fuente unica**.
+  - `TASK_STATUS_CATALOG` — code -> (nombre, color de clip, tag XYplorer). Superset, sin filtrar.
+  - `TASK_STATUS_CODES_BY_MODE`, `SHOT_STATUS_CODES_BY_MODE` — espejo del `sg_status_list` de cada sitio.
+  - `PUSH_BUTTONS`, `get_push_buttons(mode)` — botones del Flow Panel por contexto.
+  - `get_status_translation(mode=None)` — label -> codigo, para Push y conector.
+  - `get_task_status_dict()`, `get_status_info()`, `get_status_color()` — catalogo para mostrar y pintar.
+  - `filter_states_for_mode(states, mode, entity)` — filtra listas `(label, code, color)`.
+  - `PERSONAL_REVIEW_CODES`, `get_personal_review_colors()` — reviews por persona que el Pull vuelve a habilitar.
+- `LGA_HieroTools/LGA_NKS_Flow_Panel.py`
+  - `ColorChangeWidget.build_buttons()` — botones fijos + los del contexto.
+  - `ColorChangeWidget.on_context_changed()` — rearmado al cambiar de contexto.
 - `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py`
-  - `task_status_dict` — color de los clips del timeline (independiente de los dropdowns).
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py`
-  - `task_status_dict`, `status_translation` — usados por el push de estados.
-- `+Building_Blocks/LGA_Flow_QueryStates_TEMP.py` — script de verificacion contra Flow.
+  - `ShotGridManager.__init__` — `task_status_dict` desde el catalogo compartido.
+  - `_status_display_from_code()` — nombre visible; `_LEGACY_STATUS_DISPLAY` para codigos de sistemas viejos.
+  - `enable_or_disable_clips()` — usa `get_personal_review_colors()`.
+- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py` y
+  `LGA_NKS_Flow_Push_connector.py` — `status_translation` desde el modulo compartido.
+- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
+  - `ALL_SHOT_STATES`, `ALL_TASK_STATES` — paleta de dropdown (distinta de la de clips).
+  - `get_shot_states()`, `get_task_states()` — filtradas por contexto activo.
+  - `ColoredStatusComboBox` — combo con items coloreados.
+- `/Users/leg4/Desktop/Codin/LGA_PipeSync_2/src/services/StatusContextPolicy.cpp` —
+  el equivalente en PipeSync. Ojo: sus comentarios sobre que codigo existe en que
+  sitio estan desactualizados; la verdad es el schema de Flow.

@@ -1,9 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.00 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.01 | Lega
 
-  Limpia policies de Wasabi para shots aprobados o delivery checked
+  Limpia policies de Wasabi para shots ya entregados.
+
+  v1.01: Reconoce pubsh (OK for Delivery) y pbshed (Delivered) como shot
+         terminado. Sin ellos, en Client la ventana salia vacia: ahi el
+         "entregado" es pbshed y no check.
+  v1.00: Version inicial.
 ____________________________________________________________________
 """
 
@@ -68,11 +73,18 @@ def get_completed_shots_map():
     if not os.path.exists(db_path):
         raise RuntimeError(f"No se encontró pipesync.db en: {db_path}")
 
+    # Estados de shot que cuentan como terminado. `pubsh` (OK for Delivery) y
+    # `pbshed` (Delivered) faltaban: son los que usa el sitio de Flow del cliente,
+    # donde el "entregado" es `pbshed` y no `check`. Sin ellos, en Client la
+    # ventana salia vacia como si no hubiera ningun shot completo.
     status_map = {
         "apr": "approved",
         "approved": "approved",
         "check": "delivery_checked",
         "delivery_checked": "delivery_checked",
+        "pubsh": "ok_for_delivery",
+        "approved_for_delivery": "ok_for_delivery",
+        "pbshed": "delivered",
     }
     statuses = tuple(status_map.keys())
 
@@ -410,15 +422,17 @@ class CompletedShotsPolicyWindow(QDialog):
 
     def show_scanning_message(self):
         self.status_label.setText(
-            "<span style='color:#CCCCCC;'>Escaneando shots con estado Approved / Delivery Ok en pipesync.db y buscando coincidencias en policies de Wasabi...</span>"
+            "<span style='color:#CCCCCC;'>Escaneando shots ya entregados en pipesync.db y buscando coincidencias en policies de Wasabi...</span>"
         )
 
     def _display_status_label(self, internal_status):
-        if internal_status == "approved":
-            return "Approved"
-        if internal_status == "delivery_checked":
-            return "Delivery Ok"
-        return str(internal_status)
+        labels = {
+            "approved": "Delivery OK",
+            "delivery_checked": "Delivered",
+            "ok_for_delivery": "OK for Delivery",
+            "delivered": "Delivered",
+        }
+        return labels.get(internal_status, str(internal_status))
 
     def show_matches(self, matches):
         self._matches = matches
