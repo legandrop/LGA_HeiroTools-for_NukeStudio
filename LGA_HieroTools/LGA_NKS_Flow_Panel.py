@@ -1,13 +1,22 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.55 | Lega
+  LGA_NKS_Flow_Panel v2.57 | Lega
 
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v2.57: El estado final `apr` pasa a mostrarse "Delivery Apr": se llamaba
+         "Delivery OK", casi identico al "OK for Delivery" del primero de la
+         cola. La cola queda pubsh -> check -> apr. Arreglado el clear tag de
+         Rev Dir, que comparaba contra "Rev_Dir" y nunca matcheaba.
+
+  v2.56: Se elimina el boton Rev Dir Den. Los botones toman el ORDEN del
+         sg_status_list de Flow (revjav antes que revjua) y check pasa a llamarse
+         "Delivery Checked", como en Flow.
 
   v2.55: Los botones de estado salen de LGA_NKS_Flow_Status_Config y se filtran
          por contexto: en Client desaparecen los cuatro reviewers que erso no
@@ -613,12 +622,17 @@ class ColorChangeWidget(QtWidgets.QWidget):
             debug_print(f"Error al ejecutar el script ReviewPic: {e}")
 
     #### Push
+    # Estados que ademas limpian los tags del clip. Decia "Rev_Dir" con guion
+    # bajo pero el boton se llama "Rev Dir" con espacio, asi que nunca matcheaba
+    # y Rev Dir jamas limpio tags; con Corrections si funcionaba.
+    CLEAR_TAG_BUTTONS = ("Rev Dir", "Corrections")
+
     def handle_color_button_click(self, color, button_name):
         def button_click_handler(_=None):
             confirmation = self.confirm_status_application(button_name)
             if confirmation:
                 self.change_clip_color_and_push_status(color, button_name)
-                if button_name in ["Rev_Dir", "Corrections"]:
+                if button_name in self.CLEAR_TAG_BUTTONS:
                     self.run_clear_tag_script()
 
         return button_click_handler
@@ -632,7 +646,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
                     button_name,
                     flow_target_version_mode=True,
                 )
-                if button_name in ["Rev_Dir", "Corrections"]:
+                if button_name in self.CLEAR_TAG_BUTTONS:
                     self.run_clear_tag_script()
 
         return button_shift_click_handler

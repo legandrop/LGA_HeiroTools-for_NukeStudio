@@ -11,6 +11,14 @@ Fuente de verdad de los estados (`sg_status_list`) de **Shot** y **Task** en Flo
 > `sg.schema_field_read(entity, "sg_status_list")["sg_status_list"]["properties"]["valid_values"]["value"]`
 > y la entidad `Status` para nombre y `bg_color`.
 
+**Regla:** los estados en HieroTools se llaman y se ordenan **igual que en Flow**.
+Las unicas divergencias de nombre permitidas son las que estan declaradas abajo,
+y son porque el nombre de Flow es un nombre interno feo o ambiguo:
+
+| Codigo | Nombre en Flow | Nombre que usamos | Por que |
+|---|---|---|---|
+| `revleg` | Review Lega (wanka) / **Review Sup** (erso) | Review Lega | en erso el sup es Lega |
+
 ## Lo primero que hay que entender: los dos sitios NO tienen la misma lista
 
 Empujar un codigo que el sitio no acepta falla con
@@ -19,17 +27,19 @@ Empujar un codigo que el sitio no acepta falla con
 | | solo en studio (wanka) | solo en client (ersovfx) |
 |---|---|---|
 | Task | `rev_su`, `revcha`, `revjua`, `revjav` | `revprd` |
-| Shot | `check` | `pbshed` |
+| Shot | — | `revprd` no aplica; los Shot son identicos |
 
 Trampas concretas que ya causaron bugs:
 
-- **`revleg` se llama distinto en cada sitio.** En wanka es "RevLega"; en
+- **`revleg` se llama distinto en cada sitio.** En wanka es "Review Lega"; en
   ersovfx es **"Review Sup"**, y es el unico reviewer del sitio.
-- **El "entregado" de shot cambia de codigo.** En wanka es `check`; en ersovfx
-  es `pbshed`. Un filtro que solo mira `check` da vacio en client.
-- **`pubsh` y `pbshed` existen como entidad `Status` en los dos sitios** aunque
-  no esten en el `sg_status_list` de los dos. Que la entidad exista no alcanza:
-  lo que valida Flow al escribir es la lista del campo.
+- **Que una entidad `Status` exista no alcanza.** Lo que Flow valida al escribir
+  es la lista de valores validos del campo. `pubsh` existia en los dos sitios y
+  no estaba en el campo de wanka: escribirlo fallaba.
+- **La cola de entrega es `pubsh` -> `check` -> `apr`**, y `apr` es el FINAL, lo
+  da el cliente. Flow la tenia al reves (`apr` en el medio) hasta que se corrigio.
+- **`pbshed` ya no se usa.** Era el "entregado" del Shot de erso; se reemplazo
+  por `check`, que es el que manda PipeSync.
 
 ## Decision de colores
 
@@ -52,22 +62,22 @@ Render de los dropdowns (`ColoredStatusComboBox`):
 
 | Nombre visible (UI) | Codigo SG | Nombre real en Flow | Color clip | studio | client |
 |---|---|---|---|:--:|:--:|
-| Not ready | `noread` | Not Ready To Start | `#000000` | si | si |
-| Omited | `omit` | omitted | `#244c19` | si | si |
-| Ready to start | `ready` | Ready To Start | `#8a8a8a` | si | si |
-| In progress | `progre` | In Progress | `#7d4cff` | si | si |
+| Not ready | `noread` | Not ready | `#000000` | si | si |
+| Omited | `omit` | Omited | `#244c19` | si | si |
+| Ready to start | `ready` | Ready to start | `#8a8a8a` | si | si |
+| In progress | `progre` | In progress | `#7d4cff` | si | si |
 | Corrections | `corr` | Corrections | `#2e77d4` | si | si |
-| Review Sebas | `rev_su` | Review Sup | `#bd7f9f` | si | **no** |
+| Review Sebas | `rev_su` | Review Sebas | `#bd7f9f` | si | **no** |
 | Review Charly | `revcha` | Review Charly | `#a9909d` | si | **no** |
 | Review Juano | `revjua` | Review Juano | `#7F4B69` | si | **no** |
-| Review Javi | `revjav` | review_javi | `#9c3e5e` | si | **no** |
-| Review Lega | `revleg` | RevLega / **Review Sup** en erso | `#69135e` | si | si |
+| Review Javi | `revjav` | Review Javi | `#9c3e5e` | si | **no** |
+| Review Lega | `revleg` | Review Lega / **Review Sup** en erso | `#69135e` | si | si |
 | Review Hold | `revhld` | Review Hold | `#9E6A15` | si | si |
 | Review Prod | `revprd` | Review Prod | `#8CBF3F` | **no** | si |
 | Review Dir | `rev_di` | Review Dir | `#B5DB4B` | si | si |
 | OK for Delivery | `pubsh` | OK for Delivery | `#50BFC7` | si | si |
-| Delivery OK | `apr` | Delivery OK | `#266612` | si | si |
-| Delivered | `check` | Delivery Checked | `#38A138` | si | si |
+| Delivered | `check` | Delivered | `#38A138` | si | si |
+| Delivery Apr | `apr` | Delivery Apr | `#266612` | si | si |
 
 `revprd` en Flow viene con `bg_color` `#D7F2B1`, pero ese lima tiene mas
 luminancia que el gris de `noread` (`#d3d3d3`) y en un clip chico se lee como
@@ -77,15 +87,14 @@ blanco. Se usa `#8CBF3F`, el mismo ajuste que ya hizo PipeSync.
 
 | Nombre visible (UI) | Codigo SG | Nombre real en Flow | studio | client |
 |---|---|---|:--:|:--:|
-| Not ready | `noread` | Not Ready To Start | si | si |
-| Omited | `omit` | omitted | si | si |
-| Ready to start | `ready` | Ready To Start | si | si |
-| In progress | `progre` | In Progress | si | si |
-| In playlist | `plylst` | In Playlist | si | si |
+| Not ready | `noread` | Not ready | si | si |
+| Omited | `omit` | Omited | si | si |
+| Ready to start | `ready` | Ready to start | si | si |
+| In progress | `progre` | In progress | si | si |
+| In playlist | `plylst` | In playlist | si | si |
 | OK for Delivery | `pubsh` | OK for Delivery | si | si |
-| Delivered | `pbshed` | Delivered | **no** | si |
-| Delivery OK | `apr` | Delivery OK | si | si |
-| Delivered | `check` | Delivery Checked | si | **no** |
+| Delivered | `check` | Delivered | si | si |
+| Delivery Apr | `apr` | Delivery Apr | si | si |
 
 **Default en Create Shot:** `ready` (Ready to start), shot y task.
 
@@ -95,12 +104,13 @@ Salen de `PUSH_BUTTONS` y se filtran con `get_push_buttons(mode)`. El **label es
 la clave** con la que viaja el push hasta el conector, asi que el label y el
 codigo tienen que definirse juntos y en un solo lugar.
 
-| studio (12) | client (9) |
+| studio (11) | client (8) |
 |---|---|
-| Corrections, Rev Sebas, Rev Charly, Rev Juano, Rev Javi, Rev Lega, Rev Hold, Rev Dir, Rev Dir Den, OK for Delivery, Delivery OK, Delivered | Corrections, Rev Lega, Rev Hold, **Rev Prod**, Rev Dir, Rev Dir Den, OK for Delivery, Delivery OK, Delivered |
+| Corrections, Rev Sebas, Rev Charly, Rev Juano, Rev Javi, Rev Lega, Rev Hold, Rev Dir, OK for Delivery, Delivered, Delivery Apr | Corrections, Rev Lega, Rev Hold, **Rev Prod**, Rev Dir, OK for Delivery, Delivered, Delivery Apr |
 
-`Rev Dir Den` empuja el mismo `rev_di` que `Rev Dir` pero pinta el clip de
-`#4d21a8` para distinguir a ojo un rev dir denegado de uno pendiente.
+El **orden** es el mismo que el del `sg_status_list` de Flow y el de PipeSync.
+Los labels de los botones van cortos (`Rev Sebas`) porque el panel es angosto;
+el nombre completo del estado esta en el catalogo.
 
 ## Que se filtra por contexto y que no
 

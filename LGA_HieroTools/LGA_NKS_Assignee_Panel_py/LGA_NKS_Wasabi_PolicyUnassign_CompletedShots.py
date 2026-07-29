@@ -5,9 +5,8 @@ ____________________________________________________________________
 
   Limpia policies de Wasabi para shots ya entregados.
 
-  v1.01: Reconoce pubsh (OK for Delivery) y pbshed (Delivered) como shot
-         terminado. Sin ellos, en Client la ventana salia vacia: ahi el
-         "entregado" es pbshed y no check.
+  v1.01: Reconoce pubsh (OK for Delivery) como shot terminado, y pbshed por si
+         quedo data vieja de erso, que lo usaba antes de pasar a check.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -73,10 +72,10 @@ def get_completed_shots_map():
     if not os.path.exists(db_path):
         raise RuntimeError(f"No se encontró pipesync.db en: {db_path}")
 
-    # Estados de shot que cuentan como terminado. `pubsh` (OK for Delivery) y
-    # `pbshed` (Delivered) faltaban: son los que usa el sitio de Flow del cliente,
-    # donde el "entregado" es `pbshed` y no `check`. Sin ellos, en Client la
-    # ventana salia vacia como si no hubiera ningun shot completo.
+    # Estados de shot que cuentan como terminado. Faltaba `pubsh` (OK for
+    # Delivery). `pbshed` se acepta solo por data vieja: el Shot de erso lo usaba
+    # como "entregado" hasta que se reemplazo por `check`, que es el que manda
+    # PipeSync. Sin estos, en Client la ventana salia vacia.
     status_map = {
         "apr": "approved",
         "approved": "approved",
@@ -427,7 +426,7 @@ class CompletedShotsPolicyWindow(QDialog):
 
     def _display_status_label(self, internal_status):
         labels = {
-            "approved": "Delivery OK",
+            "approved": "Delivery Apr",
             "delivery_checked": "Delivered",
             "ok_for_delivery": "OK for Delivery",
             "delivered": "Delivered",

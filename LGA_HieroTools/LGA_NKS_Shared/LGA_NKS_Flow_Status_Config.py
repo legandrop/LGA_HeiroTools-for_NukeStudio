@@ -25,6 +25,10 @@ ____________________________________________________________________
   la DB local puede tener codigos sincronizados desde el otro sitio. Filtrarlo
   haria desaparecer esas filas sin ningun aviso.
 
+  El ORDEN de los estados es el mismo que el del sg_status_list de Flow, y
+  los nombres tambien, salvo las divergencias declaradas en
+  docs/Docu_Flow_Estados_Colores.md.
+
   v1.00: Version inicial.
 ____________________________________________________________________
 
@@ -48,13 +52,13 @@ CLIENT_ONLY = (MODE_CLIENT,)
 #
 # Los colores son los `bg_color` reales de Flow salvo donde se aclara.
 TASK_STATUS_CATALOG = {
-    "noread": ("Not Ready To Start", "#000000", None),
+    "noread": ("Not ready", "#000000", None),
     "wts": ("Waiting to start", "#000000", None),
-    "ready": ("Ready To Start", "#8a8a8a", None),
-    "progre": ("In Progress", "#7d4cff", None),
+    "ready": ("Ready to start", "#8a8a8a", None),
+    "progre": ("In progress", "#7d4cff", None),
     # Estado de SHOT, no de task. Nunca lo empuja el Flow Panel, pero aparece en
     # la DB y sin entrada se mostraba el codigo crudo.
-    "plylst": ("In Playlist", "#99c153", None),
+    "plylst": ("In playlist", "#99c153", None),
     "corr": ("Corrections", "#2e77d4", "Corrections"),
     "rev_su": ("Review Sebas", "#bd7f9f", "Rev_Sup"),
     "revcha": ("Review Charly", "#a9909d", "Rev_Sup"),
@@ -70,11 +74,16 @@ TASK_STATUS_CATALOG = {
     # Comparte el tag de XYplorer con Review Dir.
     "revprd": ("Review Prod", "#8CBF3F", "ReviewDir"),
     "rev_di": ("Review Dir", "#B5DB4B", "ReviewDir"),
+    # Cola de entrega: pubsh -> check -> apr. `apr` es el FINAL, lo da el cliente.
+    # Se llamaba "Delivery OK", casi identico al "OK for Delivery" de pubsh, que es
+    # el primero: las mismas palabras en los dos extremos opuestos.
     "pubsh": ("OK for Delivery", "#50BFC7", "Approved"),
+    "check": ("Delivered", "#38A138", "Approved"),
+    "apr": ("Delivery Apr", "#266612", "Approved"),
+    # `pbshed` ya no esta en ningun sg_status_list: en erso lo reemplazo `check`.
+    # Queda en el catalogo por si aparece en data vieja.
     "pbshed": ("Delivered", "#52c233", "Approved"),
-    "apr": ("Delivery OK", "#266612", "Approved"),
-    "check": ("Delivery Checked", "#38A138", "Approved"),
-    "omit": ("Omitted", "#244c19", "Approved"),
+    "omit": ("Omited", "#244c19", "Approved"),
     "enviad": ("Enviado", "#000000", "Approved"),
     "rev": ("Pending Review", "#000000", None),
     "vwd": ("Viewed", "#000000", None),
@@ -89,33 +98,39 @@ TASK_STATUS_CATALOG = {
 # El label es la clave con la que viaja el push hasta el conector, asi que tiene
 # que salir de aca y no escribirse a mano en cada archivo.
 #
-# El ORDEN es el mismo que el del `sg_status_list` de Flow, para que la lista de
-# botones y el dropdown de Flow se lean igual. Ojo con `revjav` antes de
-# `revjua`: asi esta en Flow.
+# El ORDEN es el mismo que el del `sg_status_list` de Flow y el de los dropdowns
+# de PipeSync, para que las tres listas se lean igual.
+#
+# Los labels de los botones van cortos ("Rev Sebas") porque el panel es angosto;
+# el nombre completo del estado esta en el catalogo de arriba.
 #
 # `color = None` significa "el del catalogo".
 PUSH_BUTTONS = [
     ("Corrections", "corr", None, BOTH),
     ("Rev Sebas", "rev_su", None, STUDIO_ONLY),
     ("Rev Charly", "revcha", None, STUDIO_ONLY),
-    ("Rev Javi", "revjav", None, STUDIO_ONLY),
     ("Rev Juano", "revjua", None, STUDIO_ONLY),
+    ("Rev Javi", "revjav", None, STUDIO_ONLY),
     ("Rev Lega", "revleg", None, BOTH),
     ("Rev Hold", "revhld", None, BOTH),
     ("Rev Prod", "revprd", None, CLIENT_ONLY),
     ("Rev Dir", "rev_di", None, BOTH),
     ("OK for Delivery", "pubsh", None, BOTH),
-    ("Delivery OK", "apr", None, BOTH),
-    ("Delivery Checked", "check", None, BOTH),
+    ("Delivered", "check", None, BOTH),
+    ("Delivery Apr", "apr", None, BOTH),
 ]
 
 # Alias historicos de labels que ya no se dibujan pero que pueden llegar desde
 # una llamada vieja o un log. Se mantienen para que el push no quede mudo.
+# Ojo: "Delivery Ok" era `check` y "Delivery OK" era `apr` — se diferenciaban solo
+# por la capitalizacion. Ese es justamente el motivo del renombre a "Delivery Apr".
 LEGACY_LABEL_ALIASES = {
     "Corrs_Lega": "revleg",
     "Approved": "apr",
+    "Delivery OK": "apr",
+    "Delivery Approved": "apr",
     "Delivery Ok": "check",
-    "Delivered": "check",
+    "Delivery Checked": "check",
     "Rev Dir Den": "rev_di",
 }
 
@@ -134,22 +149,22 @@ LEGACY_LABEL_ALIASES = {
 TASK_STATUS_CODES_BY_MODE = {
     MODE_STUDIO: (
         "noread", "omit", "ready", "progre", "corr",
-        "rev_su", "revcha", "revjav", "revjua", "revleg", "revhld",
-        "rev_di", "pubsh", "apr", "check",
+        "rev_su", "revcha", "revjua", "revjav", "revleg", "revhld",
+        "rev_di", "pubsh", "check", "apr",
     ),
     MODE_CLIENT: (
         "noread", "omit", "ready", "progre", "corr",
         "revleg", "revhld", "revprd",
-        "rev_di", "pubsh", "apr", "check",
+        "rev_di", "pubsh", "check", "apr",
     ),
 }
 
 SHOT_STATUS_CODES_BY_MODE = {
     MODE_STUDIO: (
-        "noread", "omit", "ready", "progre", "plylst", "pubsh", "apr", "check",
+        "noread", "omit", "ready", "progre", "plylst", "pubsh", "check", "apr",
     ),
     MODE_CLIENT: (
-        "noread", "omit", "ready", "progre", "plylst", "pubsh", "pbshed", "apr",
+        "noread", "omit", "ready", "progre", "plylst", "pubsh", "check", "apr",
     ),
 }
 

@@ -1,10 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.44 | Lega
+  LGA_NKS_Flow_CreateShot v1.46 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
+
+  v1.46: `apr` pasa a "Delivery Apr" y la cola queda pubsh -> check -> apr. En
+         el dropdown de shot sale `pbshed` y entra `check`, que es el que usa
+         PipeSync y el que ahora acepta erso.
+
+  v1.45: Los dropdowns toman el ORDEN del sg_status_list de Flow (Review Javi
+         antes que Review Juano) y check pasa a "Delivery Checked".
 
   v1.44: Los dropdowns de estado se filtran por contexto contra los codigos reales
          de cada sitio de Flow. Suma OK for Delivery, Review Prod y Delivered
@@ -505,9 +512,8 @@ ALL_SHOT_STATES = [
     ("In progress", "progre", "#6443bf"),
     ("In playlist", "plylst", "#99c153"),
     ("OK for Delivery", "pubsh", "#50bfc7"),
-    ("Delivered", "pbshed", "#52c233"),
-    ("Delivery OK", "apr", "#266612"),
-    ("Delivery Checked", "check", "#38a138"),
+    ("Delivered", "check", "#38a138"),
+    ("Delivery Apr", "apr", "#266612"),
 ]
 
 ALL_TASK_STATES = [
@@ -518,15 +524,15 @@ ALL_TASK_STATES = [
     ("Corrections", "corr", "#2e77d4"),
     ("Review Sebas", "rev_su", "#a65680"),
     ("Review Charly", "revcha", "#a9909d"),
-    ("Review Javi", "revjav", "#8f3f72"),
     ("Review Juano", "revjua", "#7f4b69"),
+    ("Review Javi", "revjav", "#8f3f72"),
     ("Review Lega", "revleg", "#68135d"),
     ("Review Hold", "revhld", "#9e6a15"),
     ("Review Prod", "revprd", "#8cbf3f"),
     ("Review Dir", "rev_di", "#b5db4b"),
     ("OK for Delivery", "pubsh", "#50bfc7"),
-    ("Delivery OK", "apr", "#266612"),
-    ("Delivery Checked", "check", "#38a138"),
+    ("Delivered", "check", "#38a138"),
+    ("Delivery Apr", "apr", "#266612"),
 ]
 
 
