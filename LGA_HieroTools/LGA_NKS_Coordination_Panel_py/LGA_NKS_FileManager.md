@@ -363,7 +363,7 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
   - `_get_selected_clips()`: obtiene los clips seleccionados (Método 1, sin playhead).
   - `_inspect_clip()`: extrae nombre, ruta, tipo (`singleFile()`) y estado online/offline.
   - `_path_has_vfx_root()`: valida que la ruta tenga raíz `VFX-` (requisito del CLI).
-  - `get_filemanager_exe()`, `build_filemanager_cmd()`: resuelven el ejecutable y arman la llamada combinada de modo normal (`--download` / `--download-file`) o latest (`--download-latest` / `--download-latest-file`) con `--notify-completion`.
+  - `build_filemanager_cmd()`: arma la llamada combinada de modo normal (`--download` / `--download-file`) o latest (`--download-latest` / `--download-latest-file`) con `--notify-completion`. El ejecutable ya no lo resuelve este script: eso pasó a `LGA_NKS_Shared/LGA_NKS_FileManagerLauncher.build_filemanager_command()`.
   - `get_notify_dir()`: devuelve la carpeta de marcadores (`logs/download_clip_done`).
   - `setup_debug_logging()`, `debug_print()`: sistema de logging a archivo.
 
