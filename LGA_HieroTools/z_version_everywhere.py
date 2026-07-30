@@ -1,5 +1,14 @@
-# version_up_everywhere.py 
+# version_up_everywhere.py
 # Adds action to enable a Clip/Shot to be Min/Max/Next/Prev versioned in all shots used in a Project.
+#
+# OJO - RAMAS DE VERSION: este script NO es branch-aware y queda fuera del
+# trabajo de ramas a proposito. Usa la API de Hiero (shot.maxVersion(),
+# minVersion(), nextVersion(), prevVersion()), que recorre TODAS las versiones
+# del bin sin saber nada de ramas: "Max Version" puede saltar a la rama de otro
+# compositor (v103 estando en v012) y Next/Prev pueden cruzar el borde entre
+# ramas. Hacerlo branch-aware implica reemplazar esas llamadas por
+# setActiveVersion propio, o sea reescribir la tool.
+# Ver LGA_HieroTools/docs/Docu_Version_Branches.md.
 #
 # Usage: 
 # 1) Copy file to <HIERO_PLUGIN_PATH>/Python/Startup

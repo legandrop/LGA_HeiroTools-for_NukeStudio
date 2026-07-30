@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Reconnect v1.19 | Lega
+  LGA_NKS_Reconnect v1.20 | Lega
 
   Reconecta clips seleccionados a diferentes rutas, manteniendo el color original.
 
+  v1.20: Ramas de version. Al elegir a que version reconectar se toma la cabeza
+         de la RAMA del clip y no la mas alta del directorio: un v103 de la rama
+         100 es trabajo de otro compositor. Aplica a los dos caminos (carpetas
+         por version y estructura plana) y al fallback de archivos sin version.
   v1.19: Fix reconnect de archivos sin versión en Win que en Mac existen con _vXX:
          si el path exacto no existe en Mac, busca en el mismo directorio archivos
          con el mismo stem + _vXX y usa el más alto disponible.
@@ -35,12 +39,23 @@ import hiero.core
 import hiero.ui
 import os
 import re
+import sys
 import logging
 import queue
 import datetime
 import time
+from pathlib import Path
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui, QtWidgets
+
+# Ramas de version: la mas alta del directorio puede ser de otra rama.
+_shared_dir = Path(__file__).parent.parent / "LGA_NKS_Shared"
+if _shared_dir.exists() and str(_shared_dir) not in sys.path:
+    sys.path.insert(0, str(_shared_dir))
+from LGA_NKS_VersionBranching import (
+    extract_version_number as extract_branch_version,
+    head_of_branch_containing,
+)
 
 # Eliminamos la importaci?n del SelfReplace
 # import LGA_NKS_SelfReplaceClip as self_replace
@@ -445,7 +460,17 @@ def main(force_all_clips=False):
                                 debug_print(f"Error buscando versiones de {stem}: {e}")
                             if versioned_candidates:
                                 versioned_candidates.sort(key=lambda x: x[0])
-                                best = versioned_candidates[-1][1]
+                                # El clip no tiene version en el nombre, asi que
+                                # no hay rama propia que respetar: se toma la
+                                # cabeza de la rama mas baja, que es la serie
+                                # original de este archivo.
+                                numbers = [number for number, _f in versioned_candidates]
+                                head = head_of_branch_containing(numbers, numbers[0])
+                                best = next(
+                                    fname
+                                    for number, fname in versioned_candidates
+                                    if number == head
+                                )
                                 target_path = os.path.join(target_dir, best)
                                 debug_print(f"Archivo sin versión → encontrado con versión: {best}")
                                 renamed_clips.append((shot.name(),
@@ -524,9 +549,22 @@ def main(force_all_clips=False):
                         debug_print("No se encontró ninguna versión con media; se omite el reconnect.")
                         continue
 
-                    # Tomar la versión más alta (última de la lista)
-                    tag, candidate_file, candidate_dir, frame_path = available_versions[-1]
-                    debug_print(f"Usando versión más alta disponible: {tag} con frame {frame_path}")
+                    # Tomar la cabeza de la RAMA del clip, no la más alta a secas:
+                    # un v103 de la rama 100 es trabajo de otro compositor y
+                    # reconectar ahí cambia el shot sin que nadie lo pida.
+                    available_numbers = [
+                        extract_branch_version(tag) for tag, _f, _d, _fp in available_versions
+                    ]
+                    branch_head = head_of_branch_containing(available_numbers, base_version)
+                    chosen_index = len(available_versions) - 1
+                    for index, number in enumerate(available_numbers):
+                        if number == branch_head:
+                            chosen_index = index
+                            break
+                    tag, candidate_file, candidate_dir, frame_path = available_versions[chosen_index]
+                    debug_print(
+                        f"Usando cabeza de la rama de v{base_version}: {tag} con frame {frame_path}"
+                    )
 
                     # Si ya estamos en esa versión y la ruta es Mac, no tocar nada
                     is_mac_path = file_path.startswith("/Volumes/T Viaja/T")

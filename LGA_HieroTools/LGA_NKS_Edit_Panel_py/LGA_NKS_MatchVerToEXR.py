@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_MatchVerToEXR v0.81 | Lega
+  LGA_NKS_MatchVerToEXR v0.82 | Lega
 
   Busca la version actual de los clips del track _comp_ (TRACK_comp_EXR) e
   intenta subir la versión de los clips correspondientes del track _compRev_ (TRACK_comp_REV) a la misma versión.
 
+  v0.82: Ramas de version. En vez de subir el clip a la version mas alta del bin
+         (copia del Pull que podia saltar a la rama de otro compositor), se pide
+         directamente la version del EXR via LGA_NKS_ClipVersions; si no esta
+         bajada, la cabeza de la rama del clip.
   v0.81: Expande el filtro de clips EXR para incluir aliases de task name
          (compo → comp) evitando descartar clips con _Compo_ en el filename
          que están correctamente en el track _comp_.
@@ -56,6 +60,9 @@ else:
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
 if utils_path.exists():
     sys.path.insert(0, str(utils_path))
+    # Cambio de version acotado a la rama del clip (ver LGA_NKS_ClipVersions).
+    from LGA_NKS_ClipVersions import switch_clip_to_version
+
     try:
         from LGA_NKS_Shared.LGA_NKS_GetClip import get_clips_to_process
         from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
@@ -314,28 +321,14 @@ class HieroOperations:
 
         return base_name, version_str
 
-    def get_highest_version(self, binItem):
-        """Obtiene la version mas alta de un binItem - COPIADO EXACTO del Pull"""
-        versions = binItem.items()
-        try:
-            highest_version = max(
-                versions, key=lambda v: extract_version_number(v.name())
-            )
-            return highest_version
-        except Exception as e:
-            debug_print(f"Error al obtener la version mas alta: {e}")
-            return None
+    def change_to_target_version(self, clip, target_version):
+        """Lleva el clip a la version del EXR, o a la cabeza de su rama.
 
-    def change_to_highest_version(self, clip):
-        """Cambia el clip a la version mas alta disponible - COPIADO EXACTO del Pull"""
-        binItem = clip.source().binItem()
-        activeVersion = binItem.activeVersion()
-        vc = hiero.core.VersionScanner()
-        vc.doScan(activeVersion)
-        highest_version = self.get_highest_version(binItem)
-        if highest_version:
-            binItem.setActiveVersion(highest_version)
-        return highest_version
+        Antes se llamaba a change_to_highest_version (max global), que con
+        ramas podia dejar el clip en la rama de otro compositor. Ahora se
+        pide directamente la version del EXR, que es lo que esta tool quiere.
+        """
+        return switch_clip_to_version(clip, target_version, debug=debug_print)
 
     def add_custom_tag_to_clip(self, clip, tag_name, tag_description, tag_icon):
         """Anade un tag personalizado a un clip - COPIADO del Pull"""
@@ -537,16 +530,19 @@ class HieroOperations:
                         f"! Necesita cambiar de v{rev_current_version:02d} a v{exr_version:02d}"
                     )
 
-                    # USAR MISMA LOGICA QUE EL PULL - cambiar a highest y verificar
+                    # Se pide la version del EXR; si no esta bajada, la cabeza
+                    # de la rama del clip (nunca la rama de otro compositor).
                     original_version = rev_current_version
-                    highest_version = self.change_to_highest_version(rev_clip)
+                    highest_version = self.change_to_target_version(
+                        rev_clip, exr_version
+                    )
 
                     if highest_version:
                         new_version_number = extract_version_number(
                             highest_version.name()
                         )
                         debug_print(
-                            f"→ Subido a version mas alta disponible: v{new_version_number:02d}"
+                            f"→ Clip llevado a v{new_version_number:02d}"
                         )
 
                         # Verificar si la nueva version coincide con la del EXR

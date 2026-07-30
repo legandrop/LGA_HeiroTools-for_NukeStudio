@@ -181,8 +181,14 @@ Los siguientes botones están disponibles en el panel **Flow Production** de Hie
   - **Secuencia de imágenes** (`..._%04d.exr` → `singleFile() == False`): se descarga la **carpeta** que contiene la secuencia con `--download`.
 - **Comando**: arma **una sola llamada** combinando todos los clips seleccionados:
   `FileManagerS3.exe --context studio --download "<carpeta_seq1>" "<carpeta_seq2>" --download-file "<archivo1>" "<archivo2>" --notify-completion "<carpeta_marcadores>"`
-- **Comando en Shift+Click**: usa los nuevos flags de latest:
-  `FileManagerS3.exe --context studio --download-latest "<carpeta_seq_v05>" --download-latest-file "<archivo_v05.mov>" --notify-completion "<carpeta_marcadores>"`
+- **Modo latest y ramas de versión**: el modo latest **ya no delega** en `--download-latest`, que resuelve el máximo global y por lo tanto puede cruzar a la rama de otro compositor. Ahora HieroTools lista Wasabi (una sola `list_objects_v2` en hilo secundario), detecta ramas y:
+  - con **una sola rama** baja su cabeza sin preguntar nada;
+  - con **más de una rama** abre un diálogo para elegir cuál bajar (todas / rama X), respondible con el mouse o con las teclas numéricas;
+  - después manda **rutas explícitas** con los flags normales:
+    `FileManagerS3.exe --context studio --download "<carpeta_seq_v103>" --download-file "<archivo_v103.mov>" --notify-completion "<carpeta_marcadores>"`
+  - FileManager **no cambia**: no hay flag nuevo ni acople de versión entre las dos apps.
+  - `--download-latest` / `--download-latest-file` quedan como **fallback** para cuando no se puede listar Wasabi (sin credenciales, sin red, ruta que no resuelve bucket).
+  - Además se escribe un **intent** por ruta en `logs/download_clip_intent/` para que el watcher sepa a qué versión subir el clip. Detalle completo en `LGA_HieroTools/docs/Docu_Version_Branches.md`.
 - **Overwrite**: los archivos individuales se descargan con `overwrite=true` (un clip online se puede re-descargar).
 - **Tabs**: a diferencia de los botones de shot, Download Clip **no abre ningún tab** en FileManager — solo dispara la descarga y FileManager cambia a la pestaña *Activity*.
 - **Reconexión automática**: el comando incluye `--notify-completion "<Startup>/logs/download_clip_done"`. FileManager escribe un marcador `.json` al terminar cada descarga; el watcher `LGA_NKS_DownloadClip_Watcher.py` lo detecta y reconecta el clip offline en Hiero automáticamente (ver sección **Reconexión automática** más abajo).
@@ -276,9 +282,24 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
 
 ---
 
-## 🧪 Arquitectura tecnica: Shift+Click en Download Clip (ultima version)
+## 🧪 Arquitectura técnica: Download Clip en modo latest
 
-### Hallazgos de investigacion (estado actual)
+> **Estado actual (ramas de versión)**: lo que sigue documenta el diseño
+> original, donde la detección de "última versión" vivía en FileManager
+> (`--download-latest`). **Para el caso con ramas eso quedó revertido**: la
+> detección la hace HieroTools y a FileManager se le pasan rutas explícitas
+> con los flags normales. Dos razones: el diálogo de "qué rama bajar" tiene
+> que abrirse donde el usuario hizo el click, y así no hace falta un flag
+> nuevo ni queda acople de versión entre las dos apps — el mismo problema que
+> obligó a actualizar HieroTools y FileManager juntos cuando se renombró la
+> carpeta de instalación. `--download-latest` sigue existiendo y se usa como
+> fallback. Ver `LGA_HieroTools/docs/Docu_Version_Branches.md`.
+>
+> También cambió el gesto: desde v3.80 el modo latest está en **Click** y
+> Shift+Click baja la versión actual (esta sección se escribió cuando era al
+> revés).
+
+### Hallazgos de investigacion (diseño original)
 
 - **Panel con doble accion ya resuelta en otros botones**:
   `LGA_NKS_Coordination_Panel.py` ya implementa `CustomButton` + `setShiftClickHandler()` para `Reveal in Flow` y `.Psync`, con tooltip explicito `Click` / `Shift+Click`.
@@ -324,6 +345,9 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
 5. **Reconexion con cambio de version en Hiero (alineado a Flow Pull)**
    - El watcher soporta marker latest con `requested_path`.
    - Cuando aplica, matchea el clip original y ejecuta subida de version en timeline (flujo equivalente a Flow Pull).
+   - **Hoy**: ese camino sigue existiendo para markers latest, pero acotado a la
+     cabeza de la rama del clip. El camino principal usa los **intents** de
+     `logs/download_clip_intent/`, que dicen a qué versión exacta subir.
 
 6. **Verificacion**
    - Casos: clip offline/online, video unico, secuencia, multiples clips seleccionados, markers sin match, path sin version, multiples `_v` en nombre.

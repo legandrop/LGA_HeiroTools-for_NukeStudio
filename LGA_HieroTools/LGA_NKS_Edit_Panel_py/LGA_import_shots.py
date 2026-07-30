@@ -1,13 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.33 | Lega
+  LGA_import_shots v1.34 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.34: Ramas de version. `is_latest` marca cabezas de RAMA y no la version mas
+         alta a secas: con dos compositores en el mismo shot hay una ultima
+         version por rama, y todas quedan pre-tildeadas y sin atenuar. Aplica a
+         plates, MOVs y carpetas de publish. La deduplicacion por track sigue
+         usando el maximo: ahi es solo un desempate de lo que el usuario tildo.
   v1.33: Los tabs suman margen horizontal configurable mediante
          ANCHO_TAB_EXRA, aplicado a izquierda y derecha.
   v1.32: Las versiones V000 importadas se colocan deshabilitadas en el
@@ -169,6 +174,10 @@ else:
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
+
+# Ramas de version: con dos compositores en el mismo shot hay una version
+# "ultima" por rama, no una sola. is_latest marca cabezas de rama.
+from LGA_NKS_VersionBranching import branch_heads
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
 
@@ -792,10 +801,11 @@ def _scan_input_folder(shot_root):
 
     for base_key, group in plate_groups.items():
         group.sort(key=lambda x: x["version_num"])
-        max_ver = max(x["version_num"] for x in group)
+        # Cabeza de cada rama: si hay ramas, hay mas de una "ultima" version.
+        head_versions = set(branch_heads([x["version_num"] for x in group]))
         has_multiple_versions = len(group) > 1
         for entry in group:
-            entry["is_latest"] = (entry["version_num"] == max_ver)
+            entry["is_latest"] = entry["version_num"] in head_versions
             entry["has_multiple_versions"] = has_multiple_versions
             # Leer metadata solo del primer archivo
             w, h, fps, comp, bd, ch, par = (None,) * 7
@@ -877,11 +887,14 @@ def _scan_input_folder(shot_root):
     # Aplicar versioning a cada grupo de MOVs (mismo patrón que EXR seqs)
     for group_key, group in mov_groups.items():
         group.sort(key=lambda x: x["version_num"])
-        max_ver = max(x["version_num"] for x in group)
+        version_numbers = [x["version_num"] for x in group]
+        max_ver = max(version_numbers)
+        # Cabeza de cada rama: si hay ramas, hay mas de una "ultima" version.
+        head_versions = set(branch_heads(version_numbers))
         has_multiple = len(group) > 1
         for entry in group:
             # Si ningún archivo tiene número de versión (max_ver == -1), todos son "latest"
-            entry["is_latest"] = (entry["version_num"] == max_ver or max_ver == -1)
+            entry["is_latest"] = entry["version_num"] in head_versions or max_ver == -1
             entry["has_multiple_versions"] = has_multiple
         items.extend(group)
 
@@ -925,7 +938,10 @@ def _scan_publish_folders(shot_root):
 
         # Ordenar descendente (mayor version primero)
         version_dirs.sort(key=lambda d: _version_number(d.name), reverse=True)
-        max_ver = _version_number(version_dirs[0].name)
+        # Cabeza de cada rama: con dos compositores hay una ultima por rama.
+        head_versions = set(
+            branch_heads([_version_number(d.name) for d in version_dirs])
+        )
 
         for vd in version_dirs:
             first_f, last_f, count, first_file = _scan_exr_sequence(str(vd))
@@ -938,7 +954,7 @@ def _scan_publish_folders(shot_root):
                 "publish_exists": True, "has_versions": True,
                 "version_dir": str(vd), "version_name": vd.name,
                 "version_num": ver_num,
-                "is_latest": (ver_num == max_ver),
+                "is_latest": ver_num in head_versions,
                 "first_file": first_file,
                 "first_frame": first_f, "last_frame": last_f, "frame_count": count,
                 "width": w, "height": h, "fps": fps, "compression": comp,

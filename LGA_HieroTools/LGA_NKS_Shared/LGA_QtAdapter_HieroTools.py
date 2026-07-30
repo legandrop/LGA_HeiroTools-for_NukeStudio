@@ -36,6 +36,7 @@ Incluye compatibilidad para:
 - horizontal_advance() para métricas de fuente
 - primary_screen_geometry() para geometría de pantalla
 - set_layout_margin() para márgenes de layout
+- svg_pixmap() / svg_icon() para rasterizar y teñir SVGs (QtSvg opcional)
 """
 
 from typing import Optional
@@ -59,6 +60,17 @@ except ImportError:  # PySide2 (Nuke 15)
     from PySide2.QtWidgets import QApplication
 
     PYSIDE_VER = 2
+
+
+# QtSvg no viene garantizado en todos los builds de Nuke: si falta, los
+# helpers de SVG devuelven None y el llamador cae a su alternativa de texto.
+try:
+    if PYSIDE_VER == 6:
+        from PySide6 import QtSvg
+    else:
+        from PySide2 import QtSvg
+except ImportError:
+    QtSvg = None
 
 
 def horizontal_advance(metrics: QtGui.QFontMetrics, text: str) -> int:
@@ -98,10 +110,78 @@ def set_layout_margin(layout: QtWidgets.QLayout, margin: int) -> None:
         layout.setMargin(margin)
 
 
+def svg_pixmap(svg_path, logical_size=18, color=None, supersampling=3, inset=1):
+    """Rasteriza un SVG a QPixmap y opcionalmente lo tiñe con `color`.
+
+    Misma tecnica que PipeSync (VersionsWidget::refreshBranchIcons): se
+    rasteriza a `supersampling`x con un inset real para que el antialias no
+    toque el borde, se tiñe con SourceIn y se entrega con devicePixelRatio,
+    asi el icono no queda ni recortado ni borroso en pantallas HiDPI.
+
+    Devuelve None si QtSvg no esta disponible o el archivo no existe.
+    """
+    if QtSvg is None:
+        return None
+
+    import os
+
+    if not svg_path or not os.path.exists(str(svg_path)):
+        return None
+
+    raster_size = int(logical_size) * int(supersampling)
+    if raster_size <= 0:
+        return None
+    raster_inset = float(inset) * float(supersampling)
+
+    image = QtGui.QImage(
+        raster_size, raster_size, QtGui.QImage.Format_ARGB32_Premultiplied
+    )
+    image.fill(Qt.transparent)
+
+    painter = QtGui.QPainter(image)
+    try:
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, True)
+        renderer = QtSvg.QSvgRenderer(str(svg_path))
+        if not renderer.isValid():
+            return None
+        bounds = QtCore.QRectF(
+            raster_inset,
+            raster_inset,
+            raster_size - (2.0 * raster_inset),
+            raster_size - (2.0 * raster_inset),
+        )
+        renderer.render(painter, bounds)
+        if color is not None:
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+            painter.fillRect(image.rect(), QtGui.QColor(color))
+    finally:
+        painter.end()
+
+    pixmap = QtGui.QPixmap.fromImage(image)
+    pixmap.setDevicePixelRatio(float(supersampling))
+    return pixmap
+
+
+def svg_icon(svg_path, logical_size=18, color=None, supersampling=3, inset=1):
+    """QIcon a partir de un SVG teñido. None si no se pudo rasterizar."""
+    pixmap = svg_pixmap(
+        svg_path,
+        logical_size=logical_size,
+        color=color,
+        supersampling=supersampling,
+        inset=inset,
+    )
+    if pixmap is None:
+        return None
+    return QtGui.QIcon(pixmap)
+
+
 __all__ = [
     "QtWidgets",
     "QtGui",
     "QtCore",
+    "QtSvg",
     "QAction",
     "QShortcut",
     "QGuiApplication",
@@ -111,4 +191,6 @@ __all__ = [
     "horizontal_advance",
     "primary_screen_geometry",
     "set_layout_margin",
+    "svg_pixmap",
+    "svg_icon",
 ]

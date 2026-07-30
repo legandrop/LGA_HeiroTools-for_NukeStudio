@@ -6,3 +6,16 @@ Shared dependencies:
 - LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py
 - LGA_NKS_Shared/SecureConfig_Reader.py
 - LGA_NKS_Shared/shotgun_api3/
+- LGA_NKS_Shared/LGA_NKS_FileManagerLauncher.py
+- LGA_NKS_Shared/LGA_NKS_VersionBranching.py
+- LGA_NKS_Shared/LGA_NKS_VersionBranchesUI.py
+- LGA_NKS_Shared/LGA_NKS_BranchDownloadPlan.py
+- LGA_NKS_Shared/LGA_NKS_S3VersionLister.py
+- LGA_NKS_Shared/LGA_NKS_BucketResolver.py
+
+Dependencia cruzada de otro panel (Download Clip, modo latest):
+- LGA_NKS_Assignee_Panel_py/boto3 + botocore
+  El runtime de boto3 se mantiene autocontenido en el Assignee Panel para no
+  duplicar el vendor. LGA_NKS_S3VersionLister lo agrega a sys.path en la
+  posicion 0 (ver Docu_Version_Branches.md: agregado al final se mezcla con
+  el botocore de otro runtime y revienta).

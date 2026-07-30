@@ -1,8 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_DownloadClip_Watcher v1.03 | Lega
+  LGA_NKS_DownloadClip_Watcher v1.04 | Lega
 
+  v1.04: Ramas de version. Lee los intents que escribe DownloadClip en
+         logs/download_clip_intent/ y sube el clip a la version que realmente
+         se descargo; si la descarga fue de la rama de otro compositor no
+         toca el clip. Sin intent (marcador latest de FileManager) sube a la
+         cabeza de la RAMA del clip y ya no al maximo global, que podia
+         saltarlo a la rama de otro.
   v1.03: Soporta markers "latest" para subir version del clip en timeline
          (flujo equivalente a Flow Pull: VersionScanner + setActiveVersion).
   v1.02: Tras reconectar, hace un toggle del estado enabled del track item
@@ -73,6 +79,22 @@ except Exception as _qt_err:
             from PySide2 import QtCore  # type: ignore
         except Exception:
             print(f"[DownloadClipWatcher] No se pudo importar QtCore: {_qt_err}")
+
+# Ramas: los intents dicen a que version subir el clip y el helper de ramas
+# evita saltar de rama cuando no hay intent.
+read_intent = None
+clear_intent = None
+head_of_branch_containing = None
+try:
+    _shared_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "LGA_NKS_Shared"
+    )
+    if _shared_dir not in sys.path:
+        sys.path.insert(0, _shared_dir)
+    from LGA_NKS_BranchDownloadPlan import clear_intent, read_intent  # type: ignore
+    from LGA_NKS_VersionBranching import head_of_branch_containing  # type: ignore
+except Exception as _branch_err:
+    print(f"[DownloadClipWatcher] No se pudo importar el helper de ramas: {_branch_err}")
 
 
 class RelativeTimeFormatter(logging.Formatter):
@@ -176,6 +198,20 @@ def get_marker_dir():
         os.path.dirname(os.path.abspath(__file__)), "..", "logs", "download_clip_done"
     )
     return os.path.abspath(marker_dir)
+
+
+def get_intent_dir():
+    """Carpeta de intents que escribe LGA_NKS_FileManager_DownloadClip.py.
+
+    Debe coincidir con get_intent_dir() de ese modulo. El intent dice a que
+    version subir el clip: el marcador de FileManager solo trae la ruta
+    descargada y con eso no se puede distinguir "bajaron mi rama" de
+    "bajaron la rama de otro".
+    """
+    intent_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "logs", "download_clip_intent"
+    )
+    return os.path.abspath(intent_dir)
 
 
 def _normalize_path(path):
@@ -294,22 +330,54 @@ def _extract_version_number(text):
         return -1
 
 
-def _get_highest_version(bin_item):
-    """Obtiene la version mas alta de un binItem (misma logica que Flow Pull)."""
+def _pick_version(bin_item, target_version=None, current_version=None):
+    """Elige a que Version del binItem cambiar.
+
+    - `target_version`: la version que se acaba de descargar (viene del
+      intent). Es la eleccion mas precisa: se baja eso, se muestra eso.
+    - Si no esta disponible, la cabeza de la RAMA del clip. Nunca el maximo
+      global: la version mas alta puede ser de la rama de otro compositor
+      y saltar ahi cambia el trabajo que el artista tiene en pantalla.
+    """
     try:
         versions = list(bin_item.items())
     except Exception:
         return None
     if not versions:
         return None
-    try:
-        return max(versions, key=lambda v: _extract_version_number(v.name()))
-    except Exception:
-        return None
+
+    numbers = [_extract_version_number(v.name()) for v in versions]
+
+    if target_version is not None:
+        for version, number in zip(versions, numbers):
+            if number == target_version:
+                return version
+        debug_print(
+            f"La version descargada v{target_version} no aparece en el binItem; "
+            "se usa la cabeza de la rama",
+            level="warning",
+        )
+
+    if current_version is None or head_of_branch_containing is None:
+        # Sin rama que respetar (o sin helper) queda el comportamiento viejo.
+        try:
+            return max(versions, key=lambda v: _extract_version_number(v.name()))
+        except Exception:
+            return None
+
+    head = head_of_branch_containing(numbers, current_version)
+    for version, number in zip(versions, numbers):
+        if number == head:
+            return version
+    return None
 
 
-def _switch_clip_to_highest_version(item):
-    """Sube el clip a la version mas alta disponible (flujo estilo Flow Pull)."""
+def _switch_clip_to_version(item, target_version=None):
+    """Cambia la version activa del clip tras una descarga.
+
+    Con `target_version` va exactamente a la version descargada; sin ella,
+    a la cabeza de la rama del clip (ver _pick_version).
+    """
     try:
         import hiero.core
     except Exception as e:
@@ -359,10 +427,14 @@ def _switch_clip_to_highest_version(item):
             level="warning",
         )
 
-    highest_version = _get_highest_version(bin_item)
+    current_version = _extract_version_number(active_version.name())
+    highest_version = _pick_version(
+        bin_item, target_version=target_version, current_version=current_version
+    )
     if highest_version is None:
         debug_print(
-            f"No se pudo determinar highest version para '{clip_name}'", level="warning"
+            f"No se pudo determinar la version destino para '{clip_name}'",
+            level="warning",
         )
         return False
 
@@ -487,10 +559,49 @@ def _find_and_reconnect(target_path, kind):
 
 
 def _find_and_switch_to_latest(target_path, kind):
-    """Busca clips por path original y los sube a su highest version disponible."""
+    """Busca clips por path original y los sube a la cabeza de SU rama."""
     return _find_and_apply(
-        target_path, kind, _switch_clip_to_highest_version, "switch-latest"
+        target_path, kind, _switch_clip_to_version, "switch-branch-head"
     )
+
+
+def _apply_intent(intent, downloaded_path, kind):
+    """Aplica el intent de una descarga por ramas.
+
+    Devuelve cuantos "asuntos" quedaron atendidos, para que el marcador se
+    pueda borrar. Una descarga de rama ajena cuenta como atendida aunque no
+    toque ningun clip: se bajo lo que se pidio y el clip no se mueve.
+    """
+    intent_dir = get_intent_dir()
+    clip_path = intent.get("clip_path")
+    target_version = intent.get("version")
+    branch_label = intent.get("branch_label", "?")
+
+    if not intent.get("switch"):
+        debug_print(
+            f"Intent de rama {branch_label} sin cambio de version: se bajo la rama "
+            "de otro compositor y el clip queda donde estaba."
+        )
+        if clear_intent is not None:
+            clear_intent(intent_dir, downloaded_path)
+        return 1
+
+    matched = 0
+    if clip_path:
+        matched = _find_and_apply(
+            clip_path,
+            intent.get("kind", kind),
+            lambda item: _switch_clip_to_version(item, target_version),
+            f"switch-v{target_version}",
+        )
+    if matched == 0 and downloaded_path:
+        # El clip pudo haber cambiado de ruta (o ya estar en la version nueva):
+        # al menos se intenta reconectar por la ruta descargada.
+        matched = _find_and_reconnect(downloaded_path, kind)
+
+    if matched and clear_intent is not None:
+        clear_intent(intent_dir, downloaded_path)
+    return matched
 
 
 def _process_marker(marker_path):
@@ -517,6 +628,7 @@ def _process_marker(marker_path):
         _safe_remove(marker_path)
         return
 
+    intent_dir = get_intent_dir()
     total_matched = 0
     for entry in items:
         path = entry.get("path")  # path resuelto/descargado
@@ -524,8 +636,25 @@ def _process_marker(marker_path):
         requested_path = entry.get("requested_path")  # path original del clip
         is_latest = bool(entry.get("latest", False))
 
+        # Descarga por ramas: DownloadClip dejo un intent con la version exacta
+        # que se bajo y si el clip tiene que moverse ahi.
+        intent = None
+        if path and read_intent is not None:
+            try:
+                intent = read_intent(intent_dir, path)
+            except Exception as intent_error:
+                debug_print(
+                    f"No se pudo leer el intent de {path}: {intent_error}",
+                    level="warning",
+                )
+
+        if intent is not None:
+            total_matched += _apply_intent(intent, path, kind)
+            continue
+
         if is_latest and requested_path:
-            # Modo latest: matchear por el path original del clip y subir version
+            # Marcador latest de FileManager (flujo viejo o fallback): se sube
+            # el clip pero acotado a su rama, nunca al maximo global.
             matched_latest = _find_and_switch_to_latest(requested_path, kind)
             total_matched += matched_latest
             if matched_latest == 0 and path:

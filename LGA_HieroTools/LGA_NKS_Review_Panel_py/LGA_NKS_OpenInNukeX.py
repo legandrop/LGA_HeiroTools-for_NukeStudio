@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_OpenInNukeX v1.31 | Lega
+  LGA_NKS_OpenInNukeX v1.32 | Lega
 
   Abre el script asociado al clip seleccionado en NukeX
   Verifica si hay una version mas reciente y pregunta si desea abrirla
-  
-  
+
+
+  v1.32 - La "version mas reciente" se busca dentro de la RAMA del script. Antes
+          era la mas alta del directorio, asi que con ramas ofrecia abrir el
+          script de otro compositor (v103 de la rama 100 estando en v012).
   v1.31 - Si la version pedida no existe, permite seleccionar otra version disponible
   v1.30 - Obtiene la ruta de NukeX desde la configuracion de LGA_OpenInNukeX
 ____________________________________________________________________
@@ -19,7 +22,16 @@ import os
 import re
 import subprocess
 import socket
+import sys
+from pathlib import Path
+
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+
+# Ramas de version: la mas alta del directorio puede ser de otra rama.
+_shared_dir = Path(__file__).parent.parent / "LGA_NKS_Shared"
+if _shared_dir.exists() and str(_shared_dir) not in sys.path:
+    sys.path.insert(0, str(_shared_dir))
+from LGA_NKS_VersionBranching import head_of_branch_containing
 
 DEBUG = False
 
@@ -231,12 +243,29 @@ def find_all_versions(script_path):
 
 
 def find_latest_version(script_path):
+    """Ultima version del script DENTRO de la rama del script pedido.
+
+    Antes devolvia la mas alta del directorio. Con ramas eso ofrecia abrir
+    el script de otro compositor: parado en v012, un v103 de la rama 100
+    aparecia como "version mas reciente" y no lo es para este trabajo.
+    """
     versions = find_all_versions(script_path)
     if not versions:
         debug_print("No se encontraron versiones validas")
         return None, None
+
+    current_version = get_version_from_filename(os.path.basename(script_path))
+    numbers = [number for number, _path in versions]
+    head = head_of_branch_containing(numbers, current_version)
+    for number, path in versions:
+        if number == head:
+            debug_print(
+                f"Cabeza de la rama de v{current_version}: v{number} en {path}"
+            )
+            return number, path
+
     latest = versions[0]
-    debug_print(f"Version mas alta encontrada: {latest[0]} en {latest[1]}")
+    debug_print(f"Sin cabeza de rama; se usa la mas alta: {latest[0]} en {latest[1]}")
     return latest
 
 

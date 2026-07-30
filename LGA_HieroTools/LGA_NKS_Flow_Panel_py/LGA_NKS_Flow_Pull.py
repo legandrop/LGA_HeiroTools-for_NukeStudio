@@ -1,11 +1,23 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.56 | Lega
+  LGA_NKS_Flow_Pull v3.58 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.58: Ramas de version. La comparacion contra Flow y el salto de version se
+         hacen dentro de la RAMA del clip: find_highest_version_for_task recibe
+         clip_version y change_to_branch_head reemplaza a change_to_highest_version,
+         asi un clip de la rama 0 nunca salta a la rama 100 de otro compositor.
+         Cada rama ajena con novedad agrega su propia fila informativa (New Status
+         "Other branch") que no toca el clip, y la columna v_SG muestra el icono
+         de ramas de PipeSync con el detalle NKS/Flow por rama en el tooltip.
+
+  v3.57: Barrido de nombres viejos de la cola de entrega y comentario sobre por
+         que hiero_status_dict conserva el color de Rev Dir Den (el bump de
+         version quedo sin aplicar en su momento).
 
   v3.56: task_status_dict, los nombres visibles y los colores de review pasan a
          LGA_NKS_Flow_Status_Config. El catalogo NO se filtra por contexto: la DB
@@ -143,6 +155,11 @@ try:
     )
 except ImportError:
     find_editref_clip_at_position = None
+
+
+# Texto de la columna New Status en las filas informativas de otra rama: no
+# hubo cambio de estado, la fila existe solo para avisar de la otra rama.
+OTHER_BRANCH_STATUS_TEXT = "Other branch"
 
 
 def _normalize_flow_login(login):
@@ -424,6 +441,23 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_personal_review_colors,
     get_status_info,
     get_task_status_dict,
+)
+
+# Ramas de version: el maximo global de Flow puede ser de la rama de otro
+# compositor. El Pull compara contra la cabeza de la rama del clip y avisa
+# de las otras ramas con una fila informativa, sin tocar el clip.
+from LGA_NKS_VersionBranching import (
+    compare_branches,
+    format_version,
+    head_of_branch_containing,
+)
+from LGA_NKS_VersionBranchesUI import (
+    BRANCH_COLOR_CONFLICT,
+    BRANCH_COLOR_CURRENT,
+    BRANCH_COLOR_NEUTRAL,
+    branch_icon,
+    branches_tooltip_html,
+    tooltip as branch_tooltip_text,
 )
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
@@ -778,26 +812,78 @@ class ShotGridManager:
                 return t
         return None
 
-    def find_highest_version_for_task(self, shot, task, task_name):
+    def find_highest_version_for_task(self, shot, task, task_name, clip_version=None):
         """Encuentra la version mas alta de una task especifica del shot.
 
         Solo recorre las versiones de esa task: no mezcla comp/roto/cleanup.
         El string devuelto usa el task_name real (no hardcoded a comp).
+
+        Con `clip_version` devuelve la cabeza de la RAMA de ese numero en vez
+        del maximo global: si el clip esta en la rama 0 y otro compositor
+        publico v103 en la rama 100, la referencia de este clip sigue siendo
+        la ultima de la rama 0. Sin `clip_version` mantiene el comportamiento
+        historico (maximo global).
         """
         task_versions = task.get("versions", []) if task else []
         if not task_versions:
             return None
-        highest_version = max(
-            task_versions,
-            key=lambda v: (
-                v["version_number"] if v["version_number"] is not None else 0
-            ),
-        )
+
+        if clip_version is not None:
+            numbers = [
+                v["version_number"]
+                for v in task_versions
+                if v.get("version_number") is not None
+            ]
+            target_number = head_of_branch_containing(numbers, clip_version)
+            highest_version = None
+            for version in task_versions:
+                if version.get("version_number") == target_number:
+                    highest_version = version
+                    break
+            # target_number puede ser la propia version del clip cuando Flow
+            # todavia no tiene nada de esa rama: ahi no hay record que devolver.
+            if highest_version is None:
+                return None
+        else:
+            highest_version = max(
+                task_versions,
+                key=lambda v: (
+                    v["version_number"] if v["version_number"] is not None else 0
+                ),
+            )
         return {
             "version_number": f"{shot['shot_name']}_{task_name}_v{highest_version['version_number']:03d}",
             "version_status": highest_version.get("status", ""),
             "version_description": highest_version.get("description", ""),
         }
+
+    def find_branches_for_task(self, task, clip_version=None, local_versions=None):
+        """Ramas de version de una task: cabeza en Flow, cabeza local y status.
+
+        Envuelve compare_branches() del helper y le agrega el status y la
+        descripcion de la Version de Flow que encabeza cada rama, que es lo
+        unico que sale de la DB y el helper no puede saber.
+        """
+        task_versions = task.get("versions", []) if task else []
+        by_number = {}
+        for version in task_versions:
+            number = version.get("version_number")
+            if number is not None:
+                by_number[number] = version
+
+        if not by_number:
+            return []
+
+        branches = compare_branches(
+            remote_versions=list(by_number.keys()),
+            local_versions=local_versions,
+            current_version=clip_version,
+        )
+        for branch in branches:
+            record = by_number.get(branch["remote_head"], {})
+            branch["status"] = record.get("status", "")
+            branch["description"] = record.get("description", "")
+        return branches
 
     def count_projects(self):
         """Cuenta los proyectos en la DB. Sirve para detectar DB vacia/sin sincronizar.
@@ -1006,6 +1092,11 @@ class GUI_Table(QtWidgets.QDialog):
 
     def _row_matches_push(self, row, clip, file_path, shot_code, task_name):
         nav_data = self.row_navigation_data[row] if row < len(self.row_navigation_data) else {}
+
+        # Fila informativa de otra rama: no es el estado de esta task, asi que
+        # un push no tiene que sobreescribirle las columnas de status.
+        if nav_data.get("is_other_branch"):
+            return False
 
         if clip and nav_data.get("clip") is clip:
             return True
@@ -1438,17 +1529,33 @@ class HieroOperations:
         clip=None,
         sequence=None,
         file_path=None,
+        branch_cells=None,
+        is_other_branch=False,
     ):
+        """Agrega una fila del Pull.
+
+        `branch_cells` (de build_branch_tooltip_cells) pinta el icono de ramas
+        en la columna v_SG con el detalle rama por rama. `is_other_branch`
+        marca las filas informativas: avisan que otra rama tiene novedad y el
+        clip NO se movio.
+        """
         row_count = table.rowCount()
         table.insertRow(row_count)
         # Extraer numeros de version de forma segura
         version_num = extract_version_number(version_number)
         sg_version_num = extract_version_number(sg_version_number)
         # Anadir un espacio al final de cada texto para mejorar la visualizacion
+        # Una version ausente llega literalmente como "-" (filas informativas de
+        # otra rama que no tenemos bajada). No se puede detectar por el numero:
+        # extract_version_number("-") devuelve 0, que es una version valida.
+        version_text = "-" if str(version_number).strip() == "-" else str(version_num)
+        sg_version_text = (
+            "-" if str(sg_version_number).strip() == "-" else str(sg_version_num)
+        )
         shot_item = QTableWidgetItem(shot_code + "   ")
         task_item = QTableWidgetItem(" " + str(task_name) + " ")
-        version_item = QTableWidgetItem(str(version_num))
-        sg_version_item = QTableWidgetItem(str(sg_version_num))
+        version_item = QTableWidgetItem(version_text)
+        sg_version_item = QTableWidgetItem(sg_version_text)
         sg_status_item = QTableWidgetItem(sg_status)
         prev_status_item = QTableWidgetItem(" " + prev_status + " ")
         new_status_item = QTableWidgetItem(new_status)
@@ -1485,6 +1592,27 @@ class HieroOperations:
         new_status_item.setBackground(QBrush(new_status_bg_color))
         new_status_item.setForeground(QBrush(new_status_text_color))
         new_status_item.setTextAlignment(Qt.AlignCenter)
+
+        # Icono de ramas: se muestra SIEMPRE que la task tenga mas de una rama,
+        # igual que el VersionsWidget de PipeSync. El tooltip trae el detalle
+        # NKS/Flow de cada rama; el texto sale de LGA_NKS_VersionBranchesUI.
+        if branch_cells:
+            icon_color = (
+                BRANCH_COLOR_CONFLICT
+                if sg_version_num > version_num
+                else BRANCH_COLOR_CURRENT
+            )
+            icon = branch_icon(icon_color)
+            if icon is not None:
+                sg_version_item.setIcon(icon)
+            branch_html = branches_tooltip_html(branch_cells)
+            if branch_html:
+                sg_version_item.setToolTip(branch_html)
+                version_item.setToolTip(branch_html)
+        if is_other_branch:
+            task_item.setToolTip(branch_tooltip_text("pull_other_branch_row"))
+            new_status_item.setToolTip(branch_tooltip_text("pull_other_branch_row"))
+
         # Anadir los items a la fila
         table.setItem(row_count, 0, shot_item)
         table.setItem(row_count, 1, task_item)
@@ -1527,6 +1655,9 @@ class HieroOperations:
                 or track_for_task_from_registered_tracks(task_name),
                 "timeline_in": timeline_in,
                 "timeline_out": timeline_out,
+                # Las filas informativas de otra rama no representan un estado
+                # de esta task: update_row_after_push las tiene que saltear.
+                "is_other_branch": bool(is_other_branch),
             }
         )
         table.resizeColumnsToContents()
@@ -1838,15 +1969,44 @@ class HieroOperations:
                             current_status = self.get_status_name_by_color(
                                 current_color_hex
                             )
+                            # La referencia de este clip es la cabeza de SU rama,
+                            # no el maximo global de la task: las otras ramas son
+                            # de otro compositor y se avisan aparte.
                             highest_version = sg_manager.find_highest_version_for_task(
-                                shot, task, task_name
+                                shot, task, task_name, clip_version=version_number
+                            )
+                            local_versions = self.local_versions_for_clip(clip)
+                            sg_branches = sg_manager.find_branches_for_task(
+                                task,
+                                clip_version=version_number,
+                                local_versions=local_versions,
                             )
                             if highest_version:
                                 debug_print(
-                                    f"Version mas alta en SG: {highest_version['version_number']}"
+                                    f"Version mas alta de la rama del clip en SG: "
+                                    f"{highest_version['version_number']}"
                                 )
                             else:
-                                debug_print("No se encontro version en SG")
+                                debug_print("No se encontro version en SG para la rama del clip")
+                            if len(sg_branches) > 1:
+                                debug_print(
+                                    "Ramas en SG: "
+                                    + " | ".join(
+                                        f"{branch['label']}-> Flow "
+                                        f"{format_version(branch['remote_head'])} / NKS "
+                                        + (
+                                            format_version(branch["local_head"])
+                                            if branch["local_head"] is not None
+                                            else "-"
+                                        )
+                                        + (
+                                            " (rama del clip)"
+                                            if branch["is_current_branch"]
+                                            else ""
+                                        )
+                                        for branch in sg_branches
+                                    )
+                                )
                             sg_version_str = (
                                 highest_version["version_number"]
                                 if highest_version
@@ -1889,6 +2049,15 @@ class HieroOperations:
                             if is_current_user_review:
                                 row_reason.append("current_user_review")
 
+                            # Ramas ajenas con novedad: se avisan SIEMPRE con una
+                            # fila informativa propia, aunque el estado de la task
+                            # no haya cambiado. El clip no se toca.
+                            other_branch_news = self.collect_other_branch_news(
+                                sg_branches
+                            )
+                            if other_branch_news:
+                                row_reason.append("new_branch")
+
                             if row_reason:
                                 debug_print(
                                     f"Agregando fila Pull para {shot_code} | {task_name}: "
@@ -1900,22 +2069,70 @@ class HieroOperations:
                                     if current_color_hex
                                     else "#000000"
                                 )
-                                self.add_row_to_table(
-                                    table,
-                                    self.gui_table,
-                                    shot_code,
-                                    task_name,
-                                    version_str,
-                                    current_status,
-                                    prev_color_hex,
-                                    task_status_name,
-                                    new_color_hex,
-                                    sg_version_str,
-                                    sg_status,
-                                    clip=clip,
-                                    sequence=seq,
-                                    file_path=file_path,
+                                branch_cells = self.build_branch_tooltip_cells(
+                                    sg_branches
                                 )
+                                # Si lo unico que pasa es que otra rama tiene
+                                # novedad, la fila normal no aporta nada: no hay
+                                # cambio de estado ni de version en ESTA rama.
+                                if row_reason != ["new_branch"]:
+                                    self.add_row_to_table(
+                                        table,
+                                        self.gui_table,
+                                        shot_code,
+                                        task_name,
+                                        version_str,
+                                        current_status,
+                                        prev_color_hex,
+                                        task_status_name,
+                                        new_color_hex,
+                                        sg_version_str,
+                                        sg_status,
+                                        clip=clip,
+                                        sequence=seq,
+                                        file_path=file_path,
+                                        branch_cells=branch_cells,
+                                    )
+                                for branch in other_branch_news:
+                                    # Las versiones se pasan con el mismo formato
+                                    # que produce la DB (`shot_task_v###`): el
+                                    # extract_version_number de este modulo exige
+                                    # el "_v" y con "v103" pelado devolveria 0.
+                                    def _branch_version_label(number):
+                                        if number is None:
+                                            return "-"
+                                        return (
+                                            f"{shot_code}_{task_name}_"
+                                            f"{format_version(number)}"
+                                        )
+
+                                    self.add_row_to_table(
+                                        table,
+                                        self.gui_table,
+                                        shot_code,
+                                        task_name,
+                                        _branch_version_label(branch["local_head"]),
+                                        "-",
+                                        "#8a8a8a",
+                                        OTHER_BRANCH_STATUS_TEXT,
+                                        "#8a8a8a",
+                                        _branch_version_label(branch["remote_head"]),
+                                        branch["status"] or "No info",
+                                        clip=clip,
+                                        sequence=seq,
+                                        file_path=file_path,
+                                        branch_cells=branch_cells,
+                                        is_other_branch=True,
+                                    )
+                                    debug_print(
+                                        f"Fila informativa de rama {branch['label']}: "
+                                        f"SG {format_version(branch['remote_head'])} vs NKS "
+                                        + (
+                                            format_version(branch["local_head"])
+                                            if branch["local_head"] is not None
+                                            else "-"
+                                        )
+                                    )
                                 changes_made = True
                                 # Recordar si el clip estaba offline antes del cambio de versión
                                 was_offline_before_version_change = not clip.source().mediaSource().isMediaPresent()
@@ -1923,8 +2140,10 @@ class HieroOperations:
                                 if sg_version_number > version_number:
                                     # comente esta linea para que no agregue tags amarillos
                                     # self.add_custom_tag_to_clip(clip, "Updated Version", sg_description, "icons:TagYellow.png", assignee)
-                                    highest_version = self.change_to_highest_version(
-                                        clip
+                                    # Solo dentro de la rama del clip: sg_version_number
+                                    # ya es la cabeza de esa rama.
+                                    highest_version = self.change_to_branch_head(
+                                        clip, version_number
                                     )
                                     # Extraer el nuevo numero de version del clip actualizado
                                     if highest_version:
@@ -1985,25 +2204,127 @@ class HieroOperations:
 
         return changes_made
 
-    def get_highest_version(self, binItem):
-        """Obtiene la version mas alta de un binItem."""
-        versions = binItem.items()
-        debug_print(f"Versiones disponibles para {binItem.name()}:")
-        for v in versions:
-            debug_print(f"  - {v.name()}")
+    def local_versions_for_clip(self, clip):
+        """Numeros de version que Hiero ya conoce del clip, sin escanear disco.
+
+        Es a proposito que NO corra doScan: el Pull recorre todos los clips
+        del timeline y un escaneo por clip lo haria lento. Alcanza para saber
+        que ramas tenemos bajadas; lo que falte se muestra como '-'.
+        """
         try:
-            highest_version = max(
-                versions, key=lambda v: extract_version_number(v.name())
-            )
-            debug_print(f"Version mas alta seleccionada: {highest_version.name()}")
-            return highest_version
+            bin_item = clip.source().binItem()
         except Exception as e:
-            debug_print(f"Error al obtener la version mas alta: {e}")
+            debug_print(f"No se pudo obtener binItem para versiones locales: {e}")
+            return []
+        if not bin_item:
+            return []
+        try:
+            return [
+                extract_version_number(version.name()) for version in bin_item.items()
+            ]
+        except Exception as e:
+            debug_print(f"No se pudieron listar versiones locales: {e}")
+            return []
+
+    def collect_other_branch_news(self, sg_branches):
+        """Ramas distintas a la del clip que tienen algo nuevo respecto a NKS.
+
+        La novedad ya viene calculada por compare_branches(); aca solo se
+        filtran las ajenas. Una rama ajena ya bajada no genera fila.
+        """
+        return [
+            branch
+            for branch in sg_branches or []
+            if branch.get("has_news") and not branch.get("is_current_branch")
+        ]
+
+    def build_branch_tooltip_cells(self, sg_branches):
+        """Filas del tooltip de ramas: NKS y Flow por rama, con color de estado.
+
+        Verde = al dia en su rama, rojo = atras dentro de su rama, gris = sin
+        dato. Mismos colores que el VersionsWidget de PipeSync.
+        """
+        if not sg_branches or len(sg_branches) < 2:
+            return []
+
+        cells = []
+        for branch in sg_branches:
+            local_head = branch.get("local_head")
+            flow_head = branch.get("remote_head")
+
+            if local_head is None:
+                local_text = "-"
+                local_color = BRANCH_COLOR_NEUTRAL
+            else:
+                local_text = format_version(local_head)
+                local_color = (
+                    BRANCH_COLOR_CONFLICT
+                    if branch.get("has_news")
+                    else BRANCH_COLOR_CURRENT
+                )
+
+            if flow_head is None:
+                flow_text = "-"
+                flow_color = BRANCH_COLOR_NEUTRAL
+            else:
+                flow_text = format_version(flow_head)
+                flow_color = BRANCH_COLOR_CURRENT
+
+            cells.append(
+                {
+                    "label": branch["label"]
+                    + (" *" if branch.get("is_current_branch") else ""),
+                    "cells": [
+                        ("NKS", local_text, local_color),
+                        ("Flow", flow_text, flow_color),
+                    ],
+                }
+            )
+        return cells
+
+    def get_branch_head_version(self, binItem, clip_version):
+        """Version local mas alta DENTRO de la rama del clip.
+
+        Reemplaza el max() global: si otro compositor bajo la rama 100 a este
+        mismo bin, el clip de la rama 0 no tiene que saltar ahi.
+        """
+        try:
+            versions = list(binItem.items())
+        except Exception as e:
+            debug_print(f"Error listando versiones del binItem: {e}")
+            return None
+        if not versions:
             return None
 
-    def change_to_highest_version(self, clip):
-        """Cambia el clip a la versión mas alta disponible incluso si está offline."""
-        debug_print(f"Cambiando a la version mas alta para el clip: {clip.name()}")
+        debug_print(f"Versiones disponibles para {binItem.name()}:")
+        numbers = []
+        for version in versions:
+            number = extract_version_number(version.name())
+            numbers.append(number)
+            debug_print(f"  - {version.name()} ({format_version(number)})")
+
+        try:
+            target = head_of_branch_containing(numbers, clip_version)
+            debug_print(
+                f"Cabeza de la rama de {format_version(clip_version)}: "
+                f"{format_version(target)}"
+            )
+            for version, number in zip(versions, numbers):
+                if number == target:
+                    debug_print(f"Version seleccionada: {version.name()}")
+                    return version
+            debug_print("La cabeza de la rama no esta entre las versiones locales")
+            return None
+        except Exception as e:
+            debug_print(f"Error al obtener la cabeza de la rama: {e}")
+            return None
+
+    def change_to_branch_head(self, clip, clip_version):
+        """Sube el clip a la cabeza de SU rama, incluso si está offline."""
+        debug_print(
+            f"Cambiando a la cabeza de la rama {format_version(clip_version)} "
+            f"para el clip: {clip.name()}"
+        )
         try:
             # Si el clip está offline seguimos adelante igual: Hiero permite cambiar la
             # versión aunque no haya media presente, por lo que solo lo registramos.
@@ -2030,10 +2351,10 @@ class HieroOperations:
             vc.doScan(activeVersion)
             debug_print(f"doScan completado para clip: {clip.name()}")
 
-            debug_print(f"Obteniendo version mas alta para binItem: {binItem.name()}")
-            highest_version = self.get_highest_version(binItem)
+            debug_print(f"Obteniendo cabeza de rama para binItem: {binItem.name()}")
+            highest_version = self.get_branch_head_version(binItem, clip_version)
             if highest_version:
-                debug_print(f"Version mas alta encontrada: {highest_version.name()}")
+                debug_print(f"Cabeza de rama encontrada: {highest_version.name()}")
                 debug_print(f"Ejecutando setActiveVersion para clip: {clip.name()}")
                 binItem.setActiveVersion(highest_version)
                 debug_print(f"setActiveVersion completado exitosamente para clip: {clip.name()}")
@@ -2061,7 +2382,7 @@ class HieroOperations:
                     else:
                         debug_print(f"Clip sigue offline después del cambio de versión: {clip.name()}")
             else:
-                debug_print("No se pudo determinar la version mas alta")
+                debug_print("No se pudo determinar la cabeza de la rama")
             return highest_version
         except Exception as e:
             debug_print(f"Error cambiando version del clip {clip.name()}: {e}")

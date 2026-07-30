@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Compare_Versions v1.20 | Lega
+  LGA_NKS_Compare_Versions v1.21 | Lega
 
   Crea un nuevo track con una version anterior del clip seleccionado
   y pone al track en modo difference
 
+  v1.21: La version anterior se busca dentro de la RAMA del clip. Antes se
+         ordenaban todas las versiones del bin y se tomaba la de al lado, asi
+         que estando en v100 bajaba a v012, que es la rama de otro compositor
+         y no una version previa de este trabajo.
   v1.20: Centralización del nombre del track usando TRACK_comp_EXR del módulo LGA_NKS_GetClip
 ____________________________________________________________________
 
@@ -22,6 +26,7 @@ utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
 if utils_path.exists():
     sys.path.insert(0, str(utils_path))
     from LGA_NKS_Shared.LGA_NKS_GetClip import TRACK_comp_EXR
+    from LGA_NKS_VersionBranching import branch_containing, extract_version_number
 else:
     # Fallback si no se encuentra el módulo
     TRACK_comp_EXR = "_comp_"
@@ -152,9 +157,16 @@ def self_replace_clip(copied_clip):
 
 
 def scan_and_downgrade_clip_version(clip):
+    """Baja el clip copiado a la version anterior DENTRO de su rama.
+
+    Ordenar todas las versiones y tomar la anterior cruzaba de rama: parado
+    en v100 la "anterior" resultaba ser v012, que no es una version previa
+    de este trabajo sino la punta de la rama de otro compositor.
+    """
+
     def get_all_versions(binItem):
         versions = binItem.items()
-        return sorted(versions, key=lambda v: int(v.name().split("_v")[-1]))
+        return sorted(versions, key=lambda v: extract_version_number(v.name()))
 
     vc = hiero.core.VersionScanner()
     bin_item = clip.source().binItem()
@@ -164,14 +176,21 @@ def scan_and_downgrade_clip_version(clip):
     versions = get_all_versions(bin_item)
     if versions:
         current_version = bin_item.activeVersion()
-        current_version_index = versions.index(current_version)
+        current_number = extract_version_number(current_version.name())
+        numbers = [extract_version_number(v.name()) for v in versions]
+        own_branch = branch_containing(numbers, current_number)
 
-        if current_version_index > 0:
-            previous_version = versions[current_version_index - 1]
+        # Candidatas: solo las de su rama que esten por debajo de la actual.
+        previous_numbers = [n for n in own_branch if n < current_number]
+        if previous_numbers:
+            target = max(previous_numbers)
+            previous_version = next(
+                v for v, n in zip(versions, numbers) if n == target
+            )
             bin_item.setActiveVersion(previous_version)
             print(f"Changed {clip.name()} to version {previous_version.name()}")
         else:
-            print(f"{clip.name()} is already at the oldest version available.")
+            print(f"{clip.name()} is already at the oldest version of its branch.")
     else:
         print(f"No versions found for clip: {clip.name()}")
 

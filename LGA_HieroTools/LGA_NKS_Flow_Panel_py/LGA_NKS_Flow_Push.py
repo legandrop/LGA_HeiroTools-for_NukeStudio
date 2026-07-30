@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.06 | Lega
+  LGA_NKS_Flow_Push v4.07 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -11,6 +11,12 @@ ____________________________________________________________________
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v4.07: El chequeo de version previo al push es por rama. get_clip_versions_from_timeline
+         devuelve la cabeza de la RAMA del clip en vez del maximo global, asi que
+         pushear v012 mientras otro compositor esta en v103 de la rama 100 ya no
+         dispara la advertencia. Cuando hay mas de una rama el dialogo las lista
+         por separado y marca cual es la del clip. Versiones formateadas a 3 digitos.
 
   v4.06: status_translation y task_status_dict salen de LGA_NKS_Flow_Status_Config,
          que es la misma fuente que usa el panel para armar los botones.
@@ -125,6 +131,16 @@ from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_status_translation,
     get_task_status_dict,
+)
+
+# Ramas de version: la version mas alta del bin puede pertenecer a la rama de
+# OTRO compositor, asi que el chequeo previo al push se hace contra la cabeza
+# de la rama del clip y no contra el maximo global.
+from LGA_NKS_VersionBranching import (
+    describe_branches,
+    format_version,
+    has_branches,
+    head_of_branch_containing,
 )
 
 # Reasignar clases para compatibilidad con código existente
@@ -1917,7 +1933,12 @@ def extract_version_number_from_string(version_str):
 def get_clip_versions_from_timeline():
     """
     Obtiene las versiones disponibles del clip seleccionado en el timeline usando la API de Hiero.
-    Retorna: (current_version_number, highest_version_number, all_versions_list)
+    Retorna: (current_version_number, branch_head_version, all_versions_list)
+
+    `branch_head_version` es la cabeza de la RAMA del clip, no el maximo
+    global: si otro compositor esta en la rama 100 y este clip esta en la
+    rama 0, su v012 puede ser perfectamente la ultima de su rama y el push
+    no tiene por que preguntar nada.
     """
     try:
         seq = hiero.ui.activeSequence()
@@ -1971,19 +1992,33 @@ def get_clip_versions_from_timeline():
             else None
         )
 
-        # Encontrar versión más alta
-        highest_version_number = max(version_numbers)
+        # Cabeza de la rama del clip. Sin ramas coincide con max(version_numbers).
+        if current_version_number is None:
+            branch_head_version = max(version_numbers)
+        else:
+            branch_head_version = head_of_branch_containing(
+                version_numbers, current_version_number
+            )
 
         debug_print(
-            f"Versión actual: v{current_version_number:02d}"
+            f"Versión actual: {format_version(current_version_number)}"
             if current_version_number is not None
             else "Versión actual: No detectada"
         )
-        debug_print(f"Versión más alta: v{highest_version_number:02d}")
+        debug_print(
+            f"Cabeza de su rama: {format_version(branch_head_version)} | "
+            f"maximo global: {format_version(max(version_numbers))}"
+        )
+        if has_branches(version_numbers):
+            ramas = " | ".join(
+                f"{branch['label']}->{format_version(branch['head'])}"
+                for branch in describe_branches(version_numbers)
+            )
+            debug_print(f"Ramas detectadas: {ramas}")
 
         return (
             current_version_number,
-            highest_version_number,
+            branch_head_version,
             sorted(version_numbers, reverse=True),
         )
 
@@ -1996,7 +2031,12 @@ def get_clip_versions_from_timeline():
 
 
 class PushVersionDialog(QDialog):
-    """Diálogo personalizado para verificación de versión antes del push"""
+    """Diálogo personalizado para verificación de versión antes del push.
+
+    `highest_version` es la cabeza de la RAMA del clip. Cuando la familia
+    tiene mas de una rama, el detalle se lista rama por rama para que se
+    vea que las otras ramas no son la referencia de este push.
+    """
 
     def __init__(
         self, base_name, current_version, highest_version, all_versions, parent=None
@@ -2020,17 +2060,45 @@ class PushVersionDialog(QDialog):
             r"(_)(v\d+)", r'\1<span style="color: #ff9900;">\2</span>', base_name
         )
 
-        # Lista de versiones disponibles
-        versions_list = ", ".join([f"v{v:02d}" for v in all_versions])
+        # Detalle de versiones: plano si hay una sola rama, agrupado si hay varias.
+        if has_branches(all_versions):
+            branch_lines = []
+            current_branch_head = head_of_branch_containing(
+                all_versions, current_version
+            )
+            for branch in describe_branches(all_versions):
+                is_own_branch = branch["head"] == current_branch_head
+                marca = " &lt;- tu rama" if is_own_branch else ""
+                branch_lines.append(
+                    f"Rama {branch['label']}: "
+                    + ", ".join(format_version(v) for v in branch["versions"])
+                    + marca
+                )
+            versions_detail = (
+                "Ramas detectadas:<br><span style='color: #9c9c9c; font-size: 0.9em;'>"
+                + "<br>".join(branch_lines)
+                + "</span><br>"
+                "<span style='color: #9c9c9c; font-size: 0.9em;'>"
+                "Las versiones de las otras ramas son de otro compositor: "
+                "no son tu proxima version.</span>"
+            )
+            head_label = "Última versión de tu rama"
+        else:
+            versions_detail = (
+                "Versiones disponibles: <span style='color: #9c9c9c; font-size: 0.9em;'>"
+                + ", ".join(format_version(v) for v in all_versions)
+                + "</span>"
+            )
+            head_label = "Última versión disponible"
 
         message_label.setText(
             f"<div style='text-align: center;'>"
             f"<span style='color: #ff9900;'><b>¡Atención!</b></span><br><br>"
             f"La versión que intentas actualizar no es la más reciente:<br><br>"
             f"<span style='font-weight: bold;'>{base_version_highlighted}</span><br><br>"
-            f"Versión actual en timeline: <span style='color: #ff9900;'>v{current_version:02d}</span><br>"
-            f"Última versión disponible: <span style='color: #00ff00;'>v{highest_version:02d}</span><br>"
-            f"Versiones disponibles: <span style='color: #9c9c9c; font-size: 0.9em;'>{versions_list}</span><br><br>"
+            f"Versión actual en timeline: <span style='color: #ff9900;'>{format_version(current_version)}</span><br>"
+            f"{head_label}: <span style='color: #00ff00;'>{format_version(highest_version)}</span><br>"
+            f"{versions_detail}<br><br>"
             f"¿Deseas continuar con el push de la versión actual de todos modos?</div>"
         )
         layout.addWidget(message_label)
@@ -2121,6 +2189,22 @@ def show_flow_version_selection_dialog(base_name, versions):
 
     list_widget = QtWidgets.QListWidget(dialog)
     list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+
+    # Con mas de una rama, cada version se rotula con su rama: v012 y v103 son
+    # trabajos paralelos de dos compositores, no una progresion.
+    branch_by_version = {}
+    all_numbers = []
+    for version in versions:
+        try:
+            all_numbers.append(int(version.get("version_number")))
+        except (TypeError, ValueError):
+            continue
+    version_branches = describe_branches(all_numbers)
+    if len(version_branches) > 1:
+        for branch in version_branches:
+            for number in branch["versions"]:
+                branch_by_version[number] = branch["label"]
+
     for version in versions:
         version_number = version.get("version_number")
         if version_number is None:
@@ -2131,6 +2215,9 @@ def show_flow_version_selection_dialog(base_name, versions):
             continue
 
         version_label = version.get("version_label") or f"v{version_number:03d}"
+        branch_label_text = branch_by_version.get(version_number)
+        if branch_label_text:
+            version_label = f"{version_label} [{branch_label_text}]"
         user_name = version.get("user_name") or "Desconocido"
         created_at = str(version.get("created_at") or "")
         created_short = created_at.replace("T", " ")[:16] if created_at else ""
@@ -2276,20 +2363,24 @@ def Push_Task_Status(
     ):
         debug_print("=== Verificando versiones del timeline antes del push ===")
 
-        # Obtener versiones del clip seleccionado
+        # Obtener versiones del clip seleccionado. highest_version es la cabeza
+        # de la RAMA del clip: pushear v012 estando otro compositor en v103 de
+        # la rama 100 no dispara ninguna advertencia.
         current_version, highest_version, all_versions = (
             get_clip_versions_from_timeline()
         )
 
         if current_version is not None and highest_version is not None:
             debug_print(
-                f"Versión actual detectada: v{current_version:02d}, Versión más alta: v{highest_version:02d}"
+                f"Versión actual detectada: {format_version(current_version)}, "
+                f"cabeza de su rama: {format_version(highest_version)}"
             )
 
-            # Si la versión actual no es la más alta, mostrar diálogo de advertencia
+            # Si la versión actual no es la cabeza de su rama, advertir
             if current_version < highest_version:
                 debug_print(
-                    f"⚠️  ADVERTENCIA: La versión actual (v{current_version:02d}) no es la más alta (v{highest_version:02d})"
+                    f"⚠️  ADVERTENCIA: La versión actual ({format_version(current_version)}) "
+                    f"no es la cabeza de su rama ({format_version(highest_version)})"
                 )
 
                 # Construir base_name con versión para el diálogo
@@ -2298,7 +2389,7 @@ def Push_Task_Status(
                     part.startswith("v") and part[1:].isdigit()
                     for part in base_name.split("_")
                 ):
-                    version_base_name = f"{base_name}_v{current_version:02d}"
+                    version_base_name = f"{base_name}_{format_version(current_version)}"
 
                 # Mostrar diálogo personalizado
                 app = QApplication.instance()
@@ -2324,13 +2415,13 @@ def Push_Task_Status(
                     debug_resumen_print("⚠️  RESULTADO: OPERACIÓN CANCELADA")
                     debug_resumen_print("")
                     debug_resumen_print(
-                        "El usuario canceló porque la versión actual no es la más reciente."
+                        "El usuario canceló porque la versión actual no es la cabeza de su rama."
                     )
                     debug_resumen_print(
-                        f"Versión actual en timeline: v{current_version:02d}"
+                        f"Versión actual en timeline: {format_version(current_version)}"
                     )
                     debug_resumen_print(
-                        f"Última versión disponible: v{highest_version:02d}"
+                        f"Última versión de su rama: {format_version(highest_version)}"
                     )
                     debug_resumen_print("")
                     debug_resumen_print("Ningún cambio se aplicó en Flow.")
@@ -2349,7 +2440,7 @@ def Push_Task_Status(
                     debug_resumen_print("⚠️  RESULTADO: OPERACIÓN CANCELADA")
                     debug_resumen_print("")
                     debug_resumen_print(
-                        "El usuario canceló porque la versión actual no es la más reciente."
+                        "El usuario canceló porque la versión actual no es la cabeza de su rama."
                     )
                     debug_resumen_print("=" * 70)
                     print_debug_messages()
@@ -2359,7 +2450,8 @@ def Push_Task_Status(
                     debug_print("Usuario confirmó continuar con la versión actual")
             else:
                 debug_print(
-                    f"✓ Versión actual (v{current_version:02d}) es la más alta, continuando sin advertencia"
+                    f"✓ Versión actual ({format_version(current_version)}) es la cabeza "
+                    "de su rama, continuando sin advertencia"
                 )
         else:
             debug_print(

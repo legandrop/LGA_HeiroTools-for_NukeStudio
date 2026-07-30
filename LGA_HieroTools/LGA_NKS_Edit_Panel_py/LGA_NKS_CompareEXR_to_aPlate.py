@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CompareEXR_to_aPlate v1.14 | Lega
+  LGA_NKS_CompareEXR_to_aPlate v1.15 | Lega
 
   Compara los rangos de frames de los clips del track especificado (por defecto _comp_) con
   los clips correspondientes del track aPlate para verificar coincidencias.
 
+  v1.15: Ramas de version. get_highest_version + change_to_highest_version (copia
+         del Pull, sin uso actual) se reemplazan por change_to_branch_head, que
+         usa LGA_NKS_ClipVersions y no cruza de rama.
   v1.14: Actualizado para ser compatible con ambos sistemas de nomenclatura:
          - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
          - PROYECTO_SEQ_SHOT (3 bloques simplificado)
@@ -43,6 +46,9 @@ def debug_print(*message):
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
 if utils_path.exists():
     sys.path.insert(0, str(utils_path))
+    # Cambio de version acotado a la rama del clip (ver LGA_NKS_ClipVersions).
+    from LGA_NKS_ClipVersions import switch_clip_to_version
+
     from LGA_NKS_Shared.LGA_NKS_GetClip import get_clips_to_process
 
     # Sincronizar el debug con el módulo utilitario
@@ -402,28 +408,14 @@ class HieroOperations:
 
         return base_identifier, version_str
 
-    def get_highest_version(self, binItem):
-        """Obtiene la version mas alta de un binItem - COPIADO EXACTO del Pull"""
-        versions = binItem.items()
-        try:
-            highest_version = max(
-                versions, key=lambda v: extract_version_number(v.name())
-            )
-            return highest_version
-        except Exception as e:
-            debug_print(f"Error al obtener la version mas alta: {e}")
-            return None
+    def change_to_branch_head(self, clip):
+        """Sube el clip a la cabeza de SU rama.
 
-    def change_to_highest_version(self, clip):
-        """Cambia el clip a la version mas alta disponible - COPIADO EXACTO del Pull"""
-        binItem = clip.source().binItem()
-        activeVersion = binItem.activeVersion()
-        vc = hiero.core.VersionScanner()
-        vc.doScan(activeVersion)
-        highest_version = self.get_highest_version(binItem)
-        if highest_version:
-            binItem.setActiveVersion(highest_version)
-        return highest_version
+        Antes era una copia del max() global del Pull: con ramas podia
+        saltar el clip a la rama de otro compositor. Hoy nadie la llama,
+        pero queda con la regla correcta para el que la use.
+        """
+        return switch_clip_to_version(clip, debug=debug_print)
 
     def add_custom_tag_to_clip(self, clip, tag_name, tag_description, tag_icon):
         """Anade un tag personalizado a un clip - COPIADO del Pull"""

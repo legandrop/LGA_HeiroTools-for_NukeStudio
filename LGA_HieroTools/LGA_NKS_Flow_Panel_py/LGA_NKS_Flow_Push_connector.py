@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.05 | Lega
+  LGA_NKS_Flow_Push_connector v1.06 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -10,6 +10,11 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
+
+  v1.06: Ramas de version. Cuando la version exacta del clip no existe en Flow, el
+         fallback a "la mas alta" se limita a la cabeza de la RAMA del clip
+         (find_highest_version_for_shot recibe clip_version). Antes podia colgar la
+         nota de la version de otro compositor: v103 de la rama 100 estando en v012.
 
   v1.05: status_translation sale de LGA_NKS_Flow_Status_Config en vez de una copia
          propia que ya se habia desincronizado de la del panel.
@@ -90,6 +95,10 @@ except ImportError as e:
     # No hay fallback local: el conector depende de LGA_NKS_Flow_NamingUtils.
     debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Flow_NamingUtils no disponible")
     raise
+
+# Ramas de version: el fallback a "la mas alta" tiene que quedarse en la rama
+# del clip, si no la nota se cuelga de la version de otro compositor.
+from LGA_NKS_VersionBranching import head_of_branch_containing
 
 
 # Traduccion label -> codigo de Flow. Fuente unica compartida con el panel y con
@@ -175,10 +184,15 @@ class ShotGridManager:
             debug_print(f"Error buscando tareas para shot_id {shot_id}: {e}")
             return []
 
-    def find_highest_version_for_shot(self, shot_id, task_name="comp"):
+    def find_highest_version_for_shot(self, shot_id, task_name="comp", clip_version=None):
         """
         Busca la versión más alta para un shot filtrando por la task indicada.
         Para 'comp' también acepta el alias '_cmp_'.
+
+        Con `clip_version` devuelve la cabeza de la RAMA de ese numero en vez
+        del maximo global. Se usa como fallback cuando la version exacta del
+        clip no existe en Flow: sin esto la nota podia terminar colgada de la
+        version de otro compositor (v103 de la rama 100 estando en v012).
         """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
@@ -209,7 +223,19 @@ class ShotGridManager:
                 m = re.search(r"_v(\d+)", v["code"])
                 return int(m.group(1)) if m else -1
 
-            highest_version = max(matching_versions, key=safe_version_num)
+            if clip_version is not None:
+                numbers = [safe_version_num(v) for v in matching_versions]
+                target = head_of_branch_containing(numbers, clip_version)
+                highest_version = next(
+                    (
+                        version
+                        for version, number in zip(matching_versions, numbers)
+                        if number == target
+                    ),
+                    max(matching_versions, key=safe_version_num),
+                )
+            else:
+                highest_version = max(matching_versions, key=safe_version_num)
             m = re.search(r"_v(\d+)", highest_version["code"])
             version_number = m.group(1) if m else "0"
             user_id = (
@@ -792,7 +818,9 @@ def execute_full_push_operation(
                 f"para task '{task_name}', usando versión más alta como fallback"
             )
             sg_specific_version, sg_version_number_str, user_id = (
-                sg_manager.find_highest_version_for_shot(shot["id"], task_name)
+                sg_manager.find_highest_version_for_shot(
+                    shot["id"], task_name, clip_version=version_number
+                )
             )
 
         if not sg_specific_version:
