@@ -2,13 +2,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.25 | Lega
+  LGA_NKS_Projects_Panel v2.26 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (alineado a la derecha del contador) visible para lega@wanka.tv.
+
+  v2.26: Los colores de proyecto salen de la DB de PipeSync del contexto activo.
+         Se elimino la seccion [Colors] del .ini y la edicion de colores del panel
+         de settings, que ahora los muestra read-only.
 
   v2.25: El switch de contexto avisa a los demas paneles por LGA_NKS_ContextSwitch
          y el login de PipeSync normal pasa a leerse memoizado (se resolvia dos
@@ -43,6 +47,10 @@ from LGA_NKS_Shared.LGA_NKS_ContextSwitch import (
     get_normal_login,
     notify as notify_context_change,
 )
+from LGA_NKS_Shared.LGA_NKS_Project_Colors_Config import (
+    get_project_colors_db_path,
+    load_project_colors as load_project_colors_from_db,
+)
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -76,44 +84,34 @@ AUTO_REFRESH_OPTIONS = {
     "2h": 120,
 }
 
-# Configuración de colores desde archivo .ini
+# Colores de proyecto, tomados de la DB de PipeSync del contexto activo.
+# No hay copia local: si PipeSync no sincronizo, el panel usa el color por defecto.
 PROJECT_COLORS = {}
 
 
 def load_project_colors():
-    """Carga los colores de proyectos desde el archivo .ini"""
+    """Carga los colores de proyectos desde la pipesync_stats.db del contexto activo"""
     global PROJECT_COLORS
     PROJECT_COLORS.clear()
-    debug_print("🔧 Iniciando carga de colores desde .ini...")
-
-    ini_path = Path(__file__).parent / "LGA_NKS_Projects_Panel.ini"
-    debug_print(f"📁 Ruta del archivo .ini: {ini_path}")
-    debug_print(f"📁 Archivo .ini existe: {ini_path.exists()}")
-
-    if not ini_path.exists():
-        debug_print(f"❌ Archivo de configuración no encontrado: {ini_path}")
-        return
+    debug_print("🔧 Iniciando carga de colores desde PipeSync...")
 
     try:
-        config = configparser.ConfigParser()
-        config.read(ini_path, encoding='utf-8')
-        debug_print("📖 Archivo .ini leído correctamente")
+        db_path = get_project_colors_db_path()
+        debug_print(f"📁 DB de PipeSync: {db_path}")
+        debug_print(f"📁 DB existe: {os.path.exists(db_path)}")
 
-        if 'Colors' in config:
-            debug_print("🎨 Sección [Colors] encontrada")
-            for project_name, color in config['Colors'].items():
-                clean_name = project_name.strip().upper()  # Convertir a mayúsculas
-                clean_color = color.strip()
-                PROJECT_COLORS[clean_name] = clean_color
-                debug_print(f"✅ Color cargado para {clean_name}: {clean_color}")
-        else:
-            debug_print("❌ Sección [Colors] no encontrada en el archivo .ini")
+        PROJECT_COLORS.update(load_project_colors_from_db())
 
         debug_print(f"📊 Total colores cargados: {len(PROJECT_COLORS)}")
         debug_print(f"📋 Colores cargados: {sorted(PROJECT_COLORS.keys())}")
+        if not PROJECT_COLORS:
+            debug_print(
+                "⚠️ Sin colores: PipeSync no sincronizo este contexto o la DB no tiene "
+                "project_settings_cache. Los proyectos se muestran con el color por defecto."
+            )
 
     except Exception as e:
-        debug_print(f"💥 Error al cargar configuración de colores: {e}")
+        debug_print(f"💥 Error al cargar colores desde PipeSync: {e}")
         import traceback
         debug_print(f"Traceback: {traceback.format_exc()}")
 
@@ -154,8 +152,8 @@ def get_project_colors(project_name):
         debug_print(f"✅ Proyecto '{project_name}' encontrado - Base: {base_color}, Hover: {hover_color}")
         return base_color, hover_color
     else:
-        # Colores por defecto
-        debug_print(f"⚪ Proyecto '{project_name}' no encontrado en .ini - Usando colores por defecto")
+        # Color por defecto: el proyecto no esta en la DB de PipeSync o no tiene color
+        debug_print(f"⚪ Proyecto '{project_name}' sin color en PipeSync - Usando color por defecto")
         return "#cccccc", "#ffffff"
 
 
@@ -312,6 +310,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.content_stack = None
         self.projects_container = None
         self.settings_widget = None
+        self.settings_list_layout = None
         self.settings_rows = []
         self.settings_timer_dropdown = None
         self.auto_refresh_timer = QtCore.QTimer(self)
@@ -426,6 +425,9 @@ class ProjectsPanel(QtWidgets.QWidget):
         ScanManager.on_scan_error(self, error_msg)
 
     def update_projects_display(self):
+        # Se releen los colores en cada display para que un cambio hecho en PipeSync
+        # se vea con un Refresh, sin reiniciar Hiero.
+        load_project_colors()
         ProjectHandler.update_projects_display(self)
         # Siempre volver a la vista principal después de actualizar
         self.show_projects_view()
@@ -437,10 +439,10 @@ class ProjectsPanel(QtWidgets.QWidget):
         """Recarga el panel usando el script externo de smart reload"""
         debug_print("🔄 BOTÓN REIMPORT PRESIONADO - Iniciando recarga del panel...")
         try:
-            # 🔄 RECARGAR COLORES DESDE .INI ANTES DEL RELOAD
-            debug_print("🔄 Recargando colores desde .ini antes del reimport...")
+            # 🔄 RECARGAR COLORES DESDE PIPESYNC ANTES DEL RELOAD
+            debug_print("🔄 Recargando colores desde PipeSync antes del reimport...")
             load_project_colors()
-            debug_print("✅ Colores recargados desde .ini")
+            debug_print("✅ Colores recargados desde PipeSync")
 
             script_path = os.path.join(
                 os.path.dirname(__file__), "LGA_NKS_Projects_Panel_py", "LGA_NKS_Projects_Panel_Smart_Reload.py"
@@ -472,6 +474,10 @@ class ProjectsPanel(QtWidgets.QWidget):
     def show_settings_view(self):
         if not self.settings_widget:
             self._build_settings_view()
+        else:
+            # La vista se construye una sola vez, pero los colores viven en la DB de
+            # PipeSync y pueden haber cambiado desde la ultima apertura.
+            self._populate_settings_colors()
         if self.content_stack and self.settings_widget:
             self.content_stack.setCurrentWidget(self.settings_widget)
             # Actualizar la etiqueta de cuenta regresiva cada vez que se muestra settings
@@ -570,10 +576,16 @@ class ProjectsPanel(QtWidgets.QWidget):
         # Línea en blanco antes del título de projects colors
         layout.addWidget(QtWidgets.QLabel(""))
 
-        # Projects colors list
+        # Projects colors list. Es SOLO VISIBILIDAD: los colores salen de la DB de
+        # PipeSync y se editan en su Project Settings tab, para que sean los mismos
+        # en todas las maquinas.
         colors_label = QtWidgets.QLabel("Project colors")
         colors_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #d8d8d8;")
         layout.addWidget(colors_label)
+
+        colors_hint = QtWidgets.QLabel("Read-only. Se editan en PipeSync > Project Settings.")
+        colors_hint.setStyleSheet("color: #888888; font-size: 11px;")
+        layout.addWidget(colors_hint)
 
         self.settings_rows = []
         self.settings_list_container = QtWidgets.QWidget()
@@ -582,36 +594,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.settings_list_layout.setSpacing(4)  # Reducir espacios entre filas de colores
         layout.addWidget(self.settings_list_container)
 
-        for name, color in sorted(PROJECT_COLORS.items()):
-            self._add_settings_row(name, color)
-
-        # Aplicar estilo dinámico al botón Add project con color gris oscuro
-        add_button_style = "#3f3f3f"
-        add_border_color = calculate_dynamic_border(add_button_style)
-        add_hover_color = calculate_dynamic_hover(add_button_style)
-
-        add_button_stylesheet = f"""
-            QPushButton {{
-                background-color: {add_button_style};
-                border: 1px solid {add_border_color};
-                border-radius: 3px;
-                color: #d8d8d8;
-                padding: 0px 0px;
-                min-height: 24px;
-            }}
-            QPushButton:hover {{
-                background-color: {add_hover_color};
-            }}
-            QPushButton:pressed {{
-                background-color: {add_button_style}aa;
-            }}
-        """
-
-        add_button = QtWidgets.QPushButton("+ Add project")
-        add_button.setFixedWidth(188)  # Ancho para el botón
-        add_button.setStyleSheet(add_button_stylesheet)
-        add_button.clicked.connect(lambda: self._add_settings_row("", "#cccccc"))
-        layout.addWidget(add_button)
+        self._populate_settings_colors()
 
         # Línea en blanco antes de los botones Cancel y Save
         layout.addWidget(QtWidgets.QLabel(""))
@@ -667,125 +650,70 @@ class ProjectsPanel(QtWidgets.QWidget):
         if self.content_stack:
             self.content_stack.addWidget(self.settings_widget)
 
+    def _populate_settings_colors(self):
+        """Rellena la lista read-only de colores con lo que hay ahora en PipeSync."""
+        if not self.settings_list_layout:
+            return
+
+        for i in reversed(range(self.settings_list_layout.count())):
+            item = self.settings_list_layout.itemAt(i)
+            if item.widget():
+                item.widget().setParent(None)
+        self.settings_rows = []
+
+        load_project_colors()
+
+        if PROJECT_COLORS:
+            for name, color in sorted(PROJECT_COLORS.items()):
+                self._add_settings_row(name, color)
+            return
+
+        # Sin esto el vacio se leeria como "no hay proyectos con color asignado",
+        # cuando en realidad lo que falta es el sync de PipeSync de este contexto.
+        empty_label = QtWidgets.QLabel("Sin colores: PipeSync todavía no sincronizó este contexto.")
+        empty_label.setStyleSheet("color: #888888; font-style: italic; font-size: 12px;")
+        empty_label.setWordWrap(True)
+        self.settings_list_layout.addWidget(empty_label)
+
     def _add_settings_row(self, name, color):
+        """Fila read-only: nombre del proyecto y su swatch de color, tal como vienen de PipeSync."""
         row_widget = QtWidgets.QWidget()
         row_layout = QtWidgets.QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)  # Espacio de 3px entre elementos de cada fila
+        row_layout.setSpacing(8)
 
-        name_edit = QtWidgets.QLineEdit(name)
-        name_edit.setPlaceholderText("Project name (e.g. BRDA)")
-        name_edit.setFixedWidth(140)
+        name_label = QtWidgets.QLabel(name)
+        name_label.setFixedWidth(140)
+        name_label.setStyleSheet("color: #d8d8d8; font-size: 12px;")
 
-        # Aplicar estilo dinámico al botón de color manteniendo el color actual
-        color_border_color = calculate_dynamic_border(color)
-        color_hover_color = calculate_dynamic_hover(color)
+        swatch_border_color = calculate_dynamic_border(color)
+        swatch = QtWidgets.QLabel()
+        swatch.setFixedSize(16, 16)
+        swatch.setStyleSheet(
+            f"background-color: {color}; border: 1px solid {swatch_border_color}; border-radius: 3px;"
+        )
+        swatch.setToolTip(f"Color de {name} en PipeSync: {color}")
 
-        color_button_stylesheet = f"""
-            QPushButton {{
-                background-color: {color};
-                border: 1px solid {color_border_color};
-                border-radius: 3px;
-                color: #d8d8d8;
-                padding: 0px 0px;
-            }}
-            QPushButton:hover {{
-                background-color: {color_hover_color};
-            }}
-            QPushButton:pressed {{
-                background-color: {color}aa;
-            }}
-        """
+        hex_label = QtWidgets.QLabel(color)
+        hex_label.setStyleSheet("color: #888888; font-size: 11px;")
 
-        color_btn = QtWidgets.QPushButton()
-        color_btn.setFixedSize(16, 16)
-        color_btn.setStyleSheet(color_button_stylesheet)
-
-        def pick_color():
-            dlg = QtWidgets.QColorDialog(QtGui.QColor(color_btn.palette().button().color()))
-            dlg.setOption(QtWidgets.QColorDialog.ShowAlphaChannel, False)
-            if dlg.exec_():
-                chosen = dlg.selectedColor().name()
-                # Aplicar el nuevo estilo dinámico con el color elegido
-                new_border_color = calculate_dynamic_border(chosen)
-                new_hover_color = calculate_dynamic_hover(chosen)
-                new_stylesheet = f"""
-                    QPushButton {{
-                        background-color: {chosen};
-                        border: 1px solid {new_border_color};
-                        border-radius: 3px;
-                        color: #d8d8d8;
-                        padding: 0px 0px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {new_hover_color};
-                    }}
-                    QPushButton:pressed {{
-                        background-color: {chosen}aa;
-                    }}
-                """
-                color_btn.setStyleSheet(new_stylesheet)
-
-        color_btn.clicked.connect(pick_color)
-
-        # Aplicar estilo dinámico al botón delete con color rojo no saturado
-        delete_button_style = "#a33333"
-        delete_border_color = calculate_dynamic_border(delete_button_style)
-        delete_hover_color = calculate_dynamic_hover(delete_button_style)
-
-        delete_button_stylesheet = f"""
-            QPushButton {{
-                background-color: {delete_button_style};
-                border: 1px solid {delete_border_color};
-                border-radius: 3px;
-                color: #d8d8d8;
-                padding: 0px 0px;
-            }}
-            QPushButton:hover {{
-                background-color: {delete_hover_color};
-            }}
-            QPushButton:pressed {{
-                background-color: {delete_button_style}aa;
-            }}
-        """
-
-        delete_btn = QtWidgets.QPushButton("✕")
-        delete_btn.setFixedSize(16, 16)
-        delete_btn.setStyleSheet(delete_button_stylesheet)
-
-        def delete_row():
-            self.settings_list_layout.removeWidget(row_widget)
-            row_widget.deleteLater()
-            self.settings_rows[:] = [r for r in self.settings_rows if r["widget"] != row_widget]
-
-        delete_btn.clicked.connect(delete_row)
-
-        row_layout.addWidget(name_edit)
-        row_layout.addWidget(color_btn)
-        row_layout.addWidget(delete_btn)
+        row_layout.addWidget(name_label)
+        row_layout.addWidget(swatch)
+        row_layout.addWidget(hex_label)
         row_layout.addStretch(1)
 
         self.settings_list_layout.addWidget(row_widget)
-        self.settings_rows.append({"widget": row_widget, "name": name_edit, "color_btn": color_btn})
+        self.settings_rows.append({"widget": row_widget, "name": name, "color": color})
 
     def _on_settings_cancel(self):
         self.show_projects_view()
 
     def _on_settings_save(self):
+        # Lo unico editable del panel de settings es el intervalo: los colores son
+        # read-only y se editan en PipeSync.
         interval_key = self.settings_timer_dropdown.currentData()
         self._save_auto_refresh_interval(interval_key)
 
-        # Leer colores
-        new_colors = {}
-        for row in self.settings_rows:
-            name = row["name"].text().strip().upper()
-            if not name:
-                continue
-            color = row["color_btn"].palette().button().color().name()
-            new_colors[name] = color
-
-        self._save_colors_to_ini(new_colors)
-        load_project_colors()
         self._apply_auto_refresh_interval(interval_key)
         self.show_projects_view()
         self.start_scan()
@@ -842,19 +770,6 @@ class ProjectsPanel(QtWidgets.QWidget):
             return
         minutes = max(1, int(round(remaining_ms / 60000.0)))
         self.next_refresh_label.setText(f"Next in: {minutes} min")
-
-    def _save_colors_to_ini(self, colors_dict):
-        ini_path = Path(__file__).parent / "LGA_NKS_Projects_Panel.ini"
-        config = configparser.ConfigParser()
-        if ini_path.exists():
-            config.read(ini_path, encoding="utf-8")
-        if "Colors" not in config:
-            config["Colors"] = {}
-        config["Colors"].clear()
-        for name, color in colors_dict.items():
-            config["Colors"][name] = color
-        with open(ini_path, "w", encoding="utf-8") as f:
-            config.write(f)
 
 
 # Crear la instancia del widget y añadirlo al gestor de ventanas de Hiero

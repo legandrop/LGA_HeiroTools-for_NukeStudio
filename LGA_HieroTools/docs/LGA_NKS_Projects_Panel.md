@@ -22,7 +22,8 @@
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel.
-- `LGA_NKS_Projects_Panel.ini` - Configuracion (colores por proyecto y auto-refresh interval para re-escaneos periodicos).
+- `LGA_NKS_Projects_Panel.ini` - Configuracion. Solo queda `[General] AutoRefreshInterval` para los re-escaneos periodicos; la seccion `[Colors]` se elimino.
+- `LGA_NKS_Shared/LGA_NKS_Project_Colors_Config.py` - `load_project_colors()`, `find_project_color()`, `get_project_colors_db_path()`. Lee los colores de proyecto de la `pipesync_stats.db` del contexto activo.
 - `LGA_NKS_Shared/LGA_QtAdapter_HieroTools.py` - Adapter Qt obligatorio.
 
 ## Flujo y funcionalidades
@@ -30,7 +31,9 @@
 - Nuke 16: se usa `QTimer.singleShot(500ms)` para esperar que Qt este completamente inicializado antes de ejecutar threads.
 - Proyectos: se listan alfabeticamente con version mas alta. Click abre con `hiero.core.openProject()`.
 - Una carpeta `*_SUP` puede tener mas de un proyecto (por ejemplo `ERSO_SUP_v040.hrox` y `ERSO_Breakdown_v004.hrox`): los `.hrox` se agrupan por nombre base ignorando version y sufijos (`_Mac`), y cada grupo entra a la lista como un proyecto propio con su version mas alta.
-- Colores: cada item lleva `project_key`, el proyecto de trabajo tomado de la carpeta `VFX-<proyecto>` de la ruta. Es la clave que se busca en la seccion `[Colors]` del `.ini`, asi que todos los `.hrox` de una misma carpeta VFX comparten color aunque tengan nombres base distintos.
+- Colores: cada item lleva `project_key`, el proyecto de trabajo tomado de la carpeta `VFX-<proyecto>` de la ruta, asi que todos los `.hrox` de una misma carpeta VFX comparten color aunque tengan nombres base distintos.
+- El color de cada proyecto sale de PipeSync, no de este repo. La fuente de verdad es Flow (`Project.sg_pipesync_project_settings_json`, campo `project_color`) y PipeSync lo cachea en la tabla `project_settings_cache` de `pipesync_stats.db`; los nombres salen de la tabla `projects`. Se lee la DB del contexto activo (`cache/` en studio, `cacheClient/` en client), read-only.
+- Si PipeSync no sincronizo ese contexto, o el proyecto no figura en la DB, el item usa el color por defecto `#cccccc`. No hay fallback local: los colores se editan en PipeSync > Project Settings para que sean iguales en todas las maquinas.
 - Update automatico: proyectos abiertos muestran boton `Update` cuando existe version mas nueva en disco.
 - Secuencias: solo de proyectos abiertos. Click llama `switch_to_sequence_hybrid()` y usa `hiero.ui.openInTimeline()` con el objeto `Sequence`.
 - En el cambio de secuencia se ejecuta un pre-cleanup sobre el timeline nuevo antes de los ajustes finales de UI: elimina tracks NukeVFX y extiende BurnIn hasta el ultimo clip visible.
@@ -70,8 +73,8 @@
 - Etiqueta inferior con resumen de conteos.
 - Vista de `Settings`:
   - Dropdown `Auto-refresh interval`: `never`, `5min`, `10min`, `15min`, `30min`, `1h`, `2h`
-  - Lista editable de proyectos desde el `.ini`: nombre y selector de color
-  - Botones `Cancel` y `Save`
+  - Lista READ-ONLY `Project colors`: nombre, swatch y hex de cada proyecto segun PipeSync. No se edita aca; si la DB no tiene datos se muestra el motivo en vez de una lista vacia. Se repuebla cada vez que se abre la vista.
+  - Botones `Cancel` y `Save`. `Save` solo guarda el intervalo.
 
 ## Compatibilidad Qt (Nuke 15/16)
 Usar siempre el adapter:
