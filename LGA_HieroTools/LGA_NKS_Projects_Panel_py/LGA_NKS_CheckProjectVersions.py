@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.82 | Lega
+  LGA_NKS_CheckProjectVersions v1.83 | Lega
 
   Chequea versiones de todos los proyectos abiertos en Hiero
 
+  v1.83: encontrar_version_mas_alta solo mira archivos del MISMO proyecto: el glob por
+         prefijo tomaba ERSO_BREAKDOWN_v05 como version nueva de ERSO_v001
   v1.82: Conectado al logger compartido del Projects Panel y removidos prints directos en flujos de UI
 ____________________________________________________________________
 
@@ -14,7 +16,6 @@ import hiero.core
 import hiero.ui
 import re
 import os
-import glob
 import datetime
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
@@ -159,35 +160,47 @@ def comparar_versiones(version1, version2):
         return version1  # En caso de error, devuelve la primera versión
 
 
+def obtener_clave_proyecto_archivo(ruta):
+    """Clave que identifica al proyecto de un .hrox, ignorando version y sufijos.
+
+    'ERSO_v000' y 'ERSO_v001' comparten clave, y tambien 'ERSO_v41_Mac'.
+    'ERSO_BREAKDOWN_v05' NO, aunque el nombre empiece igual.
+    """
+    if not ruta:
+        return ""
+
+    stem = os.path.splitext(os.path.basename(ruta))[0]
+
+    # Version al final del nombre, con o sin sufijo no numerico ("_Mac")
+    match = re.match(r"^(.+?)(?:_|-)v?\d+(?:(?:_|-)[^\d]*)?$", stem)
+    if match:
+        return match.group(1).casefold()
+
+    return stem.casefold()
+
+
 def encontrar_version_mas_alta(ruta_actual):
-    """Encuentra la ruta del archivo con la versión más alta en la misma carpeta"""
+    """Encuentra la ruta del archivo con la versión más alta del MISMO proyecto"""
     if not ruta_actual or not os.path.exists(ruta_actual):
         return "No disponible"
 
     try:
         # Obtener la carpeta que contiene el archivo actual
         directorio = os.path.dirname(ruta_actual)
+        clave_actual = obtener_clave_proyecto_archivo(ruta_actual)
+        if not clave_actual:
+            return "No detectada"
 
-        # Obtener el nombre base del proyecto (sin versión ni extensión)
-        nombre_archivo = os.path.basename(ruta_actual)
-
-        # Extraer la parte base del nombre (antes de la versión)
-        base_match = re.match(r"(.+?)(?:_|-)?v?\d+\.hrox$", nombre_archivo)
-        if not base_match:
-            base_match = re.match(r"(.+?)\.hrox$", nombre_archivo)
-            if not base_match:
-                return "No detectada"
-
-        base_nombre = base_match.group(1)
-
-        # Buscar todos los archivos .hrox en el directorio con el mismo nombre base
-        patron_busqueda = os.path.join(directorio, f"{base_nombre}*v*.hrox")
-        archivos = glob.glob(patron_busqueda)
-
-        # Si no encuentra con el patrón v*.hrox, intentar con cualquier número
-        if not archivos:
-            patron_busqueda = os.path.join(directorio, f"{base_nombre}*[0-9]*.hrox")
-            archivos = glob.glob(patron_busqueda)
+        # Se listan los .hrox de la carpeta y se filtran por clave de proyecto.
+        # Antes se buscaba con un glob por prefijo ("ERSO*v*.hrox") que tambien
+        # matcheaba ERSO_BREAKDOWN_v05 y devolvia como "version mas nueva de ERSO"
+        # un archivo de otro proyecto guardado en la misma carpeta.
+        archivos = [
+            os.path.join(directorio, item)
+            for item in os.listdir(directorio)
+            if item.lower().endswith(".hrox")
+            and obtener_clave_proyecto_archivo(item) == clave_actual
+        ]
 
         if not archivos:
             return "No hay otras versiones"

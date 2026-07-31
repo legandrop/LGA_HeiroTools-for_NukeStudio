@@ -1,9 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Workers v1.00 | Lega
+  LGA_NKS_Workers v1.01 | Lega
 
   Workers para operaciones en background en el panel de proyectos LGA.
+
+  v1.01: Se pasa el base_path del contexto a get_open_projects_info()
 ____________________________________________________________________
 
 """
@@ -56,7 +58,8 @@ class ScanWorker(QtCore.QRunnable):
             debug_print("🔍 Ejecutando scan_projects_on_disk()...")
             proyectos_encontrados = scan_projects_on_disk(base_path)
             debug_print("📂 Ejecutando get_open_projects_info()...")
-            proyectos_abiertos = get_open_projects_info()
+            # Mismo base_path que el escaneo: los abiertos del otro contexto no entran.
+            proyectos_abiertos = get_open_projects_info(base_path)
             debug_print("📡 Emitiendo señal scan_finished...")
             self.signals.scan_finished.emit(proyectos_encontrados, proyectos_abiertos)
             debug_print("✅ ScanWorker completado exitosamente")

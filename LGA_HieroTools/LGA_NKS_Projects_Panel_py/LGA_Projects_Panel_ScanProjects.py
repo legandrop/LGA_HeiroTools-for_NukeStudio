@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_Projects_Panel_ScanProjects v1.05 | Lega
+  LGA_Projects_Panel_ScanProjects v1.07 | Lega
 
   Módulo de escaneo reutilizable para el Panel de Proyectos LGA.
   - Escanea proyectos en disco
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Verifica si un proyecto está abierto
   - Obtiene secuencias de un proyecto
 
+  v1.07: La clave de agrupacion se delega en LGA_NKS_CheckProjectVersions
+  v1.06: Los proyectos abiertos se filtran por el root del contexto activo
   v1.05: Agregado 'project_key' (proyecto de trabajo segun la carpeta VFX-) a cada resultado
   v1.04: Soporte para varios proyectos por carpeta SUP, con su version mas alta cada uno
   v1.03: Normalizados paths, barras y filtros case-insensitive para VFX/SUP/.hrox
@@ -88,6 +90,7 @@ try:
         encontrar_version_mas_alta,
         obtener_nombre_base_proyecto,
         obtener_version_completa,
+        obtener_clave_proyecto_archivo,
     )
 except ImportError as e:
     raise ImportError(f"No se pudo importar funciones de LGA_NKS_CheckProjectVersions: {e}")
@@ -151,15 +154,10 @@ def _clave_agrupacion_proyecto(hrox_file):
     Clave para agrupar versiones del mismo proyecto, ignorando version y sufijos.
 
     'ERSO_SUP_v040' y 'ERSO_SUP_v41_Mac' comparten clave; 'ERSO_Breakdown_v004' no.
+    Delega en LGA_NKS_CheckProjectVersions para que el escaneo y la busqueda de
+    version mas alta usen exactamente el mismo criterio.
     """
-    stem = os.path.splitext(os.path.basename(hrox_file))[0]
-
-    # Version al final del nombre, con o sin sufijo no numerico ("_Mac")
-    match = re.match(r"^(.+?)(?:_|-)v?\d+(?:(?:_|-)[^\d]*)?$", stem)
-    if match:
-        return match.group(1).casefold()
-
-    return stem.casefold()
+    return obtener_clave_proyecto_archivo(hrox_file)
 
 
 def _agrupar_hrox_por_proyecto(hrox_files):
@@ -463,17 +461,48 @@ def scan_projects_on_disk(base_path=None):
 
     debug_print(f"✅ Escaneo completado. Proyectos encontrados: {len(proyectos_encontrados)}")
     for proyecto in proyectos_encontrados:
-        debug_print(f"   • {proyecto['nombre_base']} v{proyecto['version']} ({proyecto['vfx_folder']}/{proyecto['sup_folder']})")
+        debug_print(f"   • {proyecto['nombre_base']} {proyecto['version']} ({proyecto['vfx_folder']}/{proyecto['sup_folder']})")
 
     return proyectos_encontrados
 
 
-def get_open_projects_info():
+def is_path_under_root(path_value, root_value):
     """
-    Obtiene información de todos los proyectos abiertos en Hiero.
-    
+    Indica si un path cuelga de un root, comparando por componentes.
+
+    Se compara componente a componente y no por prefijo de texto, para que
+    'T:\\VFX-ABC' no cuente como hijo de 'T:\\VFX-AB'.
+    """
+    if not path_value or not root_value:
+        return False
+
+    path_norm = os.path.normcase(normalize_scan_path(path_value) or "")
+    root_norm = os.path.normcase(normalize_scan_path(root_value) or "")
+    if not path_norm or not root_norm:
+        return False
+
+    if path_norm == root_norm:
+        return True
+
+    root_con_sep = root_norm if root_norm.endswith(os.sep) else root_norm + os.sep
+    return path_norm.startswith(root_con_sep)
+
+
+def get_open_projects_info(base_path=None):
+    """
+    Obtiene información de los proyectos abiertos en Hiero que pertenecen al contexto.
+
     Agrupa proyectos por nombre base y extrae información de versión.
-    
+
+    Solo entran los proyectos cuyo .hrox cuelga del root del contexto activo (T:\\ en
+    studio, N:\\ en client). Sin ese filtro, al pasar de studio a client se seguian
+    viendo como abiertos los proyectos del otro contexto, que no estan en la lista de
+    disco de la pestaña en la que estas parado.
+
+    Args:
+        base_path (str|None): Root del contexto. Si es None se resuelve con
+            get_base_scan_path(). Si queda vacio, no se filtra.
+
     Returns:
         dict: Diccionario agrupado por nombre base. Cada entrada contiene:
               nombre_base: [
@@ -489,13 +518,19 @@ def get_open_projects_info():
     """
     debug_print("🔍 Obteniendo información de proyectos abiertos...")
     proyectos_abiertos_por_base = {}
-    
+
+    if base_path is None:
+        base_path = get_base_scan_path()
+    else:
+        base_path = normalize_scan_path(base_path)
+    debug_print(f"   📍 Root del contexto para filtrar abiertos: {repr(base_path)}")
+
     proyectos = hiero.core.projects()
     debug_print(f"📂 Proyectos obtenidos de Hiero: {len(proyectos)}")
     if not proyectos:
         debug_print("⚠️ No hay proyectos abiertos")
         return proyectos_abiertos_por_base
-    
+
     for proyecto in proyectos:
         try:
             ruta_disco_raw = proyecto.path()
@@ -504,6 +539,13 @@ def get_open_projects_info():
                 debug_print(f"      🔧 Ruta de proyecto normalizada: {repr(ruta_disco_raw)} -> {repr(ruta_disco)}")
             nombre_base = obtener_nombre_base_proyecto(ruta_disco)
             debug_print(f"   🔎 Procesando proyecto: {proyecto.name()} - Ruta: {ruta_disco}")
+
+            # Un proyecto abierto desde el otro contexto no pertenece a esta pestaña.
+            if base_path and not is_path_under_root(ruta_disco, base_path):
+                debug_print(
+                    f"      ⏭️ Fuera del contexto ({base_path}), se omite: {ruta_disco}"
+                )
+                continue
 
             if nombre_base:
                 if nombre_base not in proyectos_abiertos_por_base:
@@ -621,12 +663,13 @@ def get_project_sequences(proyecto):
     return sequences_names
 
 
-def get_projects_with_newer_versions(base_path="T:\\"):
+def get_projects_with_newer_versions(base_path=None):
     """
     Detecta proyectos abiertos que tienen versiones más nuevas disponibles en disco.
 
     Args:
-        base_path (str): Ruta base donde buscar proyectos (default: "T:\\")
+        base_path (str|None): Root del contexto. Si es None se resuelve solo. Antes el
+            default era "T:\\" hardcodeado, que en client no corresponde.
 
     Returns:
         dict: Diccionario con información de proyectos que tienen versiones más nuevas.
@@ -642,8 +685,8 @@ def get_projects_with_newer_versions(base_path="T:\\"):
 
     proyectos_con_version_nueva = {}
 
-    # Obtener información de proyectos abiertos
-    proyectos_abiertos_info = get_open_projects_info()
+    # Obtener información de proyectos abiertos (solo los del contexto activo)
+    proyectos_abiertos_info = get_open_projects_info(base_path)
 
     if not proyectos_abiertos_info:
         debug_print("⚠️ No hay proyectos abiertos para verificar versiones")
