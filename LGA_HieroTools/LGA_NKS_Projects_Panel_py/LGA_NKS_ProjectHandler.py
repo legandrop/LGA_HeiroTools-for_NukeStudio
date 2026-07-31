@@ -3,9 +3,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.00 | Lega
+  LGA_NKS_ProjectHandler v1.01 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
+
+  v1.01: 'project_key' y 'vfx_folder' de los proyectos abiertos salen de la ruta en disco
 ____________________________________________________________________
 
 """
@@ -41,6 +43,8 @@ class ProjectHandler:
         debug_print(f"   📊 Proyectos encontrados: {len(panel.proyectos_encontrados)}")
         debug_print(f"   📂 Proyectos abiertos: {len(panel.proyectos_abiertos)} grupos")
 
+        from LGA_Projects_Panel_ScanProjects import obtener_clave_proyecto
+
         # Limpiar items anteriores
         for i in reversed(range(panel.projects_layout.count())):
             item = panel.projects_layout.itemAt(i)
@@ -69,13 +73,18 @@ class ProjectHandler:
             has_newer_version = nombre_base in panel.proyectos_con_version_nueva
             newer_version_info = panel.proyectos_con_version_nueva.get(nombre_base) if has_newer_version else None
 
+            # El proyecto de trabajo sale de la carpeta VFX- de la ruta, no del nombre del
+            # archivo: ERSO_SUP y ERSO_Breakdown son los dos ERSO y comparten color.
+            project_key = obtener_clave_proyecto(proyecto_mas_reciente["ruta"], nombre_base)
+
             # Crear info del proyecto basado en el proyecto abierto
             proyecto_info = {
                 "nombre_base": nombre_base,
                 "version": proyecto_mas_reciente["version_str"],
                 "ruta_hrox": proyecto_mas_reciente["ruta"],
-                "vfx_folder": f"VFX-{nombre_base.split('_SUP')[0] if '_SUP' in nombre_base else nombre_base}",
+                "vfx_folder": f"VFX-{project_key}",
                 "sup_folder": nombre_base,
+                "project_key": project_key,
                 "proyecto_abierto": proyecto_mas_reciente["proyecto"],
                 "has_newer_version": has_newer_version,
                 "newer_version_info": newer_version_info

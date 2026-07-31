@@ -3,9 +3,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.00 | Lega
+  LGA_NKS_ProjectItem v1.01 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
+
+  v1.01: El color sale de 'project_key' (carpeta VFX-) y no del nombre del archivo
 ____________________________________________________________________
 
 """
@@ -132,9 +134,11 @@ class ProjectItem(QtWidgets.QWidget):
         # Crear texto formateado: "NOMBRE (vXXX)"
         formatted_text = f"{project_name} (v{clean_version})"
 
-        # Obtener colores para este proyecto
-        debug_print(f"🎨 Aplicando colores para proyecto: '{project_name}' (desde nombre_base: '{nombre}')")
-        base_color, hover_color = get_project_colors(project_name)
+        # Obtener colores para este proyecto. El color es del proyecto de trabajo
+        # (carpeta VFX-), no del nombre del archivo: ERSO_SUP y ERSO_Breakdown son ERSO.
+        color_key = self.project_info.get("project_key") or project_name
+        debug_print(f"🎨 Aplicando colores para proyecto: '{color_key}' (desde nombre_base: '{nombre}')")
+        base_color, hover_color = get_project_colors(color_key)
         debug_print(f"🎨 Colores aplicados - Base: {base_color}, Hover: {hover_color}")
 
         # Agregar emoji según estado
@@ -229,7 +233,8 @@ class ProjectItem(QtWidgets.QWidget):
         project_name = self.project_info.get("nombre_base", "")
         if "_SUP" in project_name:
             project_name = project_name.split("_SUP")[0]
-        base_color, hover_color = get_project_colors(project_name)
+        color_key = self.project_info.get("project_key") or project_name
+        base_color, hover_color = get_project_colors(color_key)
 
         for seq_name in sorted(self.sequences):
             # Contenedor horizontal para la secuencia

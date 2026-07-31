@@ -4,7 +4,7 @@
 # Panel de Proyectos LGA - Documentacion
 
 ## Concepto rapido
-- Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox`, y permite abrir proyectos y sus secuencias.
+- Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox` de cada proyecto, y permite abrir proyectos y sus secuencias.
 - Barra superior: `Refresh` reescanea en background; estado visible; `Reimport` ejecuta el smart reload para redockear y aplicar cambios.
 - Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer y dejando apagado el Frame Number del ViewerTL.
 - Boton `Update`: aparece al lado de proyectos abiertos cuando existe version mas nueva en disco y permite actualizar automaticamente.
@@ -16,7 +16,7 @@
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_UIManager.py` - Clase `UIManager` para configuracion y gestion de interfaz.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ScanManager.py` - Clase `ScanManager` para gestion de operaciones de escaneo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectHandler.py` - Clase `ProjectHandler` para manejo de proyectos y apertura. `on_update_project_click()` actualiza proyectos.
-- `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py` - `scan_projects_on_disk()`, `get_open_projects_info()`, `is_project_open()`, `get_project_sequences()`, `get_projects_with_newer_versions()`.
+- `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py` - `scan_projects_on_disk()`, `obtener_clave_proyecto()`, `_clave_agrupacion_proyecto()`, `_agrupar_hrox_por_proyecto()`, `_elegir_version_mas_alta()`, `get_open_projects_info()`, `is_project_open()`, `get_project_sequences()`, `get_projects_with_newer_versions()`.
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py` - `switch_to_sequence_hybrid()` (V3 hibrida: preserva gain/gamma/saturation/playhead, optimiza UI, hace pre-cleanup del timeline nuevo, apaga `Frame_Only`, funciona cross-project y registra diagnostico post-event-loop de viewers/timelines). `disable_frame_number_on_active_sequence()` desactiva el Frame Number del ViewerTL sin crearlo ni reposicionarlo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectsPanel_Logging.py` - Helper compartido de logging para todo el flujo del panel.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
@@ -29,6 +29,8 @@
 - Escaneo automatico al abrir y en cada Refresh (`QRunnable` + `QThreadPool`, no bloquea UI).
 - Nuke 16: se usa `QTimer.singleShot(500ms)` para esperar que Qt este completamente inicializado antes de ejecutar threads.
 - Proyectos: se listan alfabeticamente con version mas alta. Click abre con `hiero.core.openProject()`.
+- Una carpeta `*_SUP` puede tener mas de un proyecto (por ejemplo `ERSO_SUP_v040.hrox` y `ERSO_Breakdown_v004.hrox`): los `.hrox` se agrupan por nombre base ignorando version y sufijos (`_Mac`), y cada grupo entra a la lista como un proyecto propio con su version mas alta.
+- Colores: cada item lleva `project_key`, el proyecto de trabajo tomado de la carpeta `VFX-<proyecto>` de la ruta. Es la clave que se busca en la seccion `[Colors]` del `.ini`, asi que todos los `.hrox` de una misma carpeta VFX comparten color aunque tengan nombres base distintos.
 - Update automatico: proyectos abiertos muestran boton `Update` cuando existe version mas nueva en disco.
 - Secuencias: solo de proyectos abiertos. Click llama `switch_to_sequence_hybrid()` y usa `hiero.ui.openInTimeline()` con el objeto `Sequence`.
 - En el cambio de secuencia se ejecuta un pre-cleanup sobre el timeline nuevo antes de los ajustes finales de UI: elimina tracks NukeVFX y extiende BurnIn hasta el ultimo clip visible.

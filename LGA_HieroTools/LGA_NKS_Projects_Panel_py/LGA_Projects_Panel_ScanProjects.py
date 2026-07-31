@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_Projects_Panel_ScanProjects v1.03 | Lega
+  LGA_Projects_Panel_ScanProjects v1.05 | Lega
 
   Módulo de escaneo reutilizable para el Panel de Proyectos LGA.
   - Escanea proyectos en disco
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Verifica si un proyecto está abierto
   - Obtiene secuencias de un proyecto
 
+  v1.05: Agregado 'project_key' (proyecto de trabajo segun la carpeta VFX-) a cada resultado
+  v1.04: Soporte para varios proyectos por carpeta SUP, con su version mas alta cada uno
   v1.03: Normalizados paths, barras y filtros case-insensitive para VFX/SUP/.hrox
   v1.02: Agregados logs de diagnostico para AltTPath, base_path y filtros VFX/SUP
   v1.01: Conectado al logger compartido del Projects Panel para respetar flags y salida a archivo
@@ -121,6 +123,100 @@ def _is_hrox_file_name(name):
     return str(name).casefold().endswith(".hrox")
 
 
+def obtener_clave_proyecto(ruta=None, nombre_base=""):
+    """
+    Devuelve el nombre del proyecto de trabajo al que pertenece un .hrox.
+
+    Sale de la carpeta 'VFX-<proyecto>' de la ruta, porque varios .hrox distintos
+    de una misma carpeta SUP pertenecen al mismo proyecto: ERSO_SUP y
+    ERSO_Breakdown son los dos ERSO y comparten el color del .ini.
+    Si la ruta no sirve, se cae al nombre base recortado en '_SUP'.
+    """
+    if ruta:
+        partes = str(ruta).replace("/", os.sep).replace("\\", os.sep).split(os.sep)
+        for parte in partes:
+            if _is_vfx_folder_name(parte):
+                return parte[4:]  # Saca el prefijo 'VFX-' sin depender del casing
+
+    nombre_base = str(nombre_base or "")
+    posicion_sup = nombre_base.upper().find("_SUP")
+    if posicion_sup > 0:
+        return nombre_base[:posicion_sup]
+
+    return nombre_base
+
+
+def _clave_agrupacion_proyecto(hrox_file):
+    """
+    Clave para agrupar versiones del mismo proyecto, ignorando version y sufijos.
+
+    'ERSO_SUP_v040' y 'ERSO_SUP_v41_Mac' comparten clave; 'ERSO_Breakdown_v004' no.
+    """
+    stem = os.path.splitext(os.path.basename(hrox_file))[0]
+
+    # Version al final del nombre, con o sin sufijo no numerico ("_Mac")
+    match = re.match(r"^(.+?)(?:_|-)v?\d+(?:(?:_|-)[^\d]*)?$", stem)
+    if match:
+        return match.group(1).casefold()
+
+    return stem.casefold()
+
+
+def _agrupar_hrox_por_proyecto(hrox_files):
+    """
+    Agrupa archivos .hrox por proyecto, preservando el orden de aparicion.
+
+    Una misma carpeta SUP puede contener varios proyectos distintos (por ejemplo
+    ERSO_SUP_v040.hrox y ERSO_Breakdown_v004.hrox). Cada uno es un grupo aparte,
+    para que despues se elija la version mas alta de cada uno.
+
+    Returns:
+        dict: clave = clave de agrupacion, valor = lista de rutas .hrox
+    """
+    grupos = {}
+
+    for hrox_file in hrox_files:
+        clave = _clave_agrupacion_proyecto(hrox_file)
+        grupos.setdefault(clave, []).append(hrox_file)
+
+    return grupos
+
+
+def _elegir_version_mas_alta(hrox_files):
+    """
+    Elige el .hrox de version mas alta dentro de una lista de archivos del mismo proyecto.
+
+    Returns:
+        tuple: (ruta del archivo elegido | None, version completa para mostrar)
+    """
+    mejor_archivo = None
+    mejor_version = None
+
+    for archivo in hrox_files:
+        version = extraer_version(archivo)
+        if version in ["No detectada", "Error"]:
+            continue
+
+        if mejor_version is None:
+            mejor_version = version
+            mejor_archivo = archivo
+            continue
+
+        version_ganadora = comparar_versiones(mejor_version, version)
+        if version_ganadora != mejor_version:
+            mejor_version = version
+            mejor_archivo = archivo
+
+    if mejor_archivo is None:
+        # Ningun archivo del grupo tiene version legible: usar el primero como fallback
+        mejor_archivo = hrox_files[0] if hrox_files else None
+
+    if mejor_archivo is None:
+        return None, "No detectada"
+
+    return mejor_archivo, obtener_version_completa(mejor_archivo)
+
+
 def _list_hrox_files(folder_path):
     try:
         return [
@@ -197,7 +293,9 @@ def scan_projects_on_disk(base_path=None):
     Escanea el disco buscando proyectos VFX y retorna información de cada uno.
 
     Busca carpetas tipo 'VFX-' y dentro carpetas '*_SUP' sin depender del casing.
-    En cada carpeta SUP encuentra el archivo .hrox con la versión más alta.
+    En cada carpeta SUP puede haber varios proyectos distintos (por ejemplo
+    ERSO_SUP y ERSO_Breakdown): se agrupan por nombre base y se devuelve la
+    versión más alta de cada uno, como entradas separadas.
 
     Args:
         base_path (str|None): Ruta base donde buscar proyectos. Si es None,
@@ -312,48 +410,41 @@ def scan_projects_on_disk(base_path=None):
                         debug_print(f"      ⚠️ No se encontraron archivos .hrox en {sup_path}")
                         continue
 
-                    # Encontrar la versión más alta
-                    if len(hrox_files) > 1:
-                        # Usar el primer archivo como referencia
-                        ruta_referencia = hrox_files[0]
-                        debug_print(f"      🔄 Buscando versión más alta desde: {os.path.basename(ruta_referencia)}")
-                        version_mas_alta = encontrar_version_mas_alta(ruta_referencia)
-                        debug_print(f"      ✅ Versión más alta encontrada: {version_mas_alta}")
+                    # Una carpeta SUP puede tener varios proyectos distintos:
+                    # se agrupa por proyecto y se elige la version mas alta de cada grupo.
+                    grupos = _agrupar_hrox_por_proyecto(hrox_files)
+                    debug_print(f"      🗂️ {len(grupos)} proyecto(s) distinto(s) en la carpeta: {sorted(grupos.keys())}")
 
-                        if version_mas_alta not in ["No detectada", "Error", "No disponible", "No hay otras versiones"]:
-                            nombre_base = obtener_nombre_base_proyecto(version_mas_alta)
-                            version = obtener_version_completa(version_mas_alta)
-                            debug_print(f"         📝 Nombre base: {nombre_base}, Versión: {version}")
+                    for clave in sorted(grupos.keys()):
+                        archivos_grupo = grupos[clave]
+                        debug_print(
+                            f"      🔄 Grupo '{clave}': {len(archivos_grupo)} archivo(s) "
+                            f"{[os.path.basename(f) for f in archivos_grupo]}"
+                        )
 
-                            proyectos_encontrados.append({
-                                "nombre_base": nombre_base if nombre_base else sup_folder,
-                                "vfx_folder": vfx_folder,
-                                "sup_folder": sup_folder,
-                                "ruta_hrox": version_mas_alta,
-                                "version": version,
-                                "ruta_proyecto": sup_path,
-                            })
-                            debug_print(f"         ➕ Proyecto agregado: {nombre_base} v{version}")
-                        else:
-                            debug_print(f"         ❌ Versión inválida, omitiendo proyecto")
-                    elif len(hrox_files) == 1:
-                        # Solo hay un archivo
-                        hrox_file = hrox_files[0]
-                        debug_print(f"      📄 Solo un archivo .hrox: {os.path.basename(hrox_file)}")
-                        nombre_base = obtener_nombre_base_proyecto(hrox_file)
-                        version = obtener_version_completa(hrox_file)
-                        debug_print(f"         📝 Nombre base: {nombre_base}, Versión: {version}")
+                        ruta_elegida, version = _elegir_version_mas_alta(archivos_grupo)
+                        if not ruta_elegida:
+                            debug_print(f"         ❌ No se pudo elegir archivo para '{clave}', omitiendo")
+                            continue
+
+                        nombre_base = obtener_nombre_base_proyecto(ruta_elegida)
+                        debug_print(
+                            f"         📄 Archivo elegido: {os.path.basename(ruta_elegida)}, "
+                            f"Nombre base: {nombre_base}, Versión: {version}"
+                        )
 
                         proyectos_encontrados.append({
                             "nombre_base": nombre_base if nombre_base else sup_folder,
                             "vfx_folder": vfx_folder,
                             "sup_folder": sup_folder,
-                            "ruta_hrox": hrox_file,
+                            "ruta_hrox": ruta_elegida,
                             "version": version,
                             "ruta_proyecto": sup_path,
+                            "project_key": obtener_clave_proyecto(ruta_elegida, nombre_base),
                         })
-                        debug_print(f"         ➕ Proyecto agregado: {nombre_base} v{version}")
-                        
+                        debug_print(f"         ➕ Proyecto agregado: {nombre_base} {version}")
+
+
             except PermissionError:
                 # Ignorar carpetas sin permisos
                 debug_print(f"   ⚠️ PermissionError al acceder a VFX: {vfx_path}")
