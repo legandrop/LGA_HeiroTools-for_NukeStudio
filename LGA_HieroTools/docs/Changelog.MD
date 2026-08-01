@@ -1,3 +1,6 @@
+v3.82:
+        - El pack declara su version instalada en `LGA_HieroTools/VERSION`, dentro del pack y no suelto en `python/startup`, que es una carpeta compartida. El instalador lo exige como archivo obligatorio del payload y el generador lo publica junto al README. Queda como base para comparar contra la version disponible en GitHub. [ HieroTools - Agregar VERSION al pack ]
+
 v3.81:
         - Projects Panel (`LGA_NKS_CheckProjectVersions v1.83`, `LGA_Projects_Panel_ScanProjects v1.07`): con dos proyectos en la misma carpeta, abrir `ERSO_v001` mostraba la flecha de update ofreciendo `ERSO_BREAKDOWN_v05` como versión nueva de ERSO. `encontrar_version_mas_alta()` buscaba las versiones con un glob por prefijo (`ERSO*v*.hrox`), y ese comodín también matchea los archivos de otro proyecto cuyo nombre empieza igual. Ahora lista los `.hrox` de la carpeta y los filtra por clave de proyecto, la misma que usa el escaneo para agrupar — el escaneo pasa a delegar en esta función para que no haya dos criterios que se desincronicen. Arregla también la ventana de Check Project Versions, que tenía el mismo problema. [ Projects Panel - La version mas alta ya no sale de otro proyecto ]
 
