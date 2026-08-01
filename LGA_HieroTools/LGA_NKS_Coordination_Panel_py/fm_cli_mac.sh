@@ -2,11 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_DEV_APP="/Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManagerS3.app"
+DEFAULT_DEV_APP="/Users/leg4/Desktop/Codin/LGA_FileManagerS3/build/FileManagerS3.app"
 DEFAULT_PROD_APP="/Applications/FileManagerS3.app"
 DEFAULT_LOCAL_APP="$SCRIPT_DIR/build/FileManagerS3.app"
 
-# El launcher central (LGA_NKS_FileManagerLauncher) es la unica fuente de verdad
+# El launcher central (LGA_NKS_FileManagerS3Launcher) es la unica fuente de verdad
 # de la ruta del .app: resuelve dev/prod segun el flag Desarrollo y la pasa aca
 # como "--app-path <ruta>". Se consume y NO se reenvia a la app. El fallback
 # dev/prod de abajo queda solo para uso manual del wrapper (sin --app-path).

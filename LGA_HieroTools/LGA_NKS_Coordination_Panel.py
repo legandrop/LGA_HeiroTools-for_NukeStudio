@@ -7,7 +7,7 @@ ________________________________________________________________________________
   - Crear shots automáticamente
   - Crear thumbnails
   - Cambiar prioridad de shots
-  - Integración con FileManager (Open, Download, Upload)
+  - Integración con FileManagerS3 (Open, Download, Upload)
 
 
   v1.25: Invertido comportamiento del boton Download Clip:
@@ -22,8 +22,8 @@ ________________________________________________________________________________
   v1.21: Actualizado para usar estilos dinámicos con bordes y hover para todos los botones
          Agregado tooltip dinámico para todos los botones
          
-  v1.20: Agregados botones de integración con FileManager CLI
-         - Open in FileManager: Abre carpeta del shot en FileManager
+  v1.20: Agregados botones de integración con FileManagerS3 CLI
+         - Open in FileManagerS3: Abre carpeta del shot en FileManagerS3
          - Download Shot: Descarga shot desde Wasabi S3
          - Upload Shot: Sube shot a Wasabi S3
          Funcionan sobre la ruta del shot (unidad/proyecto/grupo/shot)
@@ -271,29 +271,29 @@ class FlowProdPanel(QtWidgets.QWidget):
                 "Generar archivo .psync para compartir",
             ),
             (
-                "FileManager",
-                self.open_shot_in_filemanager,
+                "FileManagerS3",
+                self.open_shot_in_filemanagers3,
                 "gradient_magenta_violet",
                 None,
-                "Abrir carpeta del shot en FileManager",
+                "Abrir carpeta del shot en FileManagerS3",
             ),
             (
                 "Download Shot",
-                self.download_shot_from_filemanager,
+                self.download_shot_from_filemanagers3,
                 "gradient_magenta_violet",
                 None,
                 "Descargar shot desde Wasabi S3",
             ),
             (
                 "Upload Shot",
-                self.upload_shot_to_filemanager,
+                self.upload_shot_to_filemanagers3,
                 "gradient_magenta_violet",
                 None,
                 "Subir shot a Wasabi S3",
             ),
             (
                 "Download Clip",
-                self.download_latest_clip_from_filemanager,
+                self.download_latest_clip_from_filemanagers3,
                 "gradient_magenta_violet",
                 None,
                 "Click: Descargar ultima version del clip\nShift+Click: Descargar clip seleccionado",
@@ -416,8 +416,8 @@ class FlowProdPanel(QtWidgets.QWidget):
                 button.setShiftClickHandler(self.open_shot_in_pipesync)
             elif name == "Download Clip":
                 button = CustomButton(name)
-                button.setCustomClickHandler(self.download_latest_clip_from_filemanager)
-                button.setShiftClickHandler(self.download_clip_from_filemanager)
+                button.setCustomClickHandler(self.download_latest_clip_from_filemanagers3)
+                button.setShiftClickHandler(self.download_clip_from_filemanagers3)
             else:
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
@@ -803,10 +803,10 @@ class FlowProdPanel(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
 
-    def open_shot_in_filemanager(self):
-        """Llama al script FileManager para abrir la carpeta del shot seleccionado"""
+    def open_shot_in_filemanagers3(self):
+        """Llama al script FileManagerS3 para abrir la carpeta del shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManager_OpenPath.py"
+            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_OpenPath.py"
         )
         if not os.path.exists(script_path):
             QtWidgets.QMessageBox.warning(
@@ -819,11 +819,11 @@ class FlowProdPanel(QtWidgets.QWidget):
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_FileManager_OpenPath", script_path
+                "LGA_NKS_FileManagerS3_OpenPath", script_path
             )
             if spec is None or spec.loader is None:
                 raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_FileManager_OpenPath.py"
+                    "No se pudo cargar el módulo LGA_NKS_FileManagerS3_OpenPath.py"
                 )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -832,10 +832,10 @@ class FlowProdPanel(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
 
-    def download_shot_from_filemanager(self):
-        """Llama al script FileManager para descargar el shot seleccionado"""
+    def download_shot_from_filemanagers3(self):
+        """Llama al script FileManagerS3 para descargar el shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManager_Download.py"
+            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_Download.py"
         )
         if not os.path.exists(script_path):
             QtWidgets.QMessageBox.warning(
@@ -848,11 +848,11 @@ class FlowProdPanel(QtWidgets.QWidget):
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_FileManager_Download", script_path
+                "LGA_NKS_FileManagerS3_Download", script_path
             )
             if spec is None or spec.loader is None:
                 raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_FileManager_Download.py"
+                    "No se pudo cargar el módulo LGA_NKS_FileManagerS3_Download.py"
                 )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -861,10 +861,10 @@ class FlowProdPanel(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
 
-    def upload_shot_to_filemanager(self):
-        """Llama al script FileManager para subir el shot seleccionado"""
+    def upload_shot_to_filemanagers3(self):
+        """Llama al script FileManagerS3 para subir el shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManager_Upload.py"
+            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_Upload.py"
         )
         if not os.path.exists(script_path):
             QtWidgets.QMessageBox.warning(
@@ -877,11 +877,11 @@ class FlowProdPanel(QtWidgets.QWidget):
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_FileManager_Upload", script_path
+                "LGA_NKS_FileManagerS3_Upload", script_path
             )
             if spec is None or spec.loader is None:
                 raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_FileManager_Upload.py"
+                    "No se pudo cargar el módulo LGA_NKS_FileManagerS3_Upload.py"
                 )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -890,10 +890,10 @@ class FlowProdPanel(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
 
-    def _run_download_clip_from_filemanager(self, download_latest=False):
-        """Llama al script FileManager para descargar clip(s) seleccionado(s)."""
+    def _run_download_clip_from_filemanagers3(self, download_latest=False):
+        """Llama al script FileManagerS3 para descargar clip(s) seleccionado(s)."""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManager_DownloadClip.py"
+            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_DownloadClip.py"
         )
         if not os.path.exists(script_path):
             QtWidgets.QMessageBox.warning(
@@ -906,11 +906,11 @@ class FlowProdPanel(QtWidgets.QWidget):
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_FileManager_DownloadClip", script_path
+                "LGA_NKS_FileManagerS3_DownloadClip", script_path
             )
             if spec is None or spec.loader is None:
                 raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_FileManager_DownloadClip.py"
+                    "No se pudo cargar el módulo LGA_NKS_FileManagerS3_DownloadClip.py"
                 )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -918,13 +918,13 @@ class FlowProdPanel(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
 
-    def download_clip_from_filemanager(self):
+    def download_clip_from_filemanagers3(self):
         """Descarga el clip seleccionado en modo normal."""
-        self._run_download_clip_from_filemanager(download_latest=False)
+        self._run_download_clip_from_filemanagers3(download_latest=False)
 
-    def download_latest_clip_from_filemanager(self):
+    def download_latest_clip_from_filemanagers3(self):
         """Descarga la ultima version disponible del clip (Shift+Click)."""
-        self._run_download_clip_from_filemanager(download_latest=True)
+        self._run_download_clip_from_filemanagers3(download_latest=True)
 
     def check_timeline_shots(self):
         """Llama al script de chequeo de shots en el timeline."""

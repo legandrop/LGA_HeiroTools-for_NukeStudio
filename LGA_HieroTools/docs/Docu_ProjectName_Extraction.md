@@ -169,13 +169,13 @@ Leyenda:
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | ✅ Actualizado v1.01 — fix en `_collect_shots_from_track()` |
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py` | ✅ Actualizado v1.01 — fix en `get_selected_clips_info()` |
 
-### FileManager Panel
+### FileManagerS3 Panel
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py` | 🔵 Analizado · no aplica — pasa shot_path directo al CLI de FileManager |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py` | 🔵 Analizado · no aplica — ídem |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_DownloadClip.py` | 🔵 Analizado · no aplica — pasa file_path directo al CLI |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py` | 🔵 Analizado · no aplica — pasa shot_path directo al CLI de FileManagerS3 |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py` | 🔵 Analizado · no aplica — ídem |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py` | 🔵 Analizado · no aplica — pasa file_path directo al CLI |
 
 ### Edit Panel
 

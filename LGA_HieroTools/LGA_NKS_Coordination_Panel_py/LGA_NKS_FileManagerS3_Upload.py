@@ -1,9 +1,9 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManager_Upload v1.01 | Lega
+  LGA_NKS_FileManagerS3_Upload v1.01 | Lega
 
-  Sube el shot seleccionado a Wasabi S3 usando FileManager CLI.
+  Sube el shot seleccionado a Wasabi S3 usando FileManagerS3 CLI.
   Extrae la ruta del shot tomando las primeras 4 partes: unidad/proyecto/grupo/shot.
   Soporta modo desarrollo con variable Desarrollo = True y verificación automática.
 
@@ -28,8 +28,8 @@ if utils_path.exists():
     sys.path.insert(0, str(utils_path))
     from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process
     from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
-    from LGA_NKS_Shared.LGA_NKS_FileManagerLauncher import (
-        build_filemanager_command,
+    from LGA_NKS_Shared.LGA_NKS_FileManagerS3Launcher import (
+        build_filemanagers3_command,
         resolve_context_mode,
     )
 
@@ -56,7 +56,7 @@ class RelativeTimeFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_debug_logging(script_name="FileManager_Upload"):
+def setup_debug_logging(script_name="FileManagerS3_Upload"):
     """Configura el logging para escribir SOLO en archivo."""
     global debug_log_listener
 
@@ -120,7 +120,7 @@ def setup_debug_logging(script_name="FileManager_Upload"):
     return logger
 
 
-debug_logger = setup_debug_logging(script_name="FileManager_Upload")
+debug_logger = setup_debug_logging(script_name="FileManagerS3_Upload")
 
 
 def debug_print(*message, level="info"):
@@ -188,16 +188,16 @@ def get_shot_path(file_path):
     return os.path.dirname(input_folder)
 
 
-def build_filemanager_cmd(action_flag, shot_path):
+def build_filemanagers3_cmd(action_flag, shot_path):
     try:
         context_mode = resolve_context_mode()
-        cmd = build_filemanager_command(
+        cmd = build_filemanagers3_command(
             [action_flag, shot_path],
             desarrollo=Desarrollo,
             script_dir=Path(__file__).parent,
             context_mode=context_mode,
         )
-        debug_print(f"Contexto FileManager resuelto: {context_mode}")
+        debug_print(f"Contexto FileManagerS3 resuelto: {context_mode}")
         return cmd
     except Exception as exc:
         debug_print(f"No se pudo construir comando de FileManagerS3: {exc}", level="error")
@@ -229,19 +229,19 @@ def main():
             debug_print(f"Ruta del archivo: {file_path}")
             debug_print(f"Ruta del shot: {shot_path}")
 
-            # Ejecutar FileManager con --upload
-            cmd = build_filemanager_cmd("--upload", shot_path)
+            # Ejecutar FileManagerS3 con --upload
+            cmd = build_filemanagers3_cmd("--upload", shot_path)
             if not cmd:
                 return
 
             debug_print(f"Ejecutando: {' '.join(cmd)}")
 
             try:
-                # Ejecutar el comando (no esperamos que termine, FileManager abre la GUI)
+                # Ejecutar el comando (no esperamos que termine, FileManagerS3 abre la GUI)
                 subprocess.Popen(cmd, shell=False)
-                debug_print("FileManager iniciado para subida")
+                debug_print("FileManagerS3 iniciado para subida")
             except Exception as cmd_error:
-                debug_print(f"Error al ejecutar FileManager: {cmd_error}")
+                debug_print(f"Error al ejecutar FileManagerS3: {cmd_error}")
         else:
             debug_print("No se pudo obtener la ruta del archivo del clip")
 

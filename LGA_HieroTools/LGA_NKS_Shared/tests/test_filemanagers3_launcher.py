@@ -8,7 +8,7 @@ SHARED_DIR = os.path.dirname(CURRENT_DIR)
 if SHARED_DIR not in sys.path:
     sys.path.insert(0, SHARED_DIR)
 
-import LGA_NKS_FileManagerLauncher as launcher  # noqa: E402
+import LGA_NKS_FileManagerS3Launcher as launcher  # noqa: E402
 
 
 def _expect(condition, message):
@@ -44,7 +44,7 @@ def run():
             launcher.WINDOWS_PROD_EXE,
         }
     )
-    win_dev_cmd = launcher.build_filemanager_command(
+    win_dev_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         context_mode="studio",
@@ -59,7 +59,7 @@ def run():
     _assert_no_legacy_targets(win_dev_cmd)
 
     win_prod_only_exists = _exists_factory({launcher.WINDOWS_PROD_EXE})
-    win_prod_cmd = launcher.build_filemanager_command(
+    win_prod_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         context_mode="CLIENT",
@@ -76,7 +76,7 @@ def run():
     fake_script_dir = Path("/tmp/fm_launcher_test")
     wrapper_path = str(fake_script_dir / "fm_cli_mac.sh")
     mac_wrapper_exists = _exists_factory({wrapper_path})
-    mac_wrapper_cmd = launcher.build_filemanager_command(
+    mac_wrapper_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         script_dir=fake_script_dir,
@@ -94,7 +94,7 @@ def run():
     # Wrapper presente + app dev: el helper resuelve la ruta segun Desarrollo y
     # la inyecta como --app-path; el wrapper queda solo como capa de exec.
     mac_wrapper_dev_exists = _exists_factory({wrapper_path, launcher.MAC_DEV_APP})
-    mac_wrapper_dev_cmd = launcher.build_filemanager_command(
+    mac_wrapper_dev_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         script_dir=fake_script_dir,
@@ -118,7 +118,7 @@ def run():
     mac_wrapper_both_exists = _exists_factory(
         {wrapper_path, launcher.MAC_DEV_APP, launcher.MAC_PROD_APP}
     )
-    mac_wrapper_prod_cmd = launcher.build_filemanager_command(
+    mac_wrapper_prod_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=False,
         script_dir=fake_script_dir,
@@ -139,7 +139,7 @@ def run():
 
     # Wrapper presente + ambas apps, Desarrollo=True: el flag debe tener efecto
     # y preferir la app dev sobre la de /Applications.
-    mac_wrapper_dev_pref_cmd = launcher.build_filemanager_command(
+    mac_wrapper_dev_pref_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         script_dir=fake_script_dir,
@@ -156,7 +156,7 @@ def run():
 
     # Wrapper presente pero sin ninguna app resuelta: se delega al wrapper sin
     # --app-path (para que honre FILEMANAGER_APP_PATH y muestre su error guia).
-    mac_wrapper_only_cmd = launcher.build_filemanager_command(
+    mac_wrapper_only_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         script_dir=fake_script_dir,
@@ -175,7 +175,7 @@ def run():
     )
 
     mac_app_exists = _exists_factory({launcher.MAC_DEV_APP})
-    mac_app_cmd = launcher.build_filemanager_command(
+    mac_app_cmd = launcher.build_filemanagers3_command(
         cli_args,
         desarrollo=True,
         script_dir=fake_script_dir,
@@ -214,7 +214,7 @@ def _run_empty_arg_cases(win_exists):
     # Sin args: sigue rechazando.
     _assert_raises(
         ValueError,
-        lambda: launcher.build_filemanager_command(
+        lambda: launcher.build_filemanagers3_command(
             [],
             desarrollo=True,
             context_mode="studio",
@@ -227,7 +227,7 @@ def _run_empty_arg_cases(win_exists):
     # Valor vacio de un flag: NO debe filtrarse silenciosamente, debe rechazar.
     _assert_raises(
         ValueError,
-        lambda: launcher.build_filemanager_command(
+        lambda: launcher.build_filemanagers3_command(
             ["--path", ""],
             desarrollo=True,
             context_mode="studio",
@@ -240,7 +240,7 @@ def _run_empty_arg_cases(win_exists):
     # Arg vacio suelto (sin flag previo) tambien se rechaza.
     _assert_raises(
         ValueError,
-        lambda: launcher.build_filemanager_command(
+        lambda: launcher.build_filemanagers3_command(
             ["   ", "--download"],
             desarrollo=True,
             context_mode="studio",
@@ -251,7 +251,7 @@ def _run_empty_arg_cases(win_exists):
     )
 
     # Args validos con espacios internos legitimos deben preservarse tal cual.
-    ok_cmd = launcher.build_filemanager_command(
+    ok_cmd = launcher.build_filemanagers3_command(
         ["--download", r"T:\VFX-ERSO\shot with space"],
         desarrollo=True,
         context_mode="studio",
@@ -266,4 +266,4 @@ def _run_empty_arg_cases(win_exists):
 
 if __name__ == "__main__":
     run()
-    print("test_filemanager_launcher: OK")
+    print("test_filemanagers3_launcher: OK")

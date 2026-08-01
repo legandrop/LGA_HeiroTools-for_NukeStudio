@@ -134,9 +134,9 @@ Hoy carga scripts desde:
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py`
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_OpenPath.py`
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py`
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
@@ -342,9 +342,9 @@ Conclusion:
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py`
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_OpenPath.py`
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py`
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
@@ -504,9 +504,9 @@ Startup/
     LGA_NKS_Flow_CreateShot.py
     LGA_NKS_Flow_ModifyShot.py
     LGA_NKS_Flow_ShotPriority.py
-    LGA_NKS_FileManager_OpenPath.py
-    LGA_NKS_FileManager_Download.py
-    LGA_NKS_FileManager_Upload.py
+    LGA_NKS_FileManagerS3_OpenPath.py
+    LGA_NKS_FileManagerS3_Download.py
+    LGA_NKS_FileManagerS3_Upload.py
     LGA_NKS_Flow_CheckTimelineShots.py
     LGA_NKS_PipeSync_OpenPath.py
     LGA_NKS_PipeSync_CreatePsync.py
@@ -748,13 +748,13 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py`
   - Lo usa `LGA_NKS_Coordination_Panel.py`.
 
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_OpenPath.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
   - Lo usa `LGA_NKS_Coordination_Panel.py`.
 
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py`
   - Lo usa `LGA_NKS_Coordination_Panel.py`.
 
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py`
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
   - Lo usa `LGA_NKS_Coordination_Panel.py`.
 
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`

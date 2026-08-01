@@ -5,9 +5,9 @@ ____________________________________________________________________
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_OpenPath.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py
   - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py
   - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py
   - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py

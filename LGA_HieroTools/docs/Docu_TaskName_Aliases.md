@@ -140,13 +140,13 @@ Leyenda:
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | 🔵 Analizado · no necesitaba cambio — no usa task name en absoluto |
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name del filename |
 
-### FileManager Panel
+### FileManagerS3 Panel
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py` | 🔵 Analizado · no aplica — no usa task names |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py` | 🔵 Analizado · no aplica — no usa task names |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_DownloadClip.py` | 🔵 Analizado · no aplica — descarga el archivo tal cual, sin interpretar task name |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py` | 🔵 Analizado · no aplica — no usa task names |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py` | 🔵 Analizado · no aplica — no usa task names |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py` | 🔵 Analizado · no aplica — descarga el archivo tal cual, sin interpretar task name |
 
 ### Edit Panel
 

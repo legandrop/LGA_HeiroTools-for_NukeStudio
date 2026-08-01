@@ -89,7 +89,7 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
 
 ### Coordination Panel
 
-Production-facing tools for Flow, FileManager, PipeSync, and shot creation / update workflows.
+Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / update workflows.
 
 - **Thumbnail**  
   Click: saves a viewer snapshot (zoom-to-fill, cropped to the sequence aspect) to `N:/<project>/Thumbs`.  
@@ -104,8 +104,8 @@ Production-facing tools for Flow, FileManager, PipeSync, and shot creation / upd
   Toggles shot priority between high and normal.
 - **.Psync**  
   Generates a `.psync` file for sharing.
-- **FileManager**  
-  Opens the shot folder in FileManager.
+- **FileManagerS3**  
+  Opens the shot folder in FileManagerS3.
 - **Download Shot**  
   Downloads the shot from Wasabi S3.
 - **Upload Shot**  

@@ -45,17 +45,17 @@ El panel de Coordination proporciona herramientas esenciales para operaciones de
 - **Función**: Genera un archivo `<SHOT>.psync` en el escritorio para compartir y arrastrar dentro de PipeSync
 - **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
 
-### 8. FileManager
-- **Función**: Abre la carpeta del shot en FileManager
-- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_OpenPath.py`
+### 8. FileManagerS3
+- **Función**: Abre la carpeta del shot en FileManagerS3
+- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
 
 ### 9. Download Shot
 - **Función**: Descarga el shot desde Wasabi S3
-- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py`
+- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py`
 
 ### 10. Upload Shot
 - **Función**: Sube el shot a Wasabi S3
-- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py`
+- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
 
 ## Compatibilidad de Nomenclatura
 
@@ -84,7 +84,7 @@ El sistema detecta automáticamente el formato utilizado sin necesidad de config
 4. **Check Shots Exist** - Chequea si los shots del track comp existen en Flow
 5. **Shot Priority** - Cambia la prioridad del shot (alta ↔ normal)
 6. **.Psync** - Genera un archivo `.psync` portable para compartir
-7. **FileManager** - Abre carpeta del shot en FileManager
+7. **FileManagerS3** - Abre carpeta del shot en FileManagerS3
 8. **Download Shot** - Descarga el shot desde Wasabi S3
 9. **Upload Shot** - Sube el shot a Wasabi S3
 10. **Reveal in Flow** - `Ctrl+Shift+F` - Abre la task comp en Chrome
@@ -119,7 +119,7 @@ El sistema detecta automáticamente el formato utilizado sin necesidad de config
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py` - Funcionalidad de Shot Priority
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_CreatePsync.py` - Generación de archivos `.psync` portables
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_OpenPath.py` - Funcionalidad de PipeSync (Open)
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_OpenPath.py` - Funcionalidad de FileManager (Open)
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Download.py` - Funcionalidad de Download Shot
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager_Upload.py` - Funcionalidad de Upload Shot
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py` - Funcionalidad de FileManagerS3 (Open)
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py` - Funcionalidad de Download Shot
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py` - Funcionalidad de Upload Shot
 - `LGA_NKS_Flow/LGA_NKS_Flow_NamingUtils.py` - Utilidades compartidas de nomenclatura (usado por los scripts de producción)

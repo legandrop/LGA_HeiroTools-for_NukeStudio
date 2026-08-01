@@ -11,11 +11,11 @@ ____________________________________________________________________
   v1.00: Version inicial.
 
   Watcher de finalizacion de descargas del boton "Download Clip"
-  (LGA_NKS_FileManager_DownloadClip.py).
+  (LGA_NKS_FileManagerS3_DownloadClip.py).
 
   Lo arranca el Coordination Panel (LGA_NKS_Coordination_Panel.py) al
   cargarse en el arranque de Hiero. Cada pocos segundos revisa la carpeta
-  de marcadores (logs/download_clip_done/) donde FileManager escribe un
+  de marcadores (logs/download_clip_done/) donde FileManagerS3 escribe un
   .json al terminar cada descarga CLI lanzada con --notify-completion.
   Cuando aparece un marcador, busca el/los clip(s) cuyo media coincide
   con la ruta descargada y los reconecta automaticamente.
@@ -25,7 +25,7 @@ ____________________________________________________________________
     la API de Hiero y debe ejecutarse en el main thread). No bloquea: el
     callback es trabajo de milisegundos.
   - Es stateless entre ticks: solo reacciona a marcadores que aparecen.
-    Si una descarga se cancela, FileManager se cierra o crashea, no se
+    Si una descarga se cancela, FileManagerS3 se cierra o crashea, no se
     escribe marcador y el watcher simplemente sigue idle.
   - Cada marcador se borra siempre tras procesarlo (haya match o no).
   - Marcadores sin clip que matchee se reintentan hasta un TTL y luego
@@ -168,9 +168,9 @@ def debug_print(*message, level="info"):
 
 
 def get_marker_dir():
-    """Carpeta vigilada donde FileManager escribe los marcadores de finalizacion.
+    """Carpeta vigilada donde FileManagerS3 escribe los marcadores de finalizacion.
 
-    Debe coincidir con get_notify_dir() de LGA_NKS_FileManager_DownloadClip.py.
+    Debe coincidir con get_notify_dir() de LGA_NKS_FileManagerS3_DownloadClip.py.
     """
     marker_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "logs", "download_clip_done"

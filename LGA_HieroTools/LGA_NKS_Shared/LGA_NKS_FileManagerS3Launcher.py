@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerLauncher v1.01 | Lega
+  LGA_NKS_FileManagerS3Launcher v1.01 | Lega
 
   Helper central para lanzar FileManager S3 desde HieroTools.
   Resuelve contexto Studio/Client, rutas dev/prod y comando final
@@ -24,15 +24,15 @@ from LGA_NKS_ContextProfile import get_context_mode
 MODE_STUDIO = "studio"
 MODE_CLIENT = "client"
 
-WINDOWS_DEV_EXE = r"C:\Portable\LGA_FileManager\build\FileManagerS3.exe"
-# La carpeta instalada paso de `LGA\FileManager` a `LGA\FileManagerS3` en
+WINDOWS_DEV_EXE = r"C:\Portable\LGA_FileManagerS3\build\FileManagerS3.exe"
+# La carpeta instalada paso de `LGA\FileManagerS3` a `LGA\FileManagerS3` en
 # FileManager S3 v0.906: el nombre viejo queda reservado para la app local que
 # viene despues. Requiere que el usuario actualice FileManager S3 y HieroTools
 # juntos; con una sola de las dos partes actualizada el exe no se encuentra.
 # La ruta de DEV no cambia: apunta al build del repo, que conserva su nombre.
 WINDOWS_PROD_EXE = r"C:\Portable\LGA\FileManagerS3\FileManagerS3.exe"
 
-MAC_DEV_APP = "/Users/leg4/Desktop/Codin/LGA_FileManager/build/FileManagerS3.app"
+MAC_DEV_APP = "/Users/leg4/Desktop/Codin/LGA_FileManagerS3/build/FileManagerS3.app"
 MAC_PROD_APP = "/Applications/FileManagerS3.app"
 
 
@@ -70,7 +70,7 @@ def _resolve_macos_app(desarrollo, script_dir, path_exists):
     return _existing_path((MAC_PROD_APP, MAC_DEV_APP, local_app), path_exists)
 
 
-def build_filemanager_command(cli_args,
+def build_filemanagers3_command(cli_args,
                               desarrollo=True,
                               script_dir=None,
                               context_mode=None,
@@ -80,7 +80,7 @@ def build_filemanager_command(cli_args,
 
     raw_args = list(cli_args or [])
     if not raw_args:
-        raise ValueError("No CLI arguments were provided for FileManager.")
+        raise ValueError("No CLI arguments were provided for FileManagerS3.")
 
     # No filtrar silenciosamente: un arg vacio deja flags colgados
     # (["--path", ""] -> ["--path"]). Validar y rechazar con error claro.
@@ -91,12 +91,12 @@ def build_filemanager_command(cli_args,
             preceding = str(raw_args[index - 1]).strip() if index > 0 else ""
             if preceding.startswith("-"):
                 raise ValueError(
-                    "Empty value for flag '{0}' in FileManager CLI arguments.".format(
+                    "Empty value for flag '{0}' in FileManagerS3 CLI arguments.".format(
                         preceding
                     )
                 )
             raise ValueError(
-                "Empty CLI argument at position {0} for FileManager.".format(index)
+                "Empty CLI argument at position {0} for FileManagerS3.".format(index)
             )
         args.append(value)
 
@@ -135,11 +135,11 @@ def build_filemanager_command(cli_args,
             )
         return ["open", "-na", app_path, "--args", "--context", context] + args
 
-    raise RuntimeError(f"Unsupported platform for FileManager launcher: {effective_platform}")
+    raise RuntimeError(f"Unsupported platform for FileManagerS3 launcher: {effective_platform}")
 
 
-def launch_filemanager(cli_args, desarrollo=True, script_dir=None, context_mode=None):
-    command = build_filemanager_command(
+def launch_filemanagers3(cli_args, desarrollo=True, script_dir=None, context_mode=None):
+    command = build_filemanagers3_command(
         cli_args=cli_args,
         desarrollo=desarrollo,
         script_dir=script_dir,

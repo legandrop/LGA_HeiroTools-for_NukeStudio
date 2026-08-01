@@ -1,17 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManager_DownloadClip v1.01 | Lega
+  LGA_NKS_FileManagerS3_DownloadClip v1.01 | Lega
 
   Descarga el/los clip(s) seleccionado(s) desde Wasabi S3 usando
-  FileManager CLI. A diferencia de "Download Shot", descarga solo el
+  FileManagerS3 CLI. A diferencia de "Download Shot", descarga solo el
   media del clip, no la carpeta entera del shot.
 
-  - Archivo de video unico (.mov, .mp4)  -> FileManager --download-file <archivo>
-  - Secuencia de imagenes (%04d.exr ...) -> FileManager --download <carpeta de la secuencia>
+  - Archivo de video unico (.mov, .mp4)  -> FileManagerS3 --download-file <archivo>
+  - Secuencia de imagenes (%04d.exr ...) -> FileManagerS3 --download <carpeta de la secuencia>
   Todos los clips seleccionados se envian en una sola llamada al CLI.
 
-  Pasa --notify-completion para que FileManager escriba un marcador al terminar
+  Pasa --notify-completion para que FileManagerS3 escriba un marcador al terminar
   cada descarga; el watcher LGA_NKS_DownloadClip_Watcher.py lo detecta y reconecta
   el clip offline automaticamente.
 
@@ -19,11 +19,11 @@ ____________________________________________________________________
          Conserva --notify-completion y modo latest.
 
   v1.00: Soporta modo latest (Shift+Click) para descargar la version mas nueva
-         via CLI de FileManager (--download-latest / --download-latest-file).
+         via CLI de FileManagerS3 (--download-latest / --download-latest-file).
 
   v0.04: Agrega --notify-completion para reconexion automatica del clip al terminar.
 
-  v0.03: Implementa la descarga real via FileManager CLI.
+  v0.03: Implementa la descarga real via FileManagerS3 CLI.
          Distingue archivo unico (singleFile) vs secuencia.
 
   v0.02: Usa el Metodo 1 (seleccion pura de clips, sin playhead).
@@ -52,8 +52,8 @@ utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
 if utils_path.exists():
     if str(utils_path) not in sys.path:
         sys.path.insert(0, str(utils_path))
-    from LGA_NKS_Shared.LGA_NKS_FileManagerLauncher import (
-        build_filemanager_command,
+    from LGA_NKS_Shared.LGA_NKS_FileManagerS3Launcher import (
+        build_filemanagers3_command,
         resolve_context_mode,
     )
 
@@ -71,7 +71,7 @@ Desarrollo = True
 
 
 def get_notify_dir():
-    """Carpeta donde FileManager escribe los marcadores de finalizacion de descarga.
+    """Carpeta donde FileManagerS3 escribe los marcadores de finalizacion de descarga.
 
     Es vigilada por LGA_NKS_DownloadClip_Watcher.py. Vive dentro de Startup/logs/.
     """
@@ -94,7 +94,7 @@ class RelativeTimeFormatter(logging.Formatter):
         return super().format(record)
 
 
-def setup_debug_logging(script_name="FileManager_DownloadClip"):
+def setup_debug_logging(script_name="FileManagerS3_DownloadClip"):
     """Configura el logging para escribir SOLO en archivo (limpieza diaria)."""
     global debug_log_listener, _log_file_path_resolved
 
@@ -162,7 +162,7 @@ def setup_debug_logging(script_name="FileManager_DownloadClip"):
 
 # Setup del logger con captura de cualquier fallo
 try:
-    debug_logger = setup_debug_logging(script_name="FileManager_DownloadClip")
+    debug_logger = setup_debug_logging(script_name="FileManagerS3_DownloadClip")
     print("[DownloadClip] logger inicializado OK")
 except Exception as _e:
     print(f"[DownloadClip] FALLO al inicializar logger: {_e}")
@@ -308,7 +308,7 @@ def _dedupe_preserve_order(paths):
     return out
 
 
-def build_filemanager_cmd(folder_paths, file_paths, notify_dir=None, download_latest=False):
+def build_filemanagers3_cmd(folder_paths, file_paths, notify_dir=None, download_latest=False):
     """Construye el comando del CLI para modo normal o latest.
 
     - Modo normal:
@@ -316,7 +316,7 @@ def build_filemanager_cmd(folder_paths, file_paths, notify_dir=None, download_la
     - Modo latest:
       --download-latest (carpetas) y --download-latest-file (archivos)
 
-    Si notify_dir esta dado, agrega --notify-completion para que FileManager
+    Si notify_dir esta dado, agrega --notify-completion para que FileManagerS3
     escriba un marcador al terminar cada descarga.
     Devuelve la lista de argumentos o None si no se puede construir.
     """
@@ -343,13 +343,13 @@ def build_filemanager_cmd(folder_paths, file_paths, notify_dir=None, download_la
 
     try:
         context_mode = resolve_context_mode()
-        cmd = build_filemanager_command(
+        cmd = build_filemanagers3_command(
             cli_args,
             desarrollo=Desarrollo,
             script_dir=Path(__file__).parent,
             context_mode=context_mode,
         )
-        debug_print(f"Contexto FileManager resuelto: {context_mode}")
+        debug_print(f"Contexto FileManagerS3 resuelto: {context_mode}")
         return cmd
     except Exception as exc:
         debug_print(
@@ -399,7 +399,7 @@ def main(download_latest=False):
 
             if not _path_has_vfx_root(file_path):
                 debug_print(
-                    f"Ruta sin raiz 'VFX-', se omite (FileManager la rechazaria): {file_path}",
+                    f"Ruta sin raiz 'VFX-', se omite (FileManagerS3 la rechazaria): {file_path}",
                     level="warning",
                 )
                 continue
@@ -436,22 +436,22 @@ def main(download_latest=False):
             debug_print(f"No se pudo crear la carpeta de notificacion: {e}", level="warning")
         debug_print(f"Notify dir: {notify_dir}")
 
-        cmd = build_filemanager_cmd(
+        cmd = build_filemanagers3_cmd(
             folder_paths, file_paths, notify_dir, download_latest=download_latest
         )
         if not cmd:
-            debug_print("No se pudo construir el comando de FileManager", level="error")
+            debug_print("No se pudo construir el comando de FileManagerS3", level="error")
             return
 
         debug_print(f"Ejecutando: {' '.join(cmd)}")
         try:
             subprocess.Popen(cmd, shell=False)
             debug_print(
-                f"FileManager iniciado ({mode_label}): {len(folder_paths)} secuencia(s), "
+                f"FileManagerS3 iniciado ({mode_label}): {len(folder_paths)} secuencia(s), "
                 f"{len(file_paths)} archivo(s)"
             )
         except Exception as cmd_error:
-            debug_print(f"Error al ejecutar FileManager: {cmd_error}", level="error")
+            debug_print(f"Error al ejecutar FileManagerS3: {cmd_error}", level="error")
 
     except Exception as e:
         debug_print(f"Error al procesar los clips: {e}", level="error")

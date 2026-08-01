@@ -1,4 +1,6 @@
 v3.82:
+        - FileManagerS3 (`LGA_NKS_FileManagerS3Launcher`, panel de coordinación, `fm_cli_mac.sh`): el repo de la app pasó a llamarse `LGA_FileManagerS3` y renombró sus símbolos, así que las tres rutas al build de desarrollo (`MAC_DEV_APP`, `DEFAULT_DEV_APP` y el ejemplo de la doc) apuntaban a una carpeta inexistente. Se corrigen y se barre el nombre viejo en 18 archivos: los cinco módulos `LGA_NKS_FileManager_*` pasan a `LGA_NKS_FileManagerS3_*` (con las cadenas de `importlib` del panel, que los carga por nombre de archivo), más `get_filemanagers3_exe`, `build_filemanagers3_command` y el test. Se preservan a propósito las aserciones de `_assert_no_legacy_targets`, que verifican que NO se usen `FileManager.exe` ni `FileManager.app`: renombrarlas habría invertido su sentido. El test pasa antes y después.
+
         - El pack declara su version instalada en `LGA_HieroTools/VERSION`, dentro del pack y no suelto en `python/startup`, que es una carpeta compartida. El instalador lo exige como archivo obligatorio del payload y el generador lo publica junto al README. Queda como base para comparar contra la version disponible en GitHub. [ HieroTools - Agregar VERSION al pack ]
 
 v3.81:

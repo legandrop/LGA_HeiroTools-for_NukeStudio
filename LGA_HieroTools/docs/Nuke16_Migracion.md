@@ -63,9 +63,9 @@
 - [x] `LGA_NKS_Flow_ShowInFlow.py` — Mostrar en Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar, QRunnable, QThreadPool)
 - [x] `LGA_NKS_Flow_Thumbs.py` — Thumbnails Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_Flow_ShotPriority.py` — Prioridad de shots (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
-- [x] `LGA_NKS_FileManager_Download.py` — Descarga FileManager (sin Qt - solo subprocess)
-- [x] `LGA_NKS_FileManager_Upload.py` — Subida FileManager (sin Qt - solo subprocess)
-- [x] `LGA_NKS_FileManager_OpenPath.py` — Abrir ruta FileManager (sin Qt - solo subprocess)
+- [x] `LGA_NKS_FileManagerS3_Download.py` — Descarga FileManagerS3 (sin Qt - solo subprocess)
+- [x] `LGA_NKS_FileManagerS3_Upload.py` — Subida FileManagerS3 (sin Qt - solo subprocess)
+- [x] `LGA_NKS_FileManagerS3_OpenPath.py` — Abrir ruta FileManagerS3 (sin Qt - solo subprocess)
 
 ## ✅ **MIGRACIÓN COMPLETA - LGA_NKS_Coordination_Panel_py**
 **8/8 archivos completamente migrados:**
@@ -74,9 +74,9 @@
 - `LGA_NKS_Flow_ShowInFlow.py` ✅
 - `LGA_NKS_Flow_Thumbs.py` ✅
 - `LGA_NKS_Flow_ShotPriority.py` ✅
-- `LGA_NKS_FileManager_Download.py` ✅ (sin Qt - solo subprocess)
-- `LGA_NKS_FileManager_Upload.py` ✅ (sin Qt - solo subprocess)
-- `LGA_NKS_FileManager_OpenPath.py` ✅ (sin Qt - solo subprocess)
+- `LGA_NKS_FileManagerS3_Download.py` ✅ (sin Qt - solo subprocess)
+- `LGA_NKS_FileManagerS3_Upload.py` ✅ (sin Qt - solo subprocess)
+- `LGA_NKS_FileManagerS3_OpenPath.py` ✅ (sin Qt - solo subprocess)
 
 ### LGA_NKS_ViewerTL/ - Scripts de timeline/viewer
 - [x] `LGA_NKS_Timeline_Refresh_Wrap.py` — Refresh timeline (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
@@ -103,7 +103,7 @@
 - [x] `LGA_NKS_Hilos_Hiero.md` — Documentación de hilos
 
 ### Scripts sin Qt
-- [x] `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManager.md` — Documentación
+- [x] `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3.md` — Documentación
 - [x] `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.md` — Documentación
 - [x] `LGA_NKS_Wasabi/LGA_NKS_Wasabi_README.md` — Documentación
 - [x] `LGA_NKS_Wasabi/verify_policy_assign.py` — Script de verificación (sin Qt)
