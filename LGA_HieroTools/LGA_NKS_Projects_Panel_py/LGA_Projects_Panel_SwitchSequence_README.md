@@ -141,17 +141,45 @@ def on_sequence_click(self, sequence_name):
 1. Verificar proyectos abiertos
 2. Buscar secuencia objetivo
 3. Verificar si ya está activa (optimización)
-4. Capturar estado del viewer actual
+4. Capturar estado del viewer actual (gain/gamma/saturation)
 5. Capturar viewer+timeline activos (originales)
-6. Abrir nueva secuencia (duplica, playhead automático)
+6. Capturar playhead del viewer original
 7. Cerrar viewer+timeline originales simultáneamente
-8. Ejecutar pre-cleanup del timeline nuevo
-9. Aplicar ajustes preservados
-10. Optimizar UI (focus, reduce + scroll)
-11. (Opcional) Cerrar TODOS los viewers+timelines viejos si `CLOSE_ALL_TIMELINES = True`
-12. Aplicar LUT Rec.709 si existe
-13. Desactivar Frame Number (`Frame_Only`) de la secuencia activa
+8. Abrir nueva secuencia
+9. Restaurar el playhead
+10. Ejecutar pre-cleanup del timeline nuevo
+11. Aplicar ajustes preservados
+12. Optimizar UI (focus, reduce + scroll)
+13. (Opcional) Cerrar TODOS los viewers+timelines viejos si `CLOSE_ALL_TIMELINES = True`
+14. Aplicar LUT Rec.709 si existe
+15. Desactivar Frame Number (`Frame_Only`) de la secuencia activa
 ```
+
+### El orden importa: cerrar ANTES de abrir
+
+Los pasos 7 y 8 estuvieron al revés hasta v2.31, y ese orden costaba entre 4 y 15
+segundos de UI congelada por switch, de forma errática y sin relación con el
+tamaño del timeline.
+
+La causa: destruir el viewer+timeline viejos obliga a sincronizarse con los hilos
+de IO que están leyendo la media de la secuencia recién abierta, y la destrucción
+se queda esperándolos. Medido dentro de `sendPostedEvents(DeferredDelete)`: 13.7s
+en un caso, 3.5s en otro. Los mismos widgets, destruidos sin nada cargando en
+paralelo, cuestan 0.46s — incluso sobre una secuencia de 129 trackItems.
+
+Cerrando primero no hay con qué competir. El flag `CLOSE_BEFORE_OPEN` conserva el
+orden viejo por si hiciera falta volver atrás.
+
+Dos consecuencias a tener presentes:
+
+- **El playhead ya no se preserva solo.** `openInTimeline` lo hacía leyéndolo del
+  viewer previo, que con este orden ya está cerrado. Por eso se captura con
+  `_get_current_playhead()` y se repone con `_restore_playhead()`.
+- **El cierre sigue siendo simultáneo.** Viewer y timeline se agendan juntos con
+  `deleteLater()` y se destruyen en una sola pasada. Separarlos forzando la
+  destrucción entre medio crashea Nuke Studio 16 (access violation en
+  `QWidget::~QWidget` destruyendo hijos en cascada). Ese "equilibrio delicado" no
+  es superstición: está verificado con dump.
 
 ## Logs y Debugging
 

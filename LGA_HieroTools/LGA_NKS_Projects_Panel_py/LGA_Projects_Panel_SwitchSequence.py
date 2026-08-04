@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.29 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.31 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -18,6 +18,10 @@ ____________________________________________________________________
 
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
+
+  v2.31: Fix del switch lento: ahora cierra el viewer + timeline viejos ANTES de abrir la secuencia nueva (flag CLOSE_BEFORE_OPEN). Abriendo primero, la destruccion competia con los hilos de IO de la media recien abierta y esperaba entre 3.5s y 13.7s. Cerrando primero, 0.46s. Se captura y restaura el playhead a mano, porque openInTimeline lo preservaba leyendolo del viewer previo.
+
+  v2.30: Diagnostico del cierre lento: _process_events ahora mide por separado sendPostedEvents(DeferredDelete) y processEvents, para saber si los segundos se van en la destruccion real del widget o en lo que esa destruccion desencadena. Agregado flag SWITCH_DIAGNOSTIC_SPLIT_CLOSE (off) para atribuir el costo a viewer o timeline.
 
   v2.29: Agregado logging diagnostico del cierre real de viewers/timelines: snapshots de widgets, medicion de eventos Qt/DeferredDelete y espera post-switch para detectar donde tarda Hiero.
 
@@ -50,9 +54,28 @@ from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
 # Si True, cierra TODOS los viewers + timelines viejos y deja solo el nuevo
 CLOSE_ALL_TIMELINES = True
 
+# Orden del switch. Con True cierra el viewer + timeline viejos ANTES de abrir
+# la secuencia nueva.
+#
+# Abriendo primero (False, comportamiento histórico), la destrucción del par
+# viejo compite con los hilos de IO que están leyendo la media recién abierta y
+# se queda esperándolos: entre 3.5s y 13.7s medidos, erráticos y sin relación
+# con el tamaño del timeline. Cerrando primero, la misma destrucción cuesta
+# 0.46s sobre una secuencia de 129 trackItems.
+#
+# Se deja el flag para poder volver al orden viejo sin revertir el código.
+CLOSE_BEFORE_OPEN = True
+
 # Logging diagnostico post-switch. Mide si Qt/Hiero siguen procesando cierres
 # despues de que las llamadas Python ya retornaron.
 SWITCH_DIAGNOSTIC_LOG_WIDGETS = True
+
+# Diagnostico: destruye viewer y timeline originales por separado en vez de
+# simultaneamente, para saber cual de los dos se come los segundos.
+# ROMPE el "cierre equilibrado" que el codigo mantiene a proposito, asi que
+# queda apagado por defecto. Prender solo para medir.
+SWITCH_DIAGNOSTIC_SPLIT_CLOSE = False
+
 SWITCH_CLEANUP_WAIT_TIMEOUT = 8.0
 SWITCH_CLEANUP_WAIT_INTERVAL = 0.10
 SWITCH_CLEANUP_LOG_INTERVAL = 0.50
@@ -62,21 +85,40 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 
 
 def _process_events(label=None, send_deferred_delete=False):
-    """Procesa eventos de Qt para estabilidad y devuelve el tiempo consumido."""
-    start = time.time()
+    """
+    Procesa eventos de Qt para estabilidad y devuelve el tiempo consumido.
+
+    Mide por separado las dos fases, que cuestan cosas distintas:
+      - sendPostedEvents(DeferredDelete): destruccion REAL de lo agendado con
+        deleteLater(). Aca es donde Hiero libera el timeline/viewer viejo.
+      - processEvents(): lo que esa destruccion desencadena (repaint, relayout)
+        mas la cola normal de eventos.
+    Antes se median juntas y no se sabia cual de las dos se comia los segundos.
+    """
+    deferred_elapsed = 0.0
+    events_elapsed = 0.0
+
     if QtCore:
         try:
             if send_deferred_delete and hasattr(QtCore, "QEvent"):
+                deferred_start = time.time()
                 QtCore.QCoreApplication.sendPostedEvents(
                     None, QtCore.QEvent.DeferredDelete
                 )
+                deferred_elapsed = time.time() - deferred_start
+
+            events_start = time.time()
             QtCore.QCoreApplication.processEvents()
+            events_elapsed = time.time() - events_start
         except Exception:
             pass
-    elapsed = time.time() - start
+
+    elapsed = deferred_elapsed + events_elapsed
     if label:
         debug_print(
-            f"   [QtEvents] {label}: {elapsed:.3f}s | deferred_delete={send_deferred_delete}"
+            f"   [QtEvents] {label}: {elapsed:.3f}s | "
+            f"deferredDelete={deferred_elapsed:.3f}s | "
+            f"processEvents={events_elapsed:.3f}s"
         )
     return elapsed
 
@@ -332,6 +374,45 @@ def _apply_rec709_if_available(viewer):
         return False
 
 
+def _get_current_playhead():
+    """
+    Posición actual del playhead, o None si no se puede leer.
+
+    Solo hace falta con CLOSE_BEFORE_OPEN: openInTimeline preservaba el playhead
+    leyéndolo del viewer previo, y con el orden nuevo ese viewer ya está cerrado
+    cuando se abre la secuencia nueva.
+    """
+    try:
+        viewer = hiero.ui.currentViewer()
+        if not viewer:
+            return None
+        return viewer.time()
+    except Exception:
+        return None
+
+
+def _restore_playhead(playhead):
+    """Reposiciona el playhead en el viewer nuevo. No falla si no se puede."""
+    if playhead is None:
+        return False
+    try:
+        viewer = hiero.ui.currentViewer()
+        if not viewer:
+            return False
+
+        actual = viewer.time()
+        if actual == playhead:
+            debug_print(f"   [Playhead] Ya estaba en {playhead}")
+            return True
+
+        viewer.setTime(playhead)
+        debug_print(f"   [Playhead] Restaurado: {actual} -> {playhead}")
+        return True
+    except Exception as e:
+        debug_print(f"   [Playhead] No se pudo restaurar: {e}")
+        return False
+
+
 def _get_current_viewer_object_name():
     """Obtiene objectName del viewer activo actual."""
     try:
@@ -426,6 +507,14 @@ def _close_old_viewer_and_timeline_safe(old_viewer_object_name, old_timeline_obj
                     closed_timelines += 1
             except Exception:
                 continue
+
+            # Modo diagnostico: fuerza la destruccion de cada widget por
+            # separado para atribuir el costo a uno u otro.
+            if SWITCH_DIAGNOSTIC_SPLIT_CLOSE:
+                _process_events(
+                    f"close original {widget_type} ({obj_name})",
+                    send_deferred_delete=True,
+                )
 
         _process_events("close originals immediate", send_deferred_delete=True)
 
@@ -928,45 +1017,95 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         f"timeline={old_timeline_object_name}"
     )
 
-    # 5. Abrir secuencia con openInTimeline (como v2) - playhead se preserva automáticamente
-    step_start = time.time()
-    try:
+    # 5 y 6. Abrir la nueva y cerrar la vieja.
+    #
+    # El ORDEN es lo que decide la velocidad del switch. Abriendo primero, la
+    # destruccion del par viejo tiene que sincronizarse con los hilos de IO que
+    # estan leyendo la media recien abierta, y se queda esperandolos: medido
+    # entre 3.5s y 13.7s, sin relacion con el tamano del timeline. Cerrando
+    # primero no hay con que competir: 0.46s sobre una secuencia de 129 items.
+    #
+    # El playhead se captura y se restaura a mano porque openInTimeline lo
+    # preservaba leyendolo del viewer previo, que con este orden ya no existe.
+
+    def _abrir_secuencia_nueva():
+        """Abre la secuencia objetivo y verifica que el cambio ocurrio."""
         debug_print("   [Stage] openInTimeline: inicio")
         hiero.ui.openInTimeline(target_seq)
         _process_events("despues de openInTimeline")
 
-        # Verificar que cambió correctamente
-        new_active = hiero.ui.activeSequence()
-        if not (new_active and new_active.name() == target_sequence_name):
+        activa = hiero.ui.activeSequence()
+        if not (activa and activa.name() == target_sequence_name):
             debug_print("❌ Error: Secuencia no cambió correctamente")
+            return None
+        return activa
+
+    def _cerrar_par_original():
+        """Cierra viewer + timeline originales. Devuelve (viewers, timelines, agendados)."""
+        try:
+            cerrados_v, cerrados_t, agendados = _close_old_viewer_and_timeline_safe(
+                old_viewer_object_name, old_timeline_object_name
+            )
+            debug_print(f"   [DeleteLater] Originales agendados: {agendados}")
+            debug_print(
+                f"   ├── Cerrados originales: viewers={cerrados_v}, timelines={cerrados_t}"
+            )
+            return cerrados_v, cerrados_t, agendados
+        except Exception as e:
+            debug_print(f"   ├── Error cerrando viewer/timeline originales: {e}")
+            return 0, 0, []
+
+    new_active = None
+    open_time = 0
+    close_time = 0
+
+    if CLOSE_BEFORE_OPEN:
+        # Playhead del viewer viejo, antes de destruirlo
+        playhead_original = _get_current_playhead()
+        debug_print(f"   [Playhead] Original: {playhead_original}")
+
+        step_start = time.time()
+        closed_viewers, closed_timelines, scheduled_original_names = (
+            _cerrar_par_original()
+        )
+        close_time = time.time() - step_start
+        _log_widget_snapshot("despues deleteLater originales (pre-apertura)")
+
+        step_start = time.time()
+        try:
+            new_active = _abrir_secuencia_nueva()
+            if new_active is None:
+                return False
+        except Exception as e:
+            debug_print(f"❌ Error abriendo secuencia: {e}")
             return False
+        open_time = time.time() - step_start
+        _log_widget_snapshot("despues openInTimeline")
 
-    except Exception as e:
-        debug_print(f"❌ Error abriendo secuencia: {e}")
-        return False
+        # Restaurar el playhead: sin viewer previo, Hiero no tiene de donde sacarlo
+        _restore_playhead(playhead_original)
+    else:
+        # Orden histórico: abrir y después cerrar. Mucho más lento, se conserva
+        # solo para poder volver atrás si el orden nuevo diera problemas.
+        step_start = time.time()
+        try:
+            new_active = _abrir_secuencia_nueva()
+            if new_active is None:
+                return False
+        except Exception as e:
+            debug_print(f"❌ Error abriendo secuencia: {e}")
+            return False
+        open_time = time.time() - step_start
+        _log_widget_snapshot("despues openInTimeline")
 
-    open_time = time.time() - step_start
+        step_start = time.time()
+        closed_viewers, closed_timelines, scheduled_original_names = (
+            _cerrar_par_original()
+        )
+        close_time = time.time() - step_start
+        _log_widget_snapshot("despues deleteLater originales")
+
     new_timeline = hiero.ui.getTimelineEditor(new_active) if new_active else None
-    _log_widget_snapshot("despues openInTimeline")
-
-    # 6. CERRAR viewer + timeline ORIGINALES simultáneamente (método refresh)
-    step_start = time.time()
-    try:
-        closed_viewers, closed_timelines, scheduled_original_names = _close_old_viewer_and_timeline_safe(
-            old_viewer_object_name, old_timeline_object_name
-        )
-        debug_print(
-            f"   [DeleteLater] Originales agendados: {scheduled_original_names}"
-        )
-        debug_print(
-            f"   ├── Cerrados originales: viewers={closed_viewers}, timelines={closed_timelines}"
-        )
-    except Exception as e:
-        debug_print(f"   ├── Error cerrando viewer/timeline originales: {e}")
-        closed_viewers, closed_timelines = 0, 0
-        scheduled_original_names = []
-    close_time = time.time() - step_start
-    _log_widget_snapshot("despues deleteLater originales")
 
     # 7. Ejecutar pre-cleanup sobre la secuencia nueva antes de ajustes finales de UI
     step_start = time.time()
@@ -1073,7 +1212,10 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     debug_print(f"✅ Switch híbrido perfecto completado en {total_time:.2f}s")
     debug_print(f"   ├── Viewer capture: {viewer_capture_time:.3f}s")
     debug_print(f"   ├── Sequence open: {open_time:.3f}s")
-    debug_print(f"   ├── Close originals (viewer+timeline): {close_time:.3f}s")
+    debug_print(
+        f"   ├── Close originals (viewer+timeline): {close_time:.3f}s"
+        f" | orden={'cierre primero' if CLOSE_BEFORE_OPEN else 'apertura primero'}"
+    )
     debug_print(f"   ├── Timeline pre-cleanup: {precleanup_time:.3f}s")
     debug_print(f"   ├── Viewer settings apply: {viewer_restore_time:.3f}s")
     debug_print(f"   ├── UI reduce: {reduce_time:.3f}s")
