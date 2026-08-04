@@ -19,7 +19,7 @@ ____________________________________________________________________
          "Delivery Checked", como en Flow.
 
   v2.55: Los botones de estado salen de LGA_NKS_Flow_Status_Config y se filtran
-         por contexto: en Client desaparecen los cuatro reviewers que erso no
+         por contexto: en Client desaparecen los cuatro reviewers que projb no
          tiene y aparece Rev Prod. Suma OK for Delivery y renombra Approved ->
          Delivery OK y Delivery Ok -> Delivered, como se llaman en Flow.
 

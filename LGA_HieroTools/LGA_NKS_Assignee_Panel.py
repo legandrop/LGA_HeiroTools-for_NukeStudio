@@ -13,7 +13,7 @@ ____________________________________________________________________
   v1.57: los botones de usuario salen de la DB de PipeSync (flow_users); se elimina el JSON local y la config por defecto.
   v1.56: Propaga file_path junto con base_name a los tres scripts del panel
          para permitir extracción de project_name desde el segmento VFX-NOMBRE
-         del path (corrige proyectos como MORLASP con prefijo MOR en el filename).
+         del path (corrige proyectos como PROJALT con prefijo PROJA en el filename).
   v1.55: Permite get/clear/assign de assignees en clips offline usando la ruta
          registrada en mediaSource().fileinfos(), sin exigir media presente.
   v1.54: Agregado logging a archivo con switches de debug

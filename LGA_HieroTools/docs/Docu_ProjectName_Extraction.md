@@ -10,18 +10,18 @@
 El método histórico extraía el nombre del proyecto del primer bloque del filename:
 
 ```
-MOR_1048_060_Compo_v012.%04d.exr  →  "MOR"
+PROJA_1048_060_Compo_v012.%04d.exr  →  "PROJA"
 ```
 
 Esto falla cuando el proyecto tiene nombre largo en la DB pero un prefijo corto en los shots:
 
 | Folder en disco  | En DB      | Desde filename |
 |------------------|------------|----------------|
-| `VFX-MORLASP`    | `MORLASP`  | `MOR` ❌        |
-| `VFX-BRDA`       | `BRDA`     | `BRDA` ✓ (coincide de casualidad) |
-| `VFX-PHLDA`      | `PHLDA`    | `PHLDA` ✓      |
+| `VFX-PROJALT`    | `PROJALT`  | `PROJA` ❌        |
+| `VFX-PROJF`       | `PROJF`     | `PROJF` ✓ (coincide de casualidad) |
+| `VFX-PROJE`      | `PROJE`    | `PROJE` ✓      |
 
-El resultado: `find_shot("MOR", ...)` no encuentra nada aunque el shot exista en la DB como proyecto `MORLASP`.
+El resultado: `find_shot("PROJA", ...)` no encuentra nada aunque el shot exista en la DB como proyecto `PROJALT`.
 
 ---
 
@@ -30,7 +30,7 @@ El resultado: `find_shot("MOR", ...)` no encuentra nada aunque el shot exista en
 Los proyectos **siempre** viven en una carpeta raíz con el patrón `VFX-NOMBRE`:
 
 ```
-T:/VFX-MORLASP/101/MOR_1048_060/Comp/4_publish/...
+T:/VFX-PROJALT/101/PROJA_1048_060/Comp/4_publish/...
      ^^^^^^^^^^
      segmento con prefijo "VFX-"
 ```
@@ -38,9 +38,9 @@ T:/VFX-MORLASP/101/MOR_1048_060/Comp/4_publish/...
 El nombre del proyecto en la DB es el segmento **sin el prefijo `VFX-`**:
 
 ```
-"VFX-MORLASP"  →  "MORLASP"
-"VFX-BRDA"     →  "BRDA"
-"VFX-KTCE"     →  "KTCE"
+"VFX-PROJALT"  →  "PROJALT"
+"VFX-PROJF"     →  "PROJF"
+"VFX-PROJG"     →  "PROJG"
 ```
 
 ---
@@ -74,13 +74,13 @@ if not project_name:
 El mismo problema aplica a la **secuencia**. Históricamente la secuencia para Flow
 (`sg_sequence`) se tomaba del **nombre del timeline de Hiero** (`seq.name()`), que
 puede no coincidir con el code de la Sequence en Flow (ej. un timeline llamado
-`MORLASP_SUP_v004`).
+`PROJALT_SUP_v004`).
 
 La estructura en disco **siempre** es `…/VFX-PROYECTO/SECUENCIA/SHOT/…`, así que la
 secuencia es el segmento que **sigue inmediatamente** al `VFX-NOMBRE`:
 
 ```
-T:/VFX-MORLASP/101/MOR_1048_060/Comp/4_publish/...
+T:/VFX-PROJALT/101/PROJA_1048_060/Comp/4_publish/...
                 ^^^
                 segmento de secuencia
 ```
@@ -203,8 +203,8 @@ Leyenda:
 ## Proyectos confirmados en DB (al 2026-05-22)
 
 ```
-BRDA, ERSO, KTCE, MOR, MORLASP, PHLDA, TEST, VLLF
+PROJF, PROJB, PROJG, PROJA, PROJALT, PROJE, TEST, PROJH
 ```
 
-> Nota: `MOR` existe en la DB como proyecto separado. No confundir con el prefijo
-> de los shot codes del proyecto `MORLASP` (cuyos shots empiezan con `MOR_`).
+> Nota: `PROJA` existe en la DB como proyecto separado. No confundir con el prefijo
+> de los shot codes del proyecto `PROJALT` (cuyos shots empiezan con `PROJA_`).

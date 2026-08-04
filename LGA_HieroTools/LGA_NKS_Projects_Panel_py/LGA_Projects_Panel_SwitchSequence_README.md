@@ -195,7 +195,7 @@ Dos consecuencias a tener presentes:
    ├── UI scroll: 0.001s
    ├── Close ALL old viewers+timelines: 0.000s (solo si CLOSE_ALL_TIMELINES = True)
    └── Total: 0.49s
-Track NukeVFX eliminado: VFX-MOR 1
+Track NukeVFX eliminado: VFX-PROJA 1
 Effect BurnIn extendido: Frame9 | 5881 -> 4638
 Pre-cleanup finalizado | tracks eliminados: 1 | efectos BurnIn ajustados: 4
 Usando método original (Nuke 15)
@@ -212,7 +212,7 @@ Scrolled to position -266.
 
 ### ✅ **RESUELTO: Dos proyectos con secuencia del mismo nombre**
 
-**Problema:** Si dos proyectos abiertos tienen secuencias con el mismo nombre (ej: "101" en MORLASP y "101" en MOR), al clickear "101" de MOR el switch era ignorado porque el check "Ya activa" comparaba solo el nombre sin considerar el proyecto. Devolvía "✅ Ya activa" aunque la activa fuera la del otro proyecto.
+**Problema:** Si dos proyectos abiertos tienen secuencias con el mismo nombre (ej: "101" en PROJALT y "101" en PROJA), al clickear "101" de PROJA el switch era ignorado porque el check "Ya activa" comparaba solo el nombre sin considerar el proyecto. Devolvía "✅ Ya activa" aunque la activa fuera la del otro proyecto.
 
 **✅ Solución (v2.28):** El check ahora compara también el proyecto usando `active_seq.project()`. Si el nombre coincide pero el proyecto difiere, el switch continúa hacia el proyecto correcto.
 
@@ -235,8 +235,8 @@ Scrolled to position -266.
 **Resultado actual (probado y funcionando):**
 ```
 🎯 Usando objeto Sequence directamente para '000'
-   Proyecto: 'ERSO_SUP_v011'
-   📊 Cambiando de proyecto 'BRDA_SUP_v050' → 'ERSO_SUP_v011'
+   Proyecto: 'PROJB_SUP_v011'
+   📊 Cambiando de proyecto 'PROJF_SUP_v050' → 'PROJB_SUP_v011'
    ✅ openInTimeline maneja el cambio automáticamente
 ✅ Switch híbrido perfecto completado
 ```

@@ -16,10 +16,10 @@ sin necesidad de ampliar schema para la lectura visual actual.
 
 Caso real validado:
 
-- shot: `MOR_2004_030`
-- proyecto abierto en Hiero: `MORLASP_SUP_v004`
-- proyecto real en `pipesync.db`: `MORLASP`
-- playlist visible en captura: `MOR - 2026.04.21`
+- shot: `PROJA_2004_030`
+- proyecto abierto en Hiero: `PROJALT_SUP_v004`
+- proyecto real en `pipesync.db`: `PROJALT`
+- playlist visible en captura: `PROJA - 2026.04.21`
 
 ## Conclusiones del analisis
 
@@ -84,7 +84,7 @@ Join requerido:
 Esto permite renderizar lineas del tipo:
 
 ```text
-v001 | Subida por Fede Blesa | ayer 3:03pm | playlist "MOR - 2026.04.21"
+v001 | Subida por Nombre Apellido | ayer 3:03pm | playlist "PROJA - 2026.04.21"
 Descripcion Version: fix peluca
 ```
 
@@ -170,12 +170,12 @@ El schema actual permite mostrar varias apariciones de una misma version number 
 
 Caso real validado:
 
-- `MOR_2004_030_comp_v01` en playlist `MOR - 2026.04.21`
-- `MORLASP_2004_030_comp_v01` en playlist `MORLASP - 2026.04.20`
+- `PROJA_2004_030_comp_v01` en playlist `PROJA - 2026.04.21`
+- `PROJALT_2004_030_comp_v01` en playlist `PROJALT - 2026.04.20`
 
 Ambas comparten:
 
-- mismo `shot_code = MOR_2004_030`
+- mismo `shot_code = PROJA_2004_030`
 
 pero tienen:
 
@@ -209,11 +209,11 @@ ni con:
 
 Porque en Hiero puede existir algo como:
 
-- `MORLASP_SUP_v004`
+- `PROJALT_SUP_v004`
 
 y en DB el proyecto real es:
 
-- `MORLASP`
+- `PROJALT`
 
 Por eso `FlowPlaylist_Shot_info.py` debe (desde v0.02):
 
@@ -226,7 +226,7 @@ Por eso `FlowPlaylist_Shot_info.py` debe (desde v0.02):
 4. usar ese valor para buscar en `pipesync.db`
 
 > El paso 0 cubre el caso en que el prefijo del shot no coincide con el nombre del
-> proyecto (ej: shots `MOR_...` que en realidad son del proyecto `MORLASP`).
+> proyecto (ej: shots `PROJA_...` que en realidad son del proyecto `PROJALT`).
 > Ver `docs/Docu_ProjectName_Extraction.md`.
 
 ## Estado actual de implementacion

@@ -71,9 +71,9 @@
 - [x] Hacer que `FlowPlaylist_Shot_info.py` resuelva shots vendor usando el proyecto real del timeline y no solo el proyecto parseado del filename.
 - [x] Normalizar el nombre del proyecto abierto en Hiero al `project_name` real de PipeSync.
 - [x] (v0.02) Priorizar el `project_name` extraido del segmento `VFX-NOMBRE` de la ruta del clip (`extract_project_name_from_path`) sobre el timeline normalizado y el parseado del filename, en Pull/Push/Push_connector/Shot_info del panel. Ver `Docu_ProjectName_Extraction.md`.
-- [x] Validar el caso vendor `MOR_2004_030`:
-  - proyecto abierto `MORLASP_SUP_v004`
-  - proyecto buscado en DB `MORLASP`
+- [x] Validar el caso vendor `PROJA_2004_030`:
+  - proyecto abierto `PROJALT_SUP_v004`
+  - proyecto buscado en DB `PROJALT`
 - [x] Documentar el mapeo real entre captura/UI y `pipesync_playlists.db` en un MD tecnico separado.
 - [x] Mostrar `Descripcion Tarea` desde `pipesync.db`.
 - [x] Mostrar `Descripcion Version` desde `pipesync_playlists.db`.

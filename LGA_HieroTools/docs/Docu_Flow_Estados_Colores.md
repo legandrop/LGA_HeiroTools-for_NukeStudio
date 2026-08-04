@@ -4,7 +4,7 @@
 # Estados y Colores de Flow (Shot y Task)
 
 Fuente de verdad de los estados (`sg_status_list`) de **Shot** y **Task** en Flow
-(ShotGrid), en los **dos sitios**: `wanka` (contexto studio) y `ersovfx`
+(ShotGrid), en los **dos sitios**: `wanka` (contexto studio) y `projbvfx`
 (contexto client).
 
 > Los codigos y nombres reales se obtienen consultando Flow directamente:
@@ -17,14 +17,14 @@ y son porque el nombre de Flow es un nombre interno feo o ambiguo:
 
 | Codigo | Nombre en Flow | Nombre que usamos | Por que |
 |---|---|---|---|
-| `revleg` | Review Lega (wanka) / **Review Sup** (erso) | Review Lega | en erso el sup es Lega |
+| `revleg` | Review Lega (wanka) / **Review Sup** (projb) | Review Lega | en projb el sup es Lega |
 
 ## Lo primero que hay que entender: los dos sitios NO tienen la misma lista
 
 Empujar un codigo que el sitio no acepta falla con
 `'xxx' is not a valid status`. No se detecta hasta que alguien aprieta el boton.
 
-| | solo en studio (wanka) | solo en client (ersovfx) |
+| | solo en studio (wanka) | solo en client (projbvfx) |
 |---|---|---|
 | Task | `rev_su`, `revcha`, `revjua`, `revjav` | `revprd` |
 | Shot | — | `revprd` no aplica; los Shot son identicos |
@@ -32,13 +32,13 @@ Empujar un codigo que el sitio no acepta falla con
 Trampas concretas que ya causaron bugs:
 
 - **`revleg` se llama distinto en cada sitio.** En wanka es "Review Lega"; en
-  ersovfx es **"Review Sup"**, y es el unico reviewer del sitio.
+  projbvfx es **"Review Sup"**, y es el unico reviewer del sitio.
 - **Que una entidad `Status` exista no alcanza.** Lo que Flow valida al escribir
   es la lista de valores validos del campo. `pubsh` existia en los dos sitios y
   no estaba en el campo de wanka: escribirlo fallaba.
 - **La cola de entrega es `pubsh` -> `check` -> `apr`**, y `apr` es el FINAL, lo
   da el cliente. Flow la tenia al reves (`apr` en el medio) hasta que se corrigio.
-- **`pbshed` ya no se usa.** Era el "entregado" del Shot de erso; se reemplazo
+- **`pbshed` ya no se usa.** Era el "entregado" del Shot de projb; se reemplazo
   por `check`, que es el que manda PipeSync.
 
 ## Decision de colores
@@ -71,7 +71,7 @@ Render de los dropdowns (`ColoredStatusComboBox`):
 | Review Charly | `revcha` | Review Charly | `#a9909d` | si | **no** |
 | Review Juano | `revjua` | Review Juano | `#7F4B69` | si | **no** |
 | Review Javi | `revjav` | Review Javi | `#9c3e5e` | si | **no** |
-| Review Lega | `revleg` | Review Lega / **Review Sup** en erso | `#69135e` | si | si |
+| Review Lega | `revleg` | Review Lega / **Review Sup** en projb | `#69135e` | si | si |
 | Review Hold | `revhld` | Review Hold | `#9E6A15` | si | si |
 | Review Prod | `revprd` | Review Prod | `#8CBF3F` | **no** | si |
 | Review Dir | `rev_di` | Review Dir | `#B5DB4B` | si | si |

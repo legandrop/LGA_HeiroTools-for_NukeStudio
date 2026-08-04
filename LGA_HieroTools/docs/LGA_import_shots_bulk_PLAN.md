@@ -87,7 +87,7 @@ carpetas. Si retorna 1 sola → el caller usa el flujo mono-shot.
 El browser tiene tamaño y colores configurables mediante constantes
 `✅✅💾⚠️`. La selección usa gris claro en lugar del highlight amarillo. El
 El sidebar usa un ancho fijo configurable, conserva los accesos estándar y suma carpetas `VFX-*`
-detectadas en `T:/` y `N:/`, con labels como `T:/VFX-MOR`. Las columnas Type
+detectadas en `T:/` y `N:/`, con labels como `T:/VFX-PROJA`. Las columnas Type
 y Date Modified se autoajustan por contenido y usan mínimos configurables.
 
 ---

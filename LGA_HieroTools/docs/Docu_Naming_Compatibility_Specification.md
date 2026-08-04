@@ -9,7 +9,7 @@ Este documento describe la evolución del sistema de nomenclatura utilizado en l
 
 **Nota:** Este proyecto está basado en la experiencia previa del proyecto de Nuke (LGA_ToolPack), donde se implementó exitosamente la compatibilidad de nomenclatura. Ver sección "Referencia: Proyecto Nuke" al final del documento.
 
-**Actualización:** Se incorpora un bloque opcional de **Temporada/Episodio** inmediatamente después del proyecto cuando se trabaja en series (ej: `ERSO_101_060_010`).
+**Actualización:** Se incorpora un bloque opcional de **Temporada/Episodio** inmediatamente después del proyecto cuando se trabaja en series (ej: `PROJB_101_060_010`).
 
 ## Sistema de Nomenclatura Actual (Con Campos de Descripción)
 
@@ -22,7 +22,7 @@ PROYECTO_SEQ_SHOT_DESC1_DESC2
 
 **Ejemplo:**
 ```
-MOR_000_140_Chroma_Auto
+PROJA_000_140_Chroma_Auto
 ```
 
 ### Estructura Completa de Archivos
@@ -31,15 +31,15 @@ PROYECTO_SEQ_SHOT_DESC1_DESC2_TASK_vVERSION.EXT
 ```
 
 **Ejemplos:**
-- Script: `MOR_000_140_Chroma_Auto_comp_v19.nk`
-- Video: `MOR_000_140_Chroma_Auto_comp_v18.mov`
-- Secuencia: `MOR_000_140_Chroma_Auto_comp_v19_1001.exr`
+- Script: `PROJA_000_140_Chroma_Auto_comp_v19.nk`
+- Video: `PROJA_000_140_Chroma_Auto_comp_v18.mov`
+- Secuencia: `PROJA_000_140_Chroma_Auto_comp_v19_1001.exr`
 
 ### Campos y su Significado
 
 | Campo | Posición | Descripción | Ejemplo |
 |-------|----------|-------------|---------|
-| PROYECTO | 1 | Código del proyecto | `MOR` |
+| PROYECTO | 1 | Código del proyecto | `PROJA` |
 | SEQ | 2 | Número de secuencia (3 dígitos) | `000` |
 | SHOT | 3 | Número de shot (3-4 dígitos) | `140` |
 | DESC1 | 4 | Primera descripción | `Chroma` |
@@ -62,7 +62,7 @@ PROYECTO_SEQ_SHOT
 
 **Ejemplo:**
 ```
-MOR_000_140
+PROJA_000_140
 ```
 
 ### Estructura Completa de Archivos
@@ -71,15 +71,15 @@ PROYECTO_SEQ_SHOT_TASK_vVERSION.EXT
 ```
 
 **Ejemplos:**
-- Script: `MOR_000_140_comp_v19.nk`
-- Video: `MOR_000_140_comp_v18.mov`
-- Secuencia: `MOR_000_140_comp_v19_1001.exr`
+- Script: `PROJA_000_140_comp_v19.nk`
+- Video: `PROJA_000_140_comp_v18.mov`
+- Secuencia: `PROJA_000_140_comp_v19_1001.exr`
 
 ### Campos y su Significado
 
 | Campo | Posición | Descripción | Ejemplo |
 |-------|----------|-------------|---------|
-| PROYECTO | 1 | Código del proyecto | `MOR` |
+| PROYECTO | 1 | Código del proyecto | `PROJA` |
 | SEQ | 2 | Número de secuencia (3 dígitos) | `000` |
 | SHOT | 3 | Número de shot (3-4 dígitos) | `140` |
 | TASK | 4 | Nombre de la tarea | `comp` |
@@ -100,7 +100,7 @@ PROYECTO_TEMP_EP_SEQ_SHOT
 
 **Ejemplo:**
 ```
-ERSO_101_060_010
+PROJB_101_060_010
 ```
 
 ### Con Campos de Descripción
@@ -110,14 +110,14 @@ PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2
 
 **Ejemplo:**
 ```
-ERSO_101_060_010_Chroma_Auto
+PROJB_101_060_010_Chroma_Auto
 ```
 
 ### Campos y su Significado
 
 | Campo | Posición | Descripción | Ejemplo |
 |-------|----------|-------------|---------|
-| PROYECTO | 1 | Código del proyecto | `ERSO` |
+| PROYECTO | 1 | Código del proyecto | `PROJB` |
 | TEMP_EP | 2 | Temporada/Episodio (3 dígitos) | `101` |
 | SEQ | 3 | Secuencia interna (3 dígitos) | `060` |
 | SHOT | 4 | Número de shot (3-4 dígitos) | `010` |
@@ -139,8 +139,8 @@ shot_code = "_".join(parts[:5])  # Siempre toma primeros 5 campos
 ```
 
 **Impacto:**
-- Con descripción: `['MOR', '000', '140', 'Chroma', 'Auto']` → `MOR_000_140_Chroma_Auto` ✓
-- Sin descripción: `['MOR', '000', '140', 'comp', 'v19']` → `MOR_000_140_comp_v19` ❌
+- Con descripción: `['PROJA', '000', '140', 'Chroma', 'Auto']` → `PROJA_000_140_Chroma_Auto` ✓
+- Sin descripción: `['PROJA', '000', '140', 'comp', 'v19']` → `PROJA_000_140_comp_v19` ❌
 
 ### 2. LGA_NKS_Flow_Pull.py (Problema CRÍTICO)
 **Problema:** Extracción de shot_code asume siempre 5 campos
@@ -183,10 +183,10 @@ Sino:
 ```
 
 **Casos de Uso:**
-- `MOR_000_140_comp_v19.exr` → **Simplificado** → Shot Code: `MOR_000_140`
-- `MOR_000_140_Chroma_Auto_comp_v19.exr` → **Con Descripción** → Shot Code: `MOR_000_140_Chroma_Auto`
-- `ERSO_101_060_010_comp_v05.exr` → **Serie Simplificado** → Shot Code: `ERSO_101_060_010`
-- `ERSO_101_060_010_Chroma_Auto_comp_v05.exr` → **Serie con Descripción** → Shot Code: `ERSO_101_060_010_Chroma_Auto`
+- `PROJA_000_140_comp_v19.exr` → **Simplificado** → Shot Code: `PROJA_000_140`
+- `PROJA_000_140_Chroma_Auto_comp_v19.exr` → **Con Descripción** → Shot Code: `PROJA_000_140_Chroma_Auto`
+- `PROJB_101_060_010_comp_v05.exr` → **Serie Simplificado** → Shot Code: `PROJB_101_060_010`
+- `PROJB_101_060_010_Chroma_Auto_comp_v05.exr` → **Serie con Descripción** → Shot Code: `PROJB_101_060_010_Chroma_Auto`
 
 **Ventajas:**
 - ✅ **100% preciso** - No hay falsos positivos

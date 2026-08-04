@@ -64,7 +64,7 @@ Basado en el análisis de proyectos existentes:
 - Tasks típicas: Comp, Plate Online, Match Move
 - Volumen: 17 tasks total
 
-### EHQALPV (Proyecto Complejo)
+### PROJD (Proyecto Complejo)
 - Enfoque: Pipeline completo
 - Tasks identificadas: Plate Online, Comp, Matte, Roto, Clean, Matchmove, etc.
 - Volumen: 332 tasks total

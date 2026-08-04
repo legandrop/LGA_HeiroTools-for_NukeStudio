@@ -85,29 +85,29 @@ con un stepper de progreso arriba: `[1. Analizar] → [2. Prep Media] → [3. Im
 ## Estructura de carpetas del shot (confirmada)
 
 ```
-T:/VFX-PROYECTO/101/MOR_1012C_010/          ← shot root (elegido por el usuario)
+T:/VFX-PROYECTO/101/PROJA_1012C_010/          ← shot root (elegido por el usuario)
 │
 ├── _input/                                  ← nivel raíz del shot, siempre
-│   ├── MOR_1012C_010_aPlate_v01/            ← subcarpeta por secuencia EXR
-│   │   ├── MOR_1012C_010_aPlate_v01_1001.exr
+│   ├── PROJA_1012C_010_aPlate_v01/            ← subcarpeta por secuencia EXR
+│   │   ├── PROJA_1012C_010_aPlate_v01_1001.exr
 │   │   └── ...
-│   ├── MOR_1012C_010_bPlate_v01/
-│   ├── MOR_1012C_010_cPlate_v01/
-│   ├── MOR_1012C_010_dPlate_v01/
-│   ├── MOR_1012C_010_EditRefComp_v01.mov    ← editref: va al track EditRef
-│   └── MOR_1012C_010_SeqRef_v01.mov         ← seqref: solo va al bin, NO al timeline
+│   ├── PROJA_1012C_010_bPlate_v01/
+│   ├── PROJA_1012C_010_cPlate_v01/
+│   ├── PROJA_1012C_010_dPlate_v01/
+│   ├── PROJA_1012C_010_EditRefComp_v01.mov    ← editref: va al track EditRef
+│   └── PROJA_1012C_010_SeqRef_v01.mov         ← seqref: solo va al bin, NO al timeline
 │
 ├── Comp/                                    ← task folders (capitalizados en disco)
 │   ├── 1_projects/
 │   ├── 2_prerenders/
 │   ├── 3_review/
 │   └── 4_publish/
-│       └── MOR_1012C_010_comp_v00/
-│           └── MOR_1012C_010_comp_v00_1001.exr
+│       └── PROJA_1012C_010_comp_v00/
+│           └── PROJA_1012C_010_comp_v00_1001.exr
 │
 └── Roto/
     └── 4_publish/
-        └── MOR_1012C_010_roto_v002/
+        └── PROJA_1012C_010_roto_v002/
             └── ...
 ```
 
@@ -176,14 +176,14 @@ La ventana muestra **una tabla con toda la media encontrada** en la carpeta del 
 
 | # | Nombre | Tipo | Resolución | FPS | Compresión | Frames | Track | ✓ |
 |---|--------|------|------------|-----|------------|--------|-------|---|
-| 1 | MOR_1012C_010_aPlate_v01 | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | aPlate | ☑ |
-| 2 | MOR_1012C_010_aPlate_v02 | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | aPlate | ☐ |
-| 3 | MOR_1012C_010_aPlate_v03 ★ | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | aPlate | ☑ |
-| 4 | MOR_1012C_010_bPlate_v01 | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | bPlate | ☑ |
-| 5 | MOR_1012C_010_EditRefComp_v01 | MOV | 1920×1080 | 24 | H.264 | — | EditRef | ☐ |
-| 6 | MOR_1012C_010_SeqRef_v01 | MOV | 1920×1080 | 24 | H.264 | — | *(solo bin)* | ☐ |
-| 7 | MOR_1012C_010_comp_v00 | EXR seq | 2048×1152 | 24 | DWAA | 1001–1120 | _comp_ | ☐ |
-| 8 | MOR_1012C_010_roto_v002 | EXR seq | 2048×1152 | 24 | DWAA | 1001–1120 | _roto_ | ☐ |
+| 1 | PROJA_1012C_010_aPlate_v01 | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | aPlate | ☑ |
+| 2 | PROJA_1012C_010_aPlate_v02 | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | aPlate | ☐ |
+| 3 | PROJA_1012C_010_aPlate_v03 ★ | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | aPlate | ☑ |
+| 4 | PROJA_1012C_010_bPlate_v01 | EXR seq | 4096×3072 | 24 | ZIP | 1001–1120 | bPlate | ☑ |
+| 5 | PROJA_1012C_010_EditRefComp_v01 | MOV | 1920×1080 | 24 | H.264 | — | EditRef | ☐ |
+| 6 | PROJA_1012C_010_SeqRef_v01 | MOV | 1920×1080 | 24 | H.264 | — | *(solo bin)* | ☐ |
+| 7 | PROJA_1012C_010_comp_v00 | EXR seq | 2048×1152 | 24 | DWAA | 1001–1120 | _comp_ | ☐ |
+| 8 | PROJA_1012C_010_roto_v002 | EXR seq | 2048×1152 | 24 | DWAA | 1001–1120 | _roto_ | ☐ |
 
 **Reglas de checkbox y versiones múltiples:**
 - Si hay múltiples versiones de un mismo plate (ej: `aPlate_v01`, `aPlate_v02`, `aPlate_v03`),
@@ -256,12 +256,12 @@ Interfaz estilo PowerRename:
 
 | Track | Clip | Duración | Origen |
 |-------|------|----------|--------|
-| aPlate | MOR_1012C_010_aPlate_v01 | 120 frames | _input |
-| bPlate | MOR_1012C_010_bPlate_v01 | 120 frames | _input |
-| EditRef | MOR_1012C_010_EditRefComp_v01 | 120 frames | _input |
-| *(bin only)* | MOR_1012C_010_SeqRef_v01 ⚠ | — | _input |
-| _comp_ | MOR_1012C_010_comp_v00 | 120 frames | Comp/4_publish |
-| _roto_ | MOR_1012C_010_roto_v002 | 120 frames | Roto/4_publish |
+| aPlate | PROJA_1012C_010_aPlate_v01 | 120 frames | _input |
+| bPlate | PROJA_1012C_010_bPlate_v01 | 120 frames | _input |
+| EditRef | PROJA_1012C_010_EditRefComp_v01 | 120 frames | _input |
+| *(bin only)* | PROJA_1012C_010_SeqRef_v01 ⚠ | — | _input |
+| _comp_ | PROJA_1012C_010_comp_v00 | 120 frames | Comp/4_publish |
+| _roto_ | PROJA_1012C_010_roto_v002 | 120 frames | Roto/4_publish |
 | _cleanup_ | *(carpeta no existe)* | — | — |
 
 - **Duración del hueco:** la del plate más largo en `_input`.
@@ -342,7 +342,7 @@ Para cada task folder que exista en el shot root (`Comp/`, `Roto/`, `Cleanup/`..
 
 Basado en la estética de `LGA_NKS_CreateV000.py`:
 
-- **Título:** `"Import Shot — MOR_1012C_010"`
+- **Título:** `"Import Shot — PROJA_1012C_010"`
 - **Tamaño inicial:** ~750 × 600 px, redimensionable. Ancho mínimo 720px.
 - **Fondo:** `#2B2B2B`, texto `#a7a7a7` / `#CCCCCC`
 - **Stepper superior:** `[1. Analizar] → [2. Prep Media] → [3. Importar]`
@@ -377,5 +377,5 @@ Basado en la estética de `LGA_NKS_CreateV000.py`:
 | P14 | ¿BurnIn inexistente? | Se omite el stretch silenciosamente, sin error |
 | P15 | ¿Shot ya existe en timeline? | Error inmediato al abrir. Solo opción: Cancelar |
 | P16 | ¿Versiones múltiples en _input? | Se muestran todas como filas independientes. ★ marca la más alta (checked). Solo la más alta va al timeline |
-| P17 | ¿Cómo detectar si shot ya existe? | Doble criterio: nombre del TrackItem Y path de la media (shot root en la ruta). Ambos. MOR_1012_010 ≠ MOR_1012C_010 — son shots distintos, no hay falsos positivos |
+| P17 | ¿Cómo detectar si shot ya existe? | Doble criterio: nombre del TrackItem Y path de la media (shot root en la ruta). Ambos. PROJA_1012_010 ≠ PROJA_1012C_010 — son shots distintos, no hay falsos positivos |
 | P18 | ¿Versiones múltiples agrupadas visualmente? | No. Filas separadas, cada una es un archivo independiente |

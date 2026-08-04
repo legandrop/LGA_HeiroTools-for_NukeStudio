@@ -8,7 +8,7 @@ ____________________________________________________________________
 
   v1.01: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
-         Corrige proyectos como MORLASP cuyos shots tienen prefijo MOR en el filename.
+         Corrige proyectos como PROJALT cuyos shots tienen prefijo PROJA en el filename.
 ____________________________________________________________________
 """
 

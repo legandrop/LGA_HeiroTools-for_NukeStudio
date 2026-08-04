@@ -74,7 +74,7 @@ class ProjectHandler:
             newer_version_info = panel.proyectos_con_version_nueva.get(nombre_base) if has_newer_version else None
 
             # El proyecto de trabajo sale de la carpeta VFX- de la ruta, no del nombre del
-            # archivo: ERSO_SUP y ERSO_Breakdown son los dos ERSO y comparten color.
+            # archivo: PROJB_SUP y PROJB_Breakdown son los dos PROJB y comparten color.
             project_key = obtener_clave_proyecto(proyecto_mas_reciente["ruta"], nombre_base)
 
             # Crear info del proyecto basado en el proyecto abierto

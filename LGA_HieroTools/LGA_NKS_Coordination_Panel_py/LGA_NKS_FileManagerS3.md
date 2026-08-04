@@ -16,7 +16,7 @@ FileManagerS3 es una aplicación para sincronizar archivos entre carpetas locale
 
 ### 1. **Abrir FileManagerS3 en una ruta específica**
 ```bash
-FileManagerS3.exe --context studio --path "T:\VFX-TOC\From_Wanka\20250909\Probando"
+FileManagerS3.exe --context studio --path "T:\VFX-PROJI\From_Wanka\20250909\Probando"
 ```
 
 - Abre la interfaz gráfica apuntando directamente a esa carpeta
@@ -25,7 +25,7 @@ FileManagerS3.exe --context studio --path "T:\VFX-TOC\From_Wanka\20250909\Proban
 
 ### 2. **Descargar desde Wasabi S3**
 ```bash
-FileManagerS3.exe --context studio --download "T:\VFX-TOC\From_Wanka\20250909\Probando"
+FileManagerS3.exe --context studio --download "T:\VFX-PROJI\From_Wanka\20250909\Probando"
 ```
 
 - Abre la interfaz gráfica
@@ -35,7 +35,7 @@ FileManagerS3.exe --context studio --download "T:\VFX-TOC\From_Wanka\20250909\Pr
 
 ### 3. **Subir a Wasabi S3**
 ```bash
-FileManagerS3.exe --context studio --upload "T:\VFX-TOC\From_Wanka\20250909\Probando"
+FileManagerS3.exe --context studio --upload "T:\VFX-PROJI\From_Wanka\20250909\Probando"
 ```
 
 - Abre la interfaz gráfica
@@ -45,7 +45,7 @@ FileManagerS3.exe --context studio --upload "T:\VFX-TOC\From_Wanka\20250909\Prob
 
 ### 4. **Descargar un archivo individual desde Wasabi S3**
 ```bash
-FileManagerS3.exe --context studio --download-file "T:\VFX-MOR\102\MOR_2015_010\_input\MOR_2015_010_EditRef_v01.mov"
+FileManagerS3.exe --context studio --download-file "T:\VFX-PROJA\102\PROJA_2015_010\_input\PROJA_2015_010_EditRef_v01.mov"
 ```
 
 - Descarga **un único archivo** (no una carpeta) desde Wasabi
@@ -54,12 +54,12 @@ FileManagerS3.exe --context studio --download-file "T:\VFX-MOR\102\MOR_2015_010\
 - Se descarga con `overwrite` activado
 - `--download` y `--download-file` aceptan **múltiples rutas** y pueden combinarse en una sola invocación:
   ```bash
-  FileManagerS3.exe --context studio --download "T:\VFX-MOR\102\SHOT\_input\seq_v01" --download-file "T:\VFX-MOR\102\SHOT\_input\ref.mov"
+  FileManagerS3.exe --context studio --download "T:\VFX-PROJA\102\SHOT\_input\seq_v01" --download-file "T:\VFX-PROJA\102\SHOT\_input\ref.mov"
   ```
 
 ### 5. **Notificar a Hiero al terminar la descarga**
 ```bash
-FileManagerS3.exe --context studio --download-file "T:\VFX-MOR\102\SHOT\_input\ref.mov" --notify-completion "C:\Users\...\Startup\LGA_HieroTools\logs\download_clip_done"
+FileManagerS3.exe --context studio --download-file "T:\VFX-PROJA\102\SHOT\_input\ref.mov" --notify-completion "C:\Users\...\Startup\LGA_HieroTools\logs\download_clip_done"
 ```
 
 - `--notify-completion "<carpeta>"` hace que FileManagerS3 escriba un marcador `.json` en `<carpeta>` cuando cada tarea de descarga termina
@@ -70,9 +70,9 @@ FileManagerS3.exe --context studio --download-file "T:\VFX-MOR\102\SHOT\_input\r
 
 ```bash
 # Compilar y ejecutar con CLI
-.\compilar.bat --path "T:\VFX-TOC\From_Wanka\20250909\Probando"
-.\compilar.bat --download "T:\VFX-TOC\From_Wanka\20250909\Probando"
-.\compilar.bat --upload "T:\VFX-TOC\From_Wanka\20250909\Probando"
+.\compilar.bat --path "T:\VFX-PROJI\From_Wanka\20250909\Probando"
+.\compilar.bat --download "T:\VFX-PROJI\From_Wanka\20250909\Probando"
+.\compilar.bat --upload "T:\VFX-PROJI\From_Wanka\20250909\Probando"
 ```
 
 ## 🍎 macOS: uso recomendado (app abierta o cerrada)
@@ -81,15 +81,15 @@ En macOS, `open -a ... --args` puede ignorar argumentos si la app ya está abier
 Para garantizar que el CLI funcione siempre, usar el wrapper:
 
 ```bash
-./fm_cli_mac.sh --path "/Volumes/T Viaja/T/VFX-BRDA/010-350/BRDA_040_010"
-./fm_cli_mac.sh --download "/Volumes/T Viaja/T/VFX-BRDA/010-350/BRDA_040_010"
-./fm_cli_mac.sh --upload "/Volumes/T Viaja/T/VFX-BRDA/010-350/BRDA_040_010"
+./fm_cli_mac.sh --path "/Volumes/T Viaja/T/VFX-PROJF/010-350/PROJF_040_010"
+./fm_cli_mac.sh --download "/Volumes/T Viaja/T/VFX-PROJF/010-350/PROJF_040_010"
+./fm_cli_mac.sh --upload "/Volumes/T Viaja/T/VFX-PROJF/010-350/PROJF_040_010"
 ```
 
 Alternativa directa sin wrapper:
 
 ```bash
-open -na /Users/leg4/Desktop/Codin/LGA_FileManagerS3/build/FileManagerS3.app --args --path "/Volumes/T Viaja/T/VFX-BRDA/010-350/BRDA_040_010"
+open -na /Users/leg4/Desktop/Codin/LGA_FileManagerS3/build/FileManagerS3.app --args --path "/Volumes/T Viaja/T/VFX-PROJF/010-350/PROJF_040_010"
 ```
 
 Notas:
@@ -99,15 +99,15 @@ Notas:
 ## 📝 Reglas importantes
 
 ### ✅ Rutas válidas
-- Deben empezar con `VFX-` (ej: `VFX-TOC`, `VFX-PHLDA`)
+- Deben empezar con `VFX-` (ej: `VFX-PROJI`, `VFX-PROJE`)
 - Pueden tener barras `/` o `\`
 - Usar comillas `"` si hay espacios
 
 ### ✅ Ejemplos válidos
 ```bash
---path "T:\VFX-TOC\From_Wanka\20250909\Probando"
---path "T:/VFX-PHLDA/022-055/PHLDA_030_010_Stab_Auto"
---download "T:\VFX-TOC\From_Wanka\20250909\TOC_067_010_HdMkup_Fabric_comp_v13"
+--path "T:\VFX-PROJI\From_Wanka\20250909\Probando"
+--path "T:/VFX-PROJE/022-055/PROJE_030_010_Stab_Auto"
+--download "T:\VFX-PROJI\From_Wanka\20250909\PROJI_067_010_HdMkup_Fabric_comp_v13"
 ```
 
 ### ❌ Ejemplos inválidos
@@ -211,7 +211,7 @@ Los scripts ejecutan comandos CLI reales de FileManagerS3:
 
 **Algoritmo**:
 1. Normaliza la ruta para manejar separadores mixtos (`/` y `\`)
-2. Busca primero un patrón de shot (ej: `BRDA_050_010`) y corta la ruta hasta esa carpeta
+2. Busca primero un patrón de shot (ej: `PROJF_050_010`) y corta la ruta hasta esa carpeta
 3. Si no encuentra patrón, usa una estructura de ruta dependiendo del OS:
    - macOS: `/Volumes/<volumen>/<drive>/<proyecto>/<grupo>/<shot>`
    - Windows: `T:/<proyecto>/<grupo>/<shot>`

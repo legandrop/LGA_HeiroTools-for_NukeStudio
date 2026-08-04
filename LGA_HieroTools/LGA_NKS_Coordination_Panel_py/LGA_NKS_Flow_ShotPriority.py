@@ -12,8 +12,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
   v1.01: Extrae project_name desde el segmento VFX-NOMBRE del path en lugar
-         del primer bloque del filename (corrige proyectos como MORLASP cuyos
-         shots tienen prefijo MOR en el filename).
+         del primer bloque del filename (corrige proyectos como PROJALT cuyos
+         shots tienen prefijo PROJA en el filename).
 ____________________________________________________________________
 """
 

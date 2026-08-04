@@ -36,7 +36,7 @@ def _assert_no_legacy_targets(command):
 
 
 def run():
-    cli_args = ["--download", r"T:\VFX-ERSO\060\ERSO_060_010"]
+    cli_args = ["--download", r"T:\VFX-PROJB\060\PROJB_060_010"]
 
     win_exists = _exists_factory(
         {
@@ -252,14 +252,14 @@ def _run_empty_arg_cases(win_exists):
 
     # Args validos con espacios internos legitimos deben preservarse tal cual.
     ok_cmd = launcher.build_filemanagers3_command(
-        ["--download", r"T:\VFX-ERSO\shot with space"],
+        ["--download", r"T:\VFX-PROJB\shot with space"],
         desarrollo=True,
         context_mode="studio",
         platform_name="win32",
         path_exists=win_exists,
     )
     _expect(
-        ok_cmd[-2:] == ["--download", r"T:\VFX-ERSO\shot with space"],
+        ok_cmd[-2:] == ["--download", r"T:\VFX-PROJB\shot with space"],
         "Args validos deben preservarse sin alteraciones",
     )
 

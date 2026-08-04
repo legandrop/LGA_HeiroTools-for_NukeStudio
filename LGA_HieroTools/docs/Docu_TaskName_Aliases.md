@@ -11,7 +11,7 @@ Algunos proyectos publican archivos cuyo nombre de task en el filename **no coin
 
 | Filename                          | Task en filename | Task en DB / Track |
 |-----------------------------------|------------------|--------------------|
-| `MOR_1048_060_Compo_v012.%04d.exr` | `compo`          | `comp` / `_comp_`  |
+| `PROJA_1048_060_Compo_v012.%04d.exr` | `compo`          | `comp` / `_comp_`  |
 
 Esto provoca tres fallos en cascada:
 

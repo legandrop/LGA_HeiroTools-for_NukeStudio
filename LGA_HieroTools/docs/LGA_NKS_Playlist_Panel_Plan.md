@@ -173,9 +173,9 @@ Estado actual implementado:
 
 Ejemplo validado:
 
-- proyecto abierto en Hiero: `MORLASP_SUP_v004`
-- proyecto real en `pipesync.db`: `MORLASP`
-- shot buscado: `MOR_2004_030`
+- proyecto abierto en Hiero: `PROJALT_SUP_v004`
+- proyecto real en `pipesync.db`: `PROJALT`
+- shot buscado: `PROJA_2004_030`
 
 Regla actual de busqueda (desde v0.02):
 
@@ -508,7 +508,7 @@ Ejemplo funcional esperado:
 En `Flow Panel`, el caso actual puede verse asi:
 
 ```text
-MOR_2029A_050 | Guadalupe Barbara
+PROJA_2029A_050 | Guadalupe Barbara
 
 Description: Agregar efecto lluvia.
 
@@ -530,7 +530,7 @@ Sebas Romano: Ajustemos, en principio, direccion de lluvia para que matchee con 
 En `Playlist Panel`, la logica esperada sera mas rica:
 
 ```text
-MOR_2029A_050
+PROJA_2029A_050
 
 Descripcion Tarea: Agregar efecto lluvia.
 

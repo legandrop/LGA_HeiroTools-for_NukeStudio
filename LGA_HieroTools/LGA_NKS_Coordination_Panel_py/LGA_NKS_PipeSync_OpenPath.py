@@ -147,7 +147,7 @@ def get_shot_path(file_path):
     path_parts = normalized_path.replace("\\", "/").split("/")
     debug_print(f"Partes de la ruta: {path_parts}")
 
-    # 1) Detección por patrón de nombre de shot (ej: BRDA_050_010)
+    # 1) Detección por patrón de nombre de shot (ej: PROJF_050_010)
     shot_pattern = re.compile(
         r"^[A-Za-z0-9]+(?:_[A-Za-z]+|_[0-9]{3,5}[A-Za-z]?)?_[0-9]{3,5}[A-Za-z]?_[0-9]{3,4}$"
     )

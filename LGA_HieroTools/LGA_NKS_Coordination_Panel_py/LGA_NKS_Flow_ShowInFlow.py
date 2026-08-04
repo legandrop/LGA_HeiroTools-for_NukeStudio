@@ -13,7 +13,7 @@ ____________________________________________________________________
   v1.30: Eliminado navegador hardcodeado (Chrome). Usa el navegador por defecto del sistema.
   v1.29: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
-         Corrige proyectos como MORLASP cuyos shots tienen prefijo MOR en el filename.
+         Corrige proyectos como PROJALT cuyos shots tienen prefijo PROJA en el filename.
   v1.28: Actualizado para usar shift+click para abrir el shot completo en Flow
   v1.27: Agrega manejo con hilos secundarios para procesar los clips en paralelo sin bloquear el hilo principal
   v1.26: Actualizado para ser compatible con ambos sistemas de nomenclatura:

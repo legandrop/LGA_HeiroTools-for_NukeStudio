@@ -25,7 +25,7 @@ ____________________________________________________________________
 
   v2.29: Agregado logging diagnostico del cierre real de viewers/timelines: snapshots de widgets, medicion de eventos Qt/DeferredDelete y espera post-switch para detectar donde tarda Hiero.
 
-  v2.28: Fix: el check "Ya activa" ahora compara también el proyecto. Antes, si dos proyectos abiertos tenían una secuencia con el mismo nombre (ej: "101" en MORLASP y en MOR), el switch hacia el proyecto incorrecto era ignorado porque el nombre coincidía con la secuencia activa de otro proyecto.
+  v2.28: Fix: el check "Ya activa" ahora compara también el proyecto. Antes, si dos proyectos abiertos tenían una secuencia con el mismo nombre (ej: "101" en PROJALT y en PROJA), el switch hacia el proyecto incorrecto era ignorado porque el nombre coincidía con la secuencia activa de otro proyecto.
   v2.27: Desactiva el Frame Number del ViewerTL al finalizar cada cambio de secuencia
   v2.26: Reinicia el log en cada cambio de timeline e inyecta el logger del Projects Panel en scripts shared
   v2.25: Agregado timeline pre-cleanup sobre la secuencia nueva.
@@ -983,7 +983,7 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
 
     if active_seq and active_seq.name() == target_sequence_name:
         # Si hay un proyecto objetivo, verificar que la secuencia activa pertenece al mismo proyecto.
-        # Dos proyectos distintos pueden tener secuencias con el mismo nombre (ej: "101" en MORLASP y en MOR).
+        # Dos proyectos distintos pueden tener secuencias con el mismo nombre (ej: "101" en PROJALT y en PROJA).
         if target_project is not None:
             try:
                 active_project = active_seq.project()

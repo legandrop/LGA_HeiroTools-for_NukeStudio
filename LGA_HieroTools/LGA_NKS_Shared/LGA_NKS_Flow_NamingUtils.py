@@ -176,7 +176,7 @@ def extract_shot_code(base_name):
 def extract_project_name(base_name):
     """
     Extrae el nombre del proyecto del nombre base del archivo (primer bloque antes de _).
-    Ej: "MOR_1048_060_Compo" → "MOR".
+    Ej: "PROJA_1048_060_Compo" → "PROJA".
 
     NOTA: Este método es el fallback. Prefiere extract_project_name_from_path()
     cuando tenés la ruta completa del archivo disponible.
@@ -199,15 +199,15 @@ def extract_project_name_from_path(file_path):
     Extrae el nombre del proyecto desde el segmento de ruta "VFX-NOMBRE".
 
     Los proyectos VFX siempre viven bajo una carpeta raíz con el patrón "VFX-NOMBRE"
-    (ej: T:/VFX-MORLASP/...). El nombre del proyecto en la DB es "NOMBRE"
+    (ej: T:/VFX-PROJALT/...). El nombre del proyecto en la DB es "NOMBRE"
     (sin el prefijo "VFX-").
 
     Si no se encuentra ningún segmento con ese patrón, retorna None para que
     el caller pueda hacer fallback a extract_project_name().
 
     Ej:
-        "T:/VFX-MORLASP/101/MOR_1048_060/..." → "MORLASP"
-        "T:/VFX-BRDA/102/..."                 → "BRDA"
+        "T:/VFX-PROJALT/101/PROJA_1048_060/..." → "PROJALT"
+        "T:/VFX-PROJF/102/..."                 → "PROJF"
         "/path/sin/prefijo/vfx/..."           → None
 
     Args:
@@ -242,8 +242,8 @@ def extract_sequence_name_from_path(file_path):
     del timeline de Hiero (comportamiento anterior).
 
     Ej:
-        "T:/VFX-MORLASP/101/MOR_1048_060/..." → "101"
-        "T:/VFX-BRDA/080/BRDA_080_010/..."    → "080"
+        "T:/VFX-PROJALT/101/PROJA_1048_060/..." → "101"
+        "T:/VFX-PROJF/080/PROJF_080_010/..."    → "080"
         "/path/sin/prefijo/vfx/..."           → None
 
     Args:

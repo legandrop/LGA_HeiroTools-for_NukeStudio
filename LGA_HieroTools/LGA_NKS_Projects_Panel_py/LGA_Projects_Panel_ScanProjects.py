@@ -131,8 +131,8 @@ def obtener_clave_proyecto(ruta=None, nombre_base=""):
     Devuelve el nombre del proyecto de trabajo al que pertenece un .hrox.
 
     Sale de la carpeta 'VFX-<proyecto>' de la ruta, porque varios .hrox distintos
-    de una misma carpeta SUP pertenecen al mismo proyecto: ERSO_SUP y
-    ERSO_Breakdown son los dos ERSO y comparten el color del .ini.
+    de una misma carpeta SUP pertenecen al mismo proyecto: PROJB_SUP y
+    PROJB_Breakdown son los dos PROJB y comparten el color del .ini.
     Si la ruta no sirve, se cae al nombre base recortado en '_SUP'.
     """
     if ruta:
@@ -153,7 +153,7 @@ def _clave_agrupacion_proyecto(hrox_file):
     """
     Clave para agrupar versiones del mismo proyecto, ignorando version y sufijos.
 
-    'ERSO_SUP_v040' y 'ERSO_SUP_v41_Mac' comparten clave; 'ERSO_Breakdown_v004' no.
+    'PROJB_SUP_v040' y 'PROJB_SUP_v41_Mac' comparten clave; 'PROJB_Breakdown_v004' no.
     Delega en LGA_NKS_CheckProjectVersions para que el escaneo y la busqueda de
     version mas alta usen exactamente el mismo criterio.
     """
@@ -165,7 +165,7 @@ def _agrupar_hrox_por_proyecto(hrox_files):
     Agrupa archivos .hrox por proyecto, preservando el orden de aparicion.
 
     Una misma carpeta SUP puede contener varios proyectos distintos (por ejemplo
-    ERSO_SUP_v040.hrox y ERSO_Breakdown_v004.hrox). Cada uno es un grupo aparte,
+    PROJB_SUP_v040.hrox y PROJB_Breakdown_v004.hrox). Cada uno es un grupo aparte,
     para que despues se elija la version mas alta de cada uno.
 
     Returns:
@@ -292,7 +292,7 @@ def scan_projects_on_disk(base_path=None):
 
     Busca carpetas tipo 'VFX-' y dentro carpetas '*_SUP' sin depender del casing.
     En cada carpeta SUP puede haber varios proyectos distintos (por ejemplo
-    ERSO_SUP y ERSO_Breakdown): se agrupan por nombre base y se devuelve la
+    PROJB_SUP y PROJB_Breakdown): se agrupan por nombre base y se devuelve la
     versión más alta de cada uno, como entradas separadas.
 
     Args:
@@ -302,9 +302,9 @@ def scan_projects_on_disk(base_path=None):
     Returns:
         list: Lista de diccionarios con información de proyectos encontrados.
               Cada diccionario contiene:
-              - nombre_base (str): Nombre base del proyecto (ej: "BRDA_SUP")
-              - vfx_folder (str): Nombre de la carpeta VFX (ej: "VFX-BRDA")
-              - sup_folder (str): Nombre de la carpeta SUP (ej: "BRDA_SUP")
+              - nombre_base (str): Nombre base del proyecto (ej: "PROJF_SUP")
+              - vfx_folder (str): Nombre de la carpeta VFX (ej: "VFX-PROJF")
+              - sup_folder (str): Nombre de la carpeta SUP (ej: "PROJF_SUP")
               - ruta_hrox (str): Ruta completa del archivo .hrox con versión más alta
               - version (str): Versión extraída (ej: "v050")
               - ruta_proyecto (str): Ruta completa de la carpeta SUP

@@ -64,13 +64,13 @@ El panel es compatible con ambos sistemas de nomenclatura utilizados en la empre
 ### Formato con Descripción (5 bloques)
 ```
 PROYECTO_SEQ_SHOT_DESC1_DESC2_TASK_vVERSION
-Ejemplo: MOR_000_140_Chroma_Auto_comp_v19
+Ejemplo: PROJA_000_140_Chroma_Auto_comp_v19
 ```
 
 ### Formato Simplificado (3 bloques)
 ```
 PROYECTO_SEQ_SHOT_TASK_vVERSION
-Ejemplo: BRDA_080_010_comp_v007
+Ejemplo: PROJF_080_010_comp_v007
 ```
 
 El sistema detecta automáticamente el formato utilizado sin necesidad de configuración previa.

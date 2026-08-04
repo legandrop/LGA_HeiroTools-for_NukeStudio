@@ -416,8 +416,8 @@ Se recalcula en vivo con cada cambio en el dialogo. Muestra un bloque por cada t
 
 ```
 Task: roto              ← color de la task (#2abf7e para roto)
-Path: T:/VFX-MOR/101/MOR_1003_020/Roto/4_publish/MOR_1003_020_roto_v000
-Name: MOR_1003_020_roto_v000_####.exr
+Path: T:/VFX-PROJA/101/PROJA_1003_020/Roto/4_publish/PROJA_1003_020_roto_v000
+Name: PROJA_1003_020_roto_v000_####.exr
 Timeline: 3813 - 4242 (handle 4)
 Frames: 1001 - 1430 (430 frames)
 Resolution: 4168 x 1612 (Timeline)
@@ -446,9 +446,9 @@ El corte entre lavanda y colores por nivel ocurre al agotar los segmentos del `s
 El shot root se extrae del path del plate buscando el segmento `_input`:
 
 ```
-T:/VFX-MOR/101/MOR_1003_020/_input/...
+T:/VFX-PROJA/101/PROJA_1003_020/_input/...
                              ^^^^^^^
-shot_root = T:/VFX-MOR/101/MOR_1003_020
+shot_root = T:/VFX-PROJA/101/PROJA_1003_020
 ```
 
 El output se construye como:
@@ -460,7 +460,7 @@ El output se construye como:
 Ejemplo para `roto`:
 
 ```
-T:/VFX-MOR/101/MOR_1003_020/Roto/4_publish/MOR_1003_020_roto_v000/
+T:/VFX-PROJA/101/PROJA_1003_020/Roto/4_publish/PROJA_1003_020_roto_v000/
 ```
 
 **Implementacion:** `_derive_shot_root()`, `_build_output()`
@@ -478,10 +478,10 @@ Patron de nombre de archivo:
 Ejemplo:
 
 ```
-MOR_1003_020_roto_v000_1001.exr
-MOR_1003_020_roto_v000_1002.exr
+PROJA_1003_020_roto_v000_1001.exr
+PROJA_1003_020_roto_v000_1002.exr
 ...
-MOR_1003_020_roto_v000_1429.exr
+PROJA_1003_020_roto_v000_1429.exr
 ```
 
 El primer frame de salida siempre es `1001` (constante `START_FRAME`).
@@ -549,9 +549,9 @@ La funcion `_build_output()` retorna un diccionario con todos los parametros nec
 
 ```python
 {
-    "shot_code": "MOR_1003_020",
+    "shot_code": "PROJA_1003_020",
     "task": "roto",
-    "shot_root": "T:/VFX-MOR/101/MOR_1003_020",   # usado para coloreado del path
+    "shot_root": "T:/VFX-PROJA/101/PROJA_1003_020",   # usado para coloreado del path
     "selected_range_sources": [
         {"track_name": "EditRef", "source_type": "editref"},
     ],
@@ -566,8 +566,8 @@ La funcion `_build_output()` retorna un diccionario con todos los parametros nec
     "source_last_frame": 1430,
     "resolution": (4168, 1612),
     "resolution_source": "Timeline",
-    "output_dir": "T:/VFX-MOR/101/MOR_1003_020/Roto/4_publish/MOR_1003_020_roto_v000",
-    "output_name_pattern": "MOR_1003_020_roto_v000_####.exr",
+    "output_dir": "T:/VFX-PROJA/101/PROJA_1003_020/Roto/4_publish/PROJA_1003_020_roto_v000",
+    "output_name_pattern": "PROJA_1003_020_roto_v000_####.exr",
 }
 ```
 

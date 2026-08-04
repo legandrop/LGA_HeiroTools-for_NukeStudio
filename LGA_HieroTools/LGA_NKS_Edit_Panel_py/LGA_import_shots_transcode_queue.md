@@ -134,7 +134,7 @@ Campos propuestos:
 {
     "job_id": "...",
     "window_id": "...",
-    "shot_name": "MOR_1012C_010",
+    "shot_name": "PROJA_1012C_010",
     "row_i": 3,
     "item": {...},
     "target_w": 2048,

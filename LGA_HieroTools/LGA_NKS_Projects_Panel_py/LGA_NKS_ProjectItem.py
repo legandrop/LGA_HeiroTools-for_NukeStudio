@@ -135,7 +135,7 @@ class ProjectItem(QtWidgets.QWidget):
         formatted_text = f"{project_name} (v{clean_version})"
 
         # Obtener colores para este proyecto. El color es del proyecto de trabajo
-        # (carpeta VFX-), no del nombre del archivo: ERSO_SUP y ERSO_Breakdown son ERSO.
+        # (carpeta VFX-), no del nombre del archivo: PROJB_SUP y PROJB_Breakdown son PROJB.
         color_key = self.project_info.get("project_key") or project_name
         debug_print(f"🎨 Aplicando colores para proyecto: '{color_key}' (desde nombre_base: '{nombre}')")
         base_color, hover_color = get_project_colors(color_key)

@@ -8,12 +8,12 @@ ____________________________________________________________________
 
   v1.94: Los colores de autor salen de la DB de PipeSync (tabla flow_users). Se
          eliminan el JSON local, el mapa de colores hardcodeado y el caso
-         especial de Fede Blesa.
+         especial de Nombre Apellido.
   v1.93: Muestra replies de notas como hilos anidados y limita la linea vertical
          al contenedor exterior, sin bordes extra en autor ni contenido.
   v1.92: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
-         Corrige proyectos como MORLASP cuyos shots tienen prefijo MOR en el filename.
+         Corrige proyectos como PROJALT cuyos shots tienen prefijo PROJA en el filename.
   v1.91: Recupera descripcion de task inicial y texto del header de version.
   v1.90: Wrap de textos sin scroll horizontal y resaltado de comentarios de playlist.
   v1.89: Identacion comentarios, comentarios de playlist, colores de nombres de usuario

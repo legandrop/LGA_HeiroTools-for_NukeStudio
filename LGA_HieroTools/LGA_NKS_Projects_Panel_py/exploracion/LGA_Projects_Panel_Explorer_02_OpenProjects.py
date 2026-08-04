@@ -194,7 +194,7 @@ else:
 
     # Proyectos simulados del disco (basados en resultados de Exploración 01)
     proyectos_disco = [
-        {"nombre_base": "BRDA_SUP", "ruta_hrox": "T:\\VFX-BRDA\\BRDA_SUP\\BRDA_SUP_v050.hrox", "version": "v050"},
+        {"nombre_base": "PROJF_SUP", "ruta_hrox": "T:\\VFX-PROJF\\PROJF_SUP\\PROJF_SUP_v050.hrox", "version": "v050"},
         {"nombre_base": "ETDM_SUP", "ruta_hrox": "T:\\VFX-ETDM\\ETDM_SUP\\ETDM_SUP_v472.hrox", "version": "v472"},
         {"nombre_base": "LC_SUP", "ruta_hrox": "T:\\VFX-LC\\LC_SUP\\LC_SUP_v30.hrox", "version": "v30"},
     ]

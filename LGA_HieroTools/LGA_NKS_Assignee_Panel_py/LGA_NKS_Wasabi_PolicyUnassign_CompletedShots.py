@@ -10,7 +10,7 @@ ____________________________________________________________________
          seleccion y en el mapa de labels de la tabla.
 
   v1.01: Reconoce pubsh (OK for Delivery) como shot terminado, y pbshed por si
-         quedo data vieja de erso, que lo usaba antes de pasar a check.
+         quedo data vieja de projb, que lo usaba antes de pasar a check.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -77,7 +77,7 @@ def get_completed_shots_map():
         raise RuntimeError(f"No se encontró pipesync.db en: {db_path}")
 
     # Estados de shot que cuentan como terminado. Faltaba `pubsh` (OK for
-    # Delivery). `pbshed` se acepta solo por data vieja: el Shot de erso lo usaba
+    # Delivery). `pbshed` se acepta solo por data vieja: el Shot de projb lo usaba
     # como "entregado" hasta que se reemplazo por `check`, que es el que manda
     # PipeSync. Sin estos, en Client la ventana salia vacia.
     status_map = {

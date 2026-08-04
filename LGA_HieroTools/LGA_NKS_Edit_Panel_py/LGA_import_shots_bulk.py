@@ -69,7 +69,7 @@ def get_last_browser_directory():
 
 
 class _ShotBrowserSidebarDelegate(QtWidgets.QStyledItemDelegate):
-    """Conserva iconos y muestra shortcuts VFX como `T:/VFX-MOR`."""
+    """Conserva iconos y muestra shortcuts VFX como `T:/VFX-PROJA`."""
 
     def __init__(self, labels_by_path, parent=None):
         super(_ShotBrowserSidebarDelegate, self).__init__(parent)

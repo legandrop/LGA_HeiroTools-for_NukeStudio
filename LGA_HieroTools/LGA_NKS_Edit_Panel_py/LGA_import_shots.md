@@ -41,7 +41,7 @@ El browser usa constantes editables marcadas con `✅✅💾⚠️` en
 
 El sidebar conserva sus shortcuts estándar y agrega automáticamente todas las
 carpetas `VFX-*` encontradas en las raíces `T:/` y `N:/`, si esos drives
-existen. Los labels muestran la ruta abreviada, por ejemplo `T:/VFX-MOR`.
+existen. Los labels muestran la ruta abreviada, por ejemplo `T:/VFX-PROJA`.
 Las columnas Type y Date Modified se autoajustan por contenido/header y luego
 respetan sus mínimos configurables para evitar títulos recortados.
 
@@ -411,20 +411,20 @@ main()
 ## Estructura de carpetas del shot (asumida)
 
 ```
-T:/VFX-PROYECTO/101/MOR_1012C_010/          <- shot root
+T:/VFX-PROYECTO/101/PROJA_1012C_010/          <- shot root
 │
 ├── _input/                                  <- nivel raiz del shot
-│   ├── MOR_1012C_010_aPlate_v01/            <- subcarpeta por secuencia EXR
-│   │   └── MOR_1012C_010_aPlate_v01_1001.exr
-│   ├── MOR_1012C_010_EditRefComp_v01.mov    <- editref: va al track EditRef
-│   └── MOR_1012C_010_SeqRef_v01.mov         <- seqref: solo al bin, no al timeline
+│   ├── PROJA_1012C_010_aPlate_v01/            <- subcarpeta por secuencia EXR
+│   │   └── PROJA_1012C_010_aPlate_v01_1001.exr
+│   ├── PROJA_1012C_010_EditRefComp_v01.mov    <- editref: va al track EditRef
+│   └── PROJA_1012C_010_SeqRef_v01.mov         <- seqref: solo al bin, no al timeline
 │
 ├── Comp/
 │   └── 4_publish/
-│       └── MOR_1012C_010_comp_v00/
+│       └── PROJA_1012C_010_comp_v00/
 └── Roto/
     └── 4_publish/
-        └── MOR_1012C_010_roto_v002/
+        └── PROJA_1012C_010_roto_v002/
 ```
 
 ---

@@ -2,13 +2,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.26 | Lega
+  LGA_NKS_Projects_Panel v2.27 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (alineado a la derecha del contador) visible para lega@wanka.tv.
+
+  v2.27: Piso de luminancia para los colores de proyecto (ensure_min_luminance).
+         Los colores de Flow son identitarios, no de texto, y los oscuros no se
+         leian contra el panel. Se aclaran solo lo necesario, respetando el tono.
 
   v2.26: Los colores de proyecto salen de la DB de PipeSync del contexto activo.
          Se elimino la seccion [Colors] del .ini y la edicion de colores del panel
@@ -116,6 +120,82 @@ def load_project_colors():
         debug_print(f"Traceback: {traceback.format_exc()}")
 
 
+# Luminancia minima (0-255) que tiene que tener el color de un proyecto para
+# leerse como texto sobre el panel oscuro. Los colores salen de Flow pensados
+# como color identitario del proyecto, no como color de texto: PROJA (#9E3A3A,
+# lum 79) y PROJB (#966496, lum 114) quedaban ilegibles. PROJC (#FFFF7F, lum 246)
+# se ve bien y no se toca.
+MIN_TEXT_LUMINANCE = 150
+
+
+def _hex_to_rgb(hex_color):
+    """'#RRGGBB' -> (r, g, b), o None si el formato no sirve."""
+    if not hex_color or not hex_color.startswith("#") or len(hex_color) != 7:
+        return None
+    try:
+        return (
+            int(hex_color[1:3], 16),
+            int(hex_color[3:5], 16),
+            int(hex_color[5:7], 16),
+        )
+    except ValueError:
+        return None
+
+
+def _luminance(r, g, b):
+    """Luminancia percibida (Rec. 709), en la misma escala 0-255 que el RGB."""
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def ensure_min_luminance(base_color, min_luminance=MIN_TEXT_LUMINANCE):
+    """
+    Aclara el color hasta que se lea sobre el panel oscuro, respetando el tono.
+
+    Dos etapas, en este orden para no desaturar de mas:
+      1. Sube el brillo al maximo manteniendo tono y saturacion (escala el RGB
+         hasta que el canal mas alto llegue a 255). #9E3A3A -> #FF5E5E.
+      2. Si con eso todavia no alcanza, recien ahi mezcla hacia blanco lo justo
+         y necesario. #FF5E5E -> #FF7A7A.
+
+    Mezclar directo con blanco desde el principio daria un pastel lavado
+    (#C58989) y perderia la identidad del color del proyecto.
+    """
+    rgb = _hex_to_rgb(base_color)
+    if rgb is None:
+        return base_color
+
+    r, g, b = rgb
+
+    if _luminance(r, g, b) >= min_luminance:
+        return base_color
+
+    # Los grises no tienen tono que preservar, y escalarles el brillo los manda
+    # a blanco puro. Van directo al gris del piso.
+    canal_max = max(r, g, b)
+    if canal_max - min(r, g, b) <= 8:
+        nivel = min(255, int(round(min_luminance)))
+        return f"#{nivel:02X}{nivel:02X}{nivel:02X}"
+
+    escala = 255.0 / canal_max
+    r = min(255, int(round(r * escala)))
+    g = min(255, int(round(g * escala)))
+    b = min(255, int(round(b * escala)))
+
+    lum = _luminance(r, g, b)
+    if lum >= min_luminance:
+        return f"#{r:02X}{g:02X}{b:02X}"
+
+    # Etapa 2: lo que falte, mezclando hacia blanco. La luminancia es lineal en
+    # la mezcla, asi que el factor sale directo sin iterar.
+    factor = (min_luminance - lum) / (255.0 - lum)
+    factor = max(0.0, min(1.0, factor))
+    r = min(255, int(round(r + (255 - r) * factor)))
+    g = min(255, int(round(g + (255 - g) * factor)))
+    b = min(255, int(round(b + (255 - b) * factor)))
+
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 def get_brighter_color(base_color):
     """Devuelve un color más brillante para hover basado en el color base"""
     if not base_color.startswith('#') or len(base_color) != 7:
@@ -147,7 +227,15 @@ def get_project_colors(project_name):
     debug_print(f"📋 PROJECT_COLORS disponibles: {sorted(PROJECT_COLORS.keys())}")
 
     if project_name_upper in PROJECT_COLORS:
-        base_color = PROJECT_COLORS[project_name_upper]
+        color_flow = PROJECT_COLORS[project_name_upper]
+        # El color de Flow es el color identitario del proyecto, no un color de
+        # texto: si es muy oscuro no se lee contra el panel. Se aclara solo lo
+        # necesario y respetando el tono.
+        base_color = ensure_min_luminance(color_flow)
+        if base_color != color_flow:
+            debug_print(
+                f"🎨 '{project_name}' aclarado por legibilidad: {color_flow} -> {base_color}"
+            )
         hover_color = get_brighter_color(base_color)
         debug_print(f"✅ Proyecto '{project_name}' encontrado - Base: {base_color}, Hover: {hover_color}")
         return base_color, hover_color

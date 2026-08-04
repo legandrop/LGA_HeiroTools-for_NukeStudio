@@ -8,14 +8,14 @@ ____________________________________________________________________
 
   v1.46: `apr` pasa a "Delivery Apr" y la cola queda pubsh -> check -> apr. En
          el dropdown de shot sale `pbshed` y entra `check`, que es el que usa
-         PipeSync y el que ahora acepta erso.
+         PipeSync y el que ahora acepta projb.
 
   v1.45: Los dropdowns toman el ORDEN del sg_status_list de Flow (Review Javi
          antes que Review Juano) y check pasa a "Delivery Checked".
 
   v1.44: Los dropdowns de estado se filtran por contexto contra los codigos reales
          de cada sitio de Flow. Suma OK for Delivery, Review Prod y Delivered
-         (pbshed, el "entregado" de erso) y alinea los colores de la cola verde.
+         (pbshed, el "entregado" de projb) y alinea los colores de la cola verde.
 
   v1.43: Popup de los dropdowns: fondo uniforme #272727 con una bolita del color
          del estado a la izquierda de cada nombre (en vez de cada fila coloreada),
@@ -49,7 +49,7 @@ ____________________________________________________________________
          Ver docs/Docu_ProjectName_Extraction.md.
   v1.36: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
-         Corrige proyectos como MORLASP cuyos shots tienen prefijo MOR en el filename.
+         Corrige proyectos como PROJALT cuyos shots tienen prefijo PROJA en el filename.
   v1.35: El diálogo de configuración ahora se muestra no modal con show()
          y continúa el flujo por callback al cerrar/aceptar.
          Evita que la ventana tome el foco bloqueando Hiero/Nuke Studio.

@@ -16,7 +16,7 @@ ____________________________________________________________________
   Los dos sitios de Flow NO tienen la misma lista de estados:
 
     solo studio (wanka) : rev_su, revcha, revjua, revjav
-    solo client (erso)  : revprd
+    solo client (projb)  : revprd
     en los dos          : el resto, incluido pubsh (OK for Delivery)
 
   Empujar un codigo que el sitio no tiene falla con
@@ -75,7 +75,7 @@ TASK_STATUS_CATALOG = {
     "revjav": ("Review Javi", "#9c3e5e", "Rev_Sup"),
     "revleg": ("Review Lega", "#69135e", "Rev_Lega"),
     "revhld": ("Review Hold", "#9E6A15", "Rev Hold"),
-    # Review Prod solo existe en erso. Flow lo trae en #D7F2B1, pero ese lima
+    # Review Prod solo existe en projb. Flow lo trae en #D7F2B1, pero ese lima
     # tiene MAS luminancia que el gris de noread (#d3d3d3) y en un clip chico se
     # lee como blanco; PipeSync ya lo bajo a #8CBF3F por el mismo motivo.
     # Comparte el tag de XYplorer con Review Dir.
@@ -87,7 +87,7 @@ TASK_STATUS_CATALOG = {
     "pubsh": ("OK for Delivery", "#50BFC7", "Approved"),
     "check": ("Delivered", "#38A138", "Approved"),
     "apr": ("Delivery Apr", "#266612", "Approved"),
-    # `pbshed` ya no esta en ningun sg_status_list: en erso lo reemplazo `check`.
+    # `pbshed` ya no esta en ningun sg_status_list: en projb lo reemplazo `check`.
     # Queda en el catalogo por si aparece en data vieja.
     "pbshed": ("Delivered", "#52c233", "Approved"),
     "omit": ("Omited", "#244c19", "Approved"),
@@ -150,7 +150,7 @@ LEGACY_LABEL_ALIASES = {
 # esta en la lista del sitio falla con "'xxx' is not a valid status", asi que
 # todo dropdown o boton que ESCRIBA estado tiene que filtrar por aca.
 #
-# Ojo: `revleg` en erso se llama "Review Sup" y es el unico reviewer del sitio.
+# Ojo: `revleg` en projb se llama "Review Sup" y es el unico reviewer del sitio.
 # Las listas de Shot son identicas en los dos; las de Task se diferencian solo en
 # los reviewers por persona (studio) y en `revprd` (client).
 TASK_STATUS_CODES_BY_MODE = {

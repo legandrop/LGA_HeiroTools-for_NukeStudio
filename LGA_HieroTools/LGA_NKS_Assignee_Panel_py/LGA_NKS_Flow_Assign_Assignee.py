@@ -7,8 +7,8 @@ ____________________________________________________________________
 
   v1.26: los usuarios salen de la DB de PipeSync (tabla flow_users), no del JSON local.
   v1.25: Recibe file_path desde el panel para extraer project_name desde el
-         segmento VFX-NOMBRE del path (corrige proyectos como MORLASP con
-         prefijo MOR en el filename). Normaliza default_task para aliases
+         segmento VFX-NOMBRE del path (corrige proyectos como PROJALT con
+         prefijo PROJA en el filename). Normaliza default_task para aliases
          (compo → comp) evitando pre-selección incorrecta en el diálogo.
   v1.24: Actualiza la UI para mostrar las tasks y los asignados en Flow.
          Funciona con todas las tasks disponibles en Flow.

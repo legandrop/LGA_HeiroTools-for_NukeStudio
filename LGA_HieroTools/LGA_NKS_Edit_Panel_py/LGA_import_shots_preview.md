@@ -280,7 +280,7 @@ La lógica se implementa con el set `assigned_track_names`: una vez que un `trac
 La búsqueda es **por nombre de shot**, no por posición de frames. Esto garantiza que si un track no tiene clip para el shot vecino (aunque tenga clips de otros shots más lejanos), el bucket queda `None` correctamente.
 
 **Por qué por nombre y no por posición:**  
-Con la lógica anterior (por `insert_frame`), si en un track no existía el shot siguiente pero sí había un clip de `MOR_1010_050` mucho más adelante, ese clip era clasificado incorrectamente como `after`. Con la búsqueda por nombre, solo el clip que pertenece al shot contiguo real aparece en el preview.
+Con la lógica anterior (por `insert_frame`), si en un track no existía el shot siguiente pero sí había un clip de `PROJA_1010_050` mucho más adelante, ese clip era clasificado incorrectamente como `after`. Con la búsqueda por nombre, solo el clip que pertenece al shot contiguo real aparece en el preview.
 
 `prev_shot_name` y `next_shot_name` los calcula `_find_insert_frame()` como parte del mismo ordenamiento alfabético que determina el punto de inserción, y se propagan hasta aquí via `ImportShotDialog` → `build_import_preview_data`.
 

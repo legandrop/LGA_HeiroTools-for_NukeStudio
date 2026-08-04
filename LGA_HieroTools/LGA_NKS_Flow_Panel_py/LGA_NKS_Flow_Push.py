@@ -443,8 +443,8 @@ def find_review_images(base_name, original_file_name=None):
     Retorna una lista de rutas de imagenes encontradas.
 
     Args:
-        base_name: Nombre base sin versión (ej: "BRDA_080_010_comp")
-        original_file_name: Nombre original del archivo con versión (opcional, ej: "BRDA_080_010_comp_v007_%04d.exr")
+        base_name: Nombre base sin versión (ej: "PROJF_080_010_comp")
+        original_file_name: Nombre original del archivo con versión (opcional, ej: "PROJF_080_010_comp_v007_%04d.exr")
     """
     try:
         # Obtener la ruta del script actual

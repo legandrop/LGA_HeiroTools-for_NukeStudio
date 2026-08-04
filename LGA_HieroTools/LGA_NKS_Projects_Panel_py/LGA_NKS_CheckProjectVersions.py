@@ -6,7 +6,7 @@ ____________________________________________________________________
   Chequea versiones de todos los proyectos abiertos en Hiero
 
   v1.83: encontrar_version_mas_alta solo mira archivos del MISMO proyecto: el glob por
-         prefijo tomaba ERSO_BREAKDOWN_v05 como version nueva de ERSO_v001
+         prefijo tomaba PROJB_BREAKDOWN_v05 como version nueva de PROJB_v001
   v1.82: Conectado al logger compartido del Projects Panel y removidos prints directos en flujos de UI
 ____________________________________________________________________
 
@@ -163,8 +163,8 @@ def comparar_versiones(version1, version2):
 def obtener_clave_proyecto_archivo(ruta):
     """Clave que identifica al proyecto de un .hrox, ignorando version y sufijos.
 
-    'ERSO_v000' y 'ERSO_v001' comparten clave, y tambien 'ERSO_v41_Mac'.
-    'ERSO_BREAKDOWN_v05' NO, aunque el nombre empiece igual.
+    'PROJB_v000' y 'PROJB_v001' comparten clave, y tambien 'PROJB_v41_Mac'.
+    'PROJB_BREAKDOWN_v05' NO, aunque el nombre empiece igual.
     """
     if not ruta:
         return ""
@@ -192,8 +192,8 @@ def encontrar_version_mas_alta(ruta_actual):
             return "No detectada"
 
         # Se listan los .hrox de la carpeta y se filtran por clave de proyecto.
-        # Antes se buscaba con un glob por prefijo ("ERSO*v*.hrox") que tambien
-        # matcheaba ERSO_BREAKDOWN_v05 y devolvia como "version mas nueva de ERSO"
+        # Antes se buscaba con un glob por prefijo ("PROJB*v*.hrox") que tambien
+        # matcheaba PROJB_BREAKDOWN_v05 y devolvia como "version mas nueva de PROJB"
         # un archivo de otro proyecto guardado en la misma carpeta.
         archivos = [
             os.path.join(directorio, item)

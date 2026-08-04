@@ -3,10 +3,10 @@
 ## Objetivo
 
 Unificar el mapeo entre proyecto lógico y bucket físico Wasabi cuando un mismo
-proyecto (`ERSO`) necesita buckets distintos por contexto:
+proyecto (`PROJB`) necesita buckets distintos por contexto:
 
-- Studio -> `vfx-erso`
-- Client -> `vfx-ers0`
+- Studio -> `vfx-projb`
+- Client -> `vfx-projb0`
 
 Sin cambiar:
 
@@ -34,7 +34,7 @@ Schema esperado (opcional):
 {
   "Wasabi": {
     "ProjectBucketOverrides": {
-      "ERSO": "vfx-ers0"
+      "PROJB": "vfx-projb0"
     }
   }
 }
@@ -86,13 +86,13 @@ Resultado:
 - las policies IAM se generan contra el bucket físico correcto del contexto;
 - el parse sigue usando `folder/subfolder` de la ruta local para la parte de
   prefix en policy;
-- no hay hardcode de `ERSO` ni de `vfx-ers0`.
+- no hay hardcode de `PROJB` ni de `vfx-projb0`.
 
 ## Ejemplos
 
-- `N:/VFX-ERSO/060/ERSO_060_010` (Client + override) ->
-  `bucket=vfx-ers0`, `prefix=060/ERSO_060_010`
-- `T:/VFX-ERSO/060/ERSO_060_010` (Studio sin override) ->
-  `bucket=vfx-erso`
-- `T:/VFX-MORLASP/1048/MOR_1048_040` (legacy) ->
-  `bucket=vfx-morlasp`
+- `N:/VFX-PROJB/060/PROJB_060_010` (Client + override) ->
+  `bucket=vfx-projb0`, `prefix=060/PROJB_060_010`
+- `T:/VFX-PROJB/060/PROJB_060_010` (Studio sin override) ->
+  `bucket=vfx-projb`
+- `T:/VFX-PROJALT/1048/PROJA_1048_040` (legacy) ->
+  `bucket=vfx-projalt`
