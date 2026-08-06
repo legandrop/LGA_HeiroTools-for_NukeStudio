@@ -51,6 +51,22 @@ Trampas concretas que ya causaron bugs:
   deliberadamente distinta de la de los clips.
 - **Color de Flow (`bg_color`):** referencia; es de donde salen los hex nuevos.
 
+Los colores del catalogo se eligen para identificar el estado, no pensando en
+que arriba va texto. Cada lugar donde se pintan resuelve la legibilidad a su
+manera, y son criterios distintos a proposito:
+
+- **Botones del Flow Panel y del Assignee Panel:** el texto es fijo (`#d8d8d8`),
+  asi que lo que se ajusta es el FONDO. `ensure_max_luminance()` (en
+  `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`) le pone un techo de luminancia de 135
+  bajando el brillo pero manteniendo el tono. Se topea **solo el fondo del
+  boton**: el `color` que el Push le pasa a `setColor()` sigue siendo el color
+  real del estado, porque de ahi sale el color del clip en el timeline.
+- **Dropdowns de Create Shot (`ColoredStatusComboBox`):** al reves, el fondo
+  queda con el color exacto y lo que se adapta es el TEXTO (negro en fondos
+  claros, `#cccccc` en oscuros).
+- **Clips del timeline:** sin correccion. El color va tal cual, porque ahi no
+  hay texto encima que dependa de el.
+
 Render de los dropdowns (`ColoredStatusComboBox`):
 - **Combo cerrado:** fondo del color del estado, texto contrastado (negro en
   fondos claros, `#cccccc` en fondos oscuros), linea vertical + flecha SVG.

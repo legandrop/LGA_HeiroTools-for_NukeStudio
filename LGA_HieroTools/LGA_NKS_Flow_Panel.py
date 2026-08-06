@@ -1,13 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.57 | Lega
+  LGA_NKS_Flow_Panel v2.58 | Lega
 
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v2.58: Techo de luminancia al FONDO de los botones de estado
+         (MAX_STATUS_BG_LUMINANCE). El texto es claro y los estados mas
+         brillantes lo dejaban ilegible. No se toca el `color` que va al clip
+         del timeline: ese sigue siendo el color real del estado.
 
   v2.57: El estado final `apr` pasa a mostrarse "Delivery Apr": se llamaba
          "Delivery OK", casi identico al "OK for Delivery" del primero de la
@@ -68,8 +73,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     calculate_dynamic_border,
     calculate_dynamic_hover,
-    create_tooltip_stylesheet
+    create_tooltip_stylesheet,
+    ensure_max_luminance,
 )
+
+
+# Techo de luminancia (0-255) para el FONDO de los botones de estado.
+#
+# El texto de los botones es #d8d8d8, casi blanco, asi que un fondo muy claro lo
+# vuelve ilegible. Los colores vienen de Flow, elegidos para identificar el
+# estado y no pensando en que llevan texto claro encima.
+#
+# OJO: se topea solo el `style` (el fondo del boton). El `color` del mismo
+# boton es el QColor que se le pone al clip en el timeline con setColor(), y
+# ese tiene que seguir siendo el color real del estado: si se topeara tambien,
+# cambiarian los colores de los clips del timeline, que no es el problema que
+# se esta arreglando.
+#
+# Mismo valor y misma funcion que el Assignee Panel, que tiene el mismo caso.
+MAX_STATUS_BG_LUMINANCE = 135
 
 
 # Variable global para activar o desactivar los prints
@@ -328,7 +350,13 @@ class ColorChangeWidget(QtWidgets.QWidget):
             # Crear un bot?n personalizado que maneje el Shift+Click
             button = CustomButton(name)
 
+            # Techo de brillo al fondo: el texto es claro y contra un fondo muy
+            # claro no se lee. Solo se toca el fondo del boton; `color` sigue
+            # siendo el color real del estado que va al clip del timeline.
+            style = ensure_max_luminance(style, MAX_STATUS_BG_LUMINANCE)
+
             # Aplicar estilos din?micos con bordes, hover y tooltips
+            # (derivados del color ya corregido)
             border_color = calculate_dynamic_border(style)
             hover_color = calculate_dynamic_hover(style)
 
