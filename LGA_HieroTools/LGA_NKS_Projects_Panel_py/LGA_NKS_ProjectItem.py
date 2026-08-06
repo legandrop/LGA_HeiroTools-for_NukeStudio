@@ -3,10 +3,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.01 | Lega
+  LGA_NKS_ProjectItem v1.02 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
 
+  v1.02: El nombre visible conserva lo que va despues del bloque _SUP
   v1.01: El color sale de 'project_key' (carpeta VFX-) y no del nombre del archivo
 ____________________________________________________________________
 
@@ -123,10 +124,13 @@ class ProjectItem(QtWidgets.QWidget):
         nombre = self.project_info.get("nombre_base", "")
         version = self.project_info.get("version", "")
 
-        # Extraer nombre del proyecto (antes de _SUP_)
-        project_name = nombre
-        if "_SUP" in nombre:
-            project_name = nombre.split("_SUP")[0]
+        from LGA_Projects_Panel_ScanProjects import (
+            obtener_clave_proyecto,
+            obtener_nombre_display_proyecto,
+        )
+
+        # Nombre visible: sin el bloque _SUP, pero conservando lo que venga despues
+        project_name = obtener_nombre_display_proyecto(nombre)
 
         # Limpiar versión (quitar 'v' inicial)
         clean_version = version.lstrip('v')
@@ -136,7 +140,8 @@ class ProjectItem(QtWidgets.QWidget):
 
         # Obtener colores para este proyecto. El color es del proyecto de trabajo
         # (carpeta VFX-), no del nombre del archivo: PROJB_SUP y PROJB_Breakdown son PROJB.
-        color_key = self.project_info.get("project_key") or project_name
+        # Por eso el fallback recorta en _SUP y no usa el nombre visible.
+        color_key = self.project_info.get("project_key") or obtener_clave_proyecto(nombre_base=nombre)
         debug_print(f"🎨 Aplicando colores para proyecto: '{color_key}' (desde nombre_base: '{nombre}')")
         base_color, hover_color = get_project_colors(color_key)
         debug_print(f"🎨 Colores aplicados - Base: {base_color}, Hover: {hover_color}")
@@ -230,10 +235,10 @@ class ProjectItem(QtWidgets.QWidget):
                 pass
 
         # Obtener colores para las secuencias (mismo que el proyecto padre)
-        project_name = self.project_info.get("nombre_base", "")
-        if "_SUP" in project_name:
-            project_name = project_name.split("_SUP")[0]
-        color_key = self.project_info.get("project_key") or project_name
+        from LGA_Projects_Panel_ScanProjects import obtener_clave_proyecto
+
+        nombre_base = self.project_info.get("nombre_base", "")
+        color_key = self.project_info.get("project_key") or obtener_clave_proyecto(nombre_base=nombre_base)
         base_color, hover_color = get_project_colors(color_key)
 
         for seq_name in sorted(self.sequences):

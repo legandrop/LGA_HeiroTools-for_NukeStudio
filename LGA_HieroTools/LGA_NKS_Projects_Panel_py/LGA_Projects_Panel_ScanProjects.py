@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_Projects_Panel_ScanProjects v1.07 | Lega
+  LGA_Projects_Panel_ScanProjects v1.08 | Lega
 
   Módulo de escaneo reutilizable para el Panel de Proyectos LGA.
   - Escanea proyectos en disco
@@ -10,6 +10,7 @@ ____________________________________________________________________
   - Verifica si un proyecto está abierto
   - Obtiene secuencias de un proyecto
 
+  v1.08: Agregado obtener_nombre_display_proyecto() para el nombre visible del panel
   v1.07: La clave de agrupacion se delega en LGA_NKS_CheckProjectVersions
   v1.06: Los proyectos abiertos se filtran por el root del contexto activo
   v1.05: Agregado 'project_key' (proyecto de trabajo segun la carpeta VFX-) a cada resultado
@@ -147,6 +148,28 @@ def obtener_clave_proyecto(ruta=None, nombre_base=""):
         return nombre_base[:posicion_sup]
 
     return nombre_base
+
+
+def obtener_nombre_display_proyecto(nombre_base):
+    """
+    Nombre para mostrar en el panel: saca el bloque '_SUP' y conserva lo que sigue.
+
+    'PROJA_SUP' -> 'PROJA', 'PROJA_sup' -> 'PROJA', 'PROJA_SUP_Previa' -> 'PROJA_Previa'.
+
+    Antes se cortaba en el primer '_SUP', asi que 'PROJA_SUP_Previa' se mostraba como
+    'PROJA' y quedaba indistinguible del proyecto principal en la lista.
+    """
+    nombre = str(nombre_base or "").strip()
+    if not nombre:
+        return ""
+
+    # Solo el bloque exacto SUP entre separadores: un nombre como 'SUPERMAN' no se toca.
+    sin_sup = re.sub(r"(?i)(?:^|(?<=[_-]))sup(?=$|[_-])", "", nombre)
+    # Limpiar los separadores que quedaron sueltos al sacar el bloque
+    sin_sup = re.sub(r"[_-]{2,}", "_", sin_sup).strip("_-")
+
+    # Si el nombre era solo 'SUP' no queda nada util: se muestra el original.
+    return sin_sup or nombre
 
 
 def _clave_agrupacion_proyecto(hrox_file):

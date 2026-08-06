@@ -3,10 +3,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.01 | Lega
+  LGA_NKS_ProjectHandler v1.02 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.02: El display formateado usa obtener_nombre_display_proyecto()
   v1.01: 'project_key' y 'vfx_folder' de los proyectos abiertos salen de la ruta en disco
 ____________________________________________________________________
 
@@ -43,7 +44,10 @@ class ProjectHandler:
         debug_print(f"   📊 Proyectos encontrados: {len(panel.proyectos_encontrados)}")
         debug_print(f"   📂 Proyectos abiertos: {len(panel.proyectos_abiertos)} grupos")
 
-        from LGA_Projects_Panel_ScanProjects import obtener_clave_proyecto
+        from LGA_Projects_Panel_ScanProjects import (
+            obtener_clave_proyecto,
+            obtener_nombre_display_proyecto,
+        )
 
         # Limpiar items anteriores
         for i in reversed(range(panel.projects_layout.count())):
@@ -121,10 +125,8 @@ class ProjectHandler:
             vfx_folder = proyecto_info.get("vfx_folder", "")
             sup_folder = proyecto_info.get("sup_folder", "")
 
-            # Calcular el display formateado
-            project_display_name = nombre_base
-            if "_SUP" in nombre_base:
-                project_display_name = nombre_base.split("_SUP")[0]
+            # Calcular el display formateado (sin el bloque _SUP, con lo que venga despues)
+            project_display_name = obtener_nombre_display_proyecto(nombre_base)
             clean_ver = version.lstrip('v')
             formatted_display = f"{project_display_name} (v{clean_ver})"
 
@@ -174,9 +176,7 @@ class ProjectHandler:
             update_indicator = " (🔼 UPDATE disponible)" if item.has_newer_version and item.is_open else ""
 
             # Calcular display formateado igual que en UI
-            project_display_name = nombre_base
-            if "_SUP" in nombre_base:
-                project_display_name = nombre_base.split("_SUP")[0]
+            project_display_name = obtener_nombre_display_proyecto(nombre_base)
             clean_ver = version.lstrip('v')
             formatted_display = f"{project_display_name} (v{clean_ver})"
             icono = "▼" if item.is_open else "▶"

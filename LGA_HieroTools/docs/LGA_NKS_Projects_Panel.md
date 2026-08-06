@@ -30,6 +30,7 @@
 - Escaneo automatico al abrir y en cada Refresh (`QRunnable` + `QThreadPool`, no bloquea UI).
 - Nuke 16: se usa `QTimer.singleShot(500ms)` para esperar que Qt este completamente inicializado antes de ejecutar threads.
 - Proyectos: se listan alfabeticamente con version mas alta. Click abre con `hiero.core.openProject()`.
+- Nombre visible: `obtener_nombre_display_proyecto()` saca el bloque `_SUP` y la version, pero conserva lo que venga despues (`PROJA_SUP` -> `PROJA`, `PROJA_SUP_Previa` -> `PROJA_Previa`). No cortar en `_SUP` con `split()`: se come el sufijo y dos proyectos distintos se ven iguales.
 - Una carpeta `*_SUP` puede tener mas de un proyecto (por ejemplo `PROJB_SUP_v040.hrox` y `PROJB_Breakdown_v004.hrox`): los `.hrox` se agrupan por nombre base ignorando version y sufijos (`_Mac`), y cada grupo entra a la lista como un proyecto propio con su version mas alta.
 - Colores: cada item lleva `project_key`, el proyecto de trabajo tomado de la carpeta `VFX-<proyecto>` de la ruta, asi que todos los `.hrox` de una misma carpeta VFX comparten color aunque tengan nombres base distintos.
 - El color de cada proyecto sale de PipeSync, no de este repo. La fuente de verdad es Flow (`Project.sg_pipesync_project_settings_json`, campo `project_color`) y PipeSync lo cachea en la tabla `project_settings_cache` de `pipesync_stats.db`; los nombres salen de la tabla `projects`. Se lee la DB del contexto activo (`cache/` en studio, `cacheClient/` en client), read-only.
