@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_StyleUtils v1.00 | Lega
+  LGA_NKS_StyleUtils v1.01 | Lega
 
   Utilidades para estilos dinámicos de botones en paneles Hiero.
   Incluye funciones para conversión de colores, cálculo de bordes
@@ -17,6 +17,10 @@ ____________________________________________________________________
   - LGA_NKS_Review_Panel.py
   - LGA_NKS_ViewerTL_Panel.py
 
+  v1.01: Agregadas luminance(), ensure_min_luminance() y ensure_max_luminance().
+         Piso y techo de luminancia para que los colores de Flow se lean tanto
+         cuando van como texto sobre fondo oscuro (Projects Panel) como cuando
+         van de fondo con texto claro encima (Assignee Panel, Flow Panel).
   v1.00: Versión inicial
 ____________________________________________________________________
 
@@ -90,6 +94,137 @@ def hsv_to_rgb(h, s, v):
     b = int((b + m) * 255)
 
     return r, g, b
+
+
+# Legibilidad: piso y techo de luminancia
+#
+# Los colores de proyecto y de usuario salen de Flow, donde se eligen como color
+# IDENTITARIO y no pensando en sobre que se van a pintar. En los paneles se usan
+# de dos formas opuestas, y cada una falla por una punta distinta:
+#
+#   - Como COLOR DE TEXTO sobre el panel oscuro (Projects Panel): los colores
+#     oscuros no se leen -> hace falta un PISO de luminancia.
+#   - Como COLOR DE FONDO con texto claro encima (Assignee Panel, Flow Panel):
+#     los colores claros no se leen -> hace falta un TECHO.
+#
+# Las dos funciones son la misma operacion espejada, por eso viven juntas: si
+# manana se cambia el criterio (por ejemplo pasar a contraste WCAG en vez de
+# luminancia cruda), se cambia una vez y vale para los tres paneles.
+
+# Rec. 709. Se trabaja en escala 0-255 para poder compararla de un vistazo
+# contra los valores RGB del color.
+LUMINANCE_R = 0.2126
+LUMINANCE_G = 0.7152
+LUMINANCE_B = 0.0722
+
+# Si el color es practicamente gris no hay tono que preservar, y escalarle el
+# brillo lo manda a blanco o negro puro. Por debajo de esta diferencia entre el
+# canal mas alto y el mas bajo, se resuelve con un gris del limite.
+UMBRAL_ACROMATICO = 8
+
+
+def luminance(color):
+    """Luminancia percibida (Rec. 709) de un '#RRGGBB', en escala 0-255."""
+    rgb = _color_a_rgb(color)
+    if rgb is None:
+        return None
+    r, g, b = rgb
+    return LUMINANCE_R * r + LUMINANCE_G * g + LUMINANCE_B * b
+
+
+def _color_a_rgb(color):
+    """'#RRGGBB' -> (r, g, b), o None si el formato no sirve."""
+    if not color or not isinstance(color, str):
+        return None
+    color = color.strip()
+    if not color.startswith('#') or len(color) != 7:
+        return None
+    try:
+        return hex_to_rgb(color)
+    except ValueError:
+        return None
+
+
+def _gris(nivel):
+    nivel = max(0, min(255, int(round(nivel))))
+    return '#{0:02X}{0:02X}{0:02X}'.format(nivel)
+
+
+def ensure_min_luminance(color, min_luminance):
+    """
+    Aclara el color hasta el piso, respetando el tono. Para TEXTO DE COLOR sobre
+    fondo oscuro.
+
+    Dos etapas, en este orden para no desaturar de mas:
+      1. Sube el brillo al maximo manteniendo tono y saturacion (escala el RGB
+         hasta que el canal mas alto llegue a 255). #9E3A3A -> #FF5E5E.
+      2. Si con eso todavia no alcanza, recien ahi mezcla hacia blanco lo justo
+         y necesario. #FF5E5E -> #FF7A7A.
+
+    Mezclar con blanco desde el principio daria un pastel lavado (#C58989) y
+    perderia la identidad del color.
+
+    Devuelve el color sin tocar si ya cumple, o si el formato no es valido.
+    """
+    rgb = _color_a_rgb(color)
+    if rgb is None:
+        return color
+
+    r, g, b = rgb
+    if luminance(color) >= min_luminance:
+        return color
+
+    canal_max = max(r, g, b)
+    if canal_max - min(r, g, b) <= UMBRAL_ACROMATICO:
+        return _gris(min_luminance)
+
+    escala = 255.0 / canal_max
+    r = min(255, int(round(r * escala)))
+    g = min(255, int(round(g * escala)))
+    b = min(255, int(round(b * escala)))
+
+    lum = LUMINANCE_R * r + LUMINANCE_G * g + LUMINANCE_B * b
+    if lum < min_luminance:
+        # La luminancia es lineal en la mezcla, asi que el factor sale directo.
+        factor = (min_luminance - lum) / (255.0 - lum) if lum < 255 else 0
+        factor = max(0.0, min(1.0, factor))
+        r = min(255, int(round(r + (255 - r) * factor)))
+        g = min(255, int(round(g + (255 - g) * factor)))
+        b = min(255, int(round(b + (255 - b) * factor)))
+
+    return '#{:02X}{:02X}{:02X}'.format(r, g, b)
+
+
+def ensure_max_luminance(color, max_luminance):
+    """
+    Oscurece el color hasta el techo, respetando el tono. Para COLOR DE FONDO
+    con texto claro encima.
+
+    Es el espejo de ensure_min_luminance(), pero mas simple: escalar el RGB
+    hacia abajo baja el brillo manteniendo tono y saturacion, y siempre alcanza
+    (el limite es el negro). No hace falta una segunda etapa.
+
+    Devuelve el color sin tocar si ya cumple, o si el formato no es valido.
+    """
+    rgb = _color_a_rgb(color)
+    if rgb is None:
+        return color
+
+    lum = luminance(color)
+    if lum <= max_luminance:
+        return color
+
+    r, g, b = rgb
+    if max(r, g, b) - min(r, g, b) <= UMBRAL_ACROMATICO:
+        return _gris(max_luminance)
+
+    # La luminancia es lineal en el escalado, asi que el factor es exacto.
+    factor = max_luminance / lum
+    r = max(0, int(round(r * factor)))
+    g = max(0, int(round(g * factor)))
+    b = max(0, int(round(b * factor)))
+
+    return '#{:02X}{:02X}{:02X}'.format(r, g, b)
 
 
 # Funciones para gradientes

@@ -75,7 +75,7 @@ fila de la persona. La seccion `PipeSync` del dialogo tiene:
 
 | Campo | Que hace |
 |---|---|
-| `Assignee color` | Color del label del assignee. Se usa como **fondo**, asi que conviene un tono oscuro; el dialogo muestra un preview con el nombre real encima. |
+| `Assignee color` | Color del label del assignee. Se usa como **fondo**, asi que conviene un tono oscuro; el dialogo muestra un preview con el nombre real encima. En el panel de Hiero el brillo ademas se topea por codigo (ver abajo), pero el color guardado en Flow es el que se ve en PipeSync tal cual. |
 | `Wasabi user` | Nombre de usuario **IAM** de Wasabi (ej. `lega`). Con el se arma la policy `<usuario>_policy`. **No es una credencial**: las access/secret key siguen en el `config.secure` de cada maquina. |
 | `Short name` | Nombre corto, opcional. |
 | `Assignable` | Si aparece como boton en este panel. |
@@ -175,6 +175,7 @@ El panel utiliza un **método híbrido inteligente filtrado por track** para det
 ### Botones Dinámicos (Usuarios)
 - Se generan automáticamente basándose en el archivo de configuración
 - Cada usuario tiene su propio botón con color personalizado
+- **Techo de brillo**: el color del usuario se usa como fondo y el texto del botón es `#d8d8d8`, casi blanco, así que un color muy claro lo vuelve ilegible. Antes de pintar, `ensure_max_luminance()` (en `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`) baja el brillo hasta `MAX_USER_BG_LUMINANCE = 135` manteniendo el tono; los que ya cumplen no se tocan. El borde y el hover se derivan del color ya corregido. Solo aplica a botones de usuario con color sólido: los botones fijos del panel y los gradientes pasan sin cambios. Es la operación inversa a la del Projects Panel, donde el color va como texto sobre fondo oscuro y necesita un **piso**; las dos funciones viven juntas en `StyleUtils`. Esto es solo presentación: en Flow y en PipeSync el color queda como está.
 - **Click normal**: Asigna el usuario a la task comp en Flow Production Tracking y actualiza la base de datos local pipesync.db
 - **Shift+Click**: Crea/actualiza políticas IAM de Wasabi para el usuario
 - **Ctrl+Shift+Click**: Abre ventana de gestión de shots asignados en policy de Wasabi

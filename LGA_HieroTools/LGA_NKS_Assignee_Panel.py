@@ -1,10 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.58 | Lega
+  LGA_NKS_Flow_Assignee_Panel v1.59 | Lega
 
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
+
+  v1.59: Techo de luminancia al fondo de los botones de usuario
+         (MAX_USER_BG_LUMINANCE). El texto es claro y los colores mas brillantes
+         de Flow lo dejaban ilegible. Borde y hover se derivan del color ya
+         corregido. Solo aplica a botones de usuario con color solido.
 
   v1.58: En contexto Client el panel queda deshabilitado con el motivo a la vista.
          Antes mostraba los dos botones fijos y ningun usuario, indistinguible
@@ -58,8 +63,22 @@ from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     calculate_dynamic_border,
     calculate_dynamic_hover,
-    create_tooltip_stylesheet
+    create_tooltip_stylesheet,
+    ensure_max_luminance,
 )
+
+
+# Techo de luminancia (0-255) para el fondo de los botones de usuario.
+#
+# El texto de los botones es #d8d8d8, casi blanco, asi que un fondo muy claro lo
+# vuelve ilegible. Los colores vienen de Flow, donde se eligen como color
+# identitario de la persona y no pensando en que llevan texto claro encima.
+# El valor sale de medir los colores reales: los que hoy se leen bien llegan
+# hasta ~135, y a partir de ahi empiezan a molestar.
+#
+# Es la operacion inversa a la del Projects Panel, que usa un PISO porque ahi el
+# color va como texto sobre fondo oscuro. Las dos viven en StyleUtils.
+MAX_USER_BG_LUMINANCE = 135
 
 
 # Clase de botón personalizada que maneja el Shift+Click y Ctrl+Shift+Click
@@ -485,7 +504,17 @@ class AssigneePanel(QtWidgets.QWidget):
             else:
                 tooltip_text = tooltip if tooltip else None
 
+            # Techo de brillo al fondo de los botones de usuario: el texto es
+            # claro y contra un fondo muy claro no se lee. Solo se tocan los
+            # colores solidos de usuario; los botones fijos del panel llevan
+            # colores propios ya elegidos para este fondo, y los gradientes se
+            # dejan pasar sin cambios.
+            if is_user_button:
+                style = ensure_max_luminance(style, MAX_USER_BG_LUMINANCE)
+
             # Aplicar estilos dinámicos con bordes, hover y tooltips
+            # (se derivan del color ya corregido, para que borde y hover
+            # acompañen al fondo en vez de contradecirlo)
             border_color = calculate_dynamic_border(style)
             hover_color = calculate_dynamic_hover(style)
 
