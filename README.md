@@ -1,6 +1,6 @@
 <p>
   <span style="font-size:1.6em;font-weight:700;line-height:1;">LGA HIERO TOOLS</span><br>
-  <span style="font-style:italic;line-height:1;">Lega | v3.83</span><br>
+  <span style="font-style:italic;line-height:1;">Lega | v3.84</span><br>
 </p>
 <br clear="left">
 
