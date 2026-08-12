@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.13 | Lega
+  LGA_NKS_Flow_NamingUtils v1.14 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -9,6 +9,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
   - PROYECTO_TempEP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TempEP_SEQ_SHOT (4 bloques simplificado)
+  - Cualquiera de esas variantes + VENDOR al final del bloque base
+    (PROYECTO_SEQ_SHOT_VENDOR), donde VENDOR sale de la DB de PipeSync.
 
   Usado por runtime activo:
   - LGA_NKS_Flow_Panel.py
@@ -28,6 +30,11 @@ ____________________________________________________________________
   - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py
   - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py
   - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_CreatePsync.py
+  - LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_OpenPath.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py
@@ -38,6 +45,13 @@ ____________________________________________________________________
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push_connector.py
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py
 
+  v1.14: soporte de vendor code al final del bloque base
+         (PROYECTO_SEQ_SHOT_VENDOR). Los vendor codes validos se leen de la DB
+         de PipeSync via LGA_NKS_Vendors_Config; NO se adivinan por estructura,
+         porque un bloque alfabetico despues de dos numeros puede ser tanto un
+         vendor ("PROJA_1013_0800_VEN") como una task ("PROJA_1048_060_Compo").
+         Antes, el vendor se comia como DESC1 y el shot_code terminaba
+         incluyendo la task, con lo que no matcheaba ningun shot de Flow.
   v1.13: extract_sequence_name_from_path(): extrae el nombre de secuencia desde
          el segmento de ruta que sigue a "VFX-NOMBRE" (estructura
          VFX-PROYECTO/SECUENCIA/SHOT) en lugar del nombre del timeline de Hiero.
@@ -94,7 +108,7 @@ def _is_series_format(parts):
 
 def _is_vendor_format(parts):
     """
-    Detecta formato con vendor:
+    Detecta formato con vendor delante:
     PROYECTO_VENDOR_SEQ_SHOT, donde VENDOR es solo letras.
     """
     return (
@@ -103,6 +117,54 @@ def _is_vendor_format(parts):
         and _is_numeric_block(parts[2])
         and _is_numeric_block(parts[3])
     )
+
+
+# Resolver de vendor codes, cacheado tras el primer intento. _analyze_shotname
+# corre dos veces por clip (shot code + task), asi que el import no puede
+# repetirse en cada llamada. False = ya se intento y no esta disponible.
+_vendor_lookup = None
+
+
+def _get_vendor_lookup():
+    """Devuelve is_vendor_code() de Vendors_Config, o None si no esta disponible.
+
+    El import es lazy y tolerante a fallas a proposito: este modulo tiene que
+    seguir funcionando en contextos donde no esten la DB ni la cadena de imports
+    de PipeSync (scripts sueltos, tests).
+    """
+    global _vendor_lookup
+    if _vendor_lookup is not None:
+        return _vendor_lookup or None
+
+    try:
+        try:
+            from LGA_NKS_Vendors_Config import is_vendor_code
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_Vendors_Config import is_vendor_code
+        _vendor_lookup = is_vendor_code
+    except Exception:
+        _vendor_lookup = False
+    return _vendor_lookup or None
+
+
+def _is_known_vendor_code(block, project_name):
+    """
+    True si `block` es un vendor code configurado en Flow para ese proyecto.
+
+    La lista sale de la DB de PipeSync. Si no se puede resolver, devuelve False
+    y el naming se comporta como antes de v1.14.
+    """
+    if not block or not block.isalpha():
+        return False
+
+    lookup = _get_vendor_lookup()
+    if lookup is None:
+        return False
+
+    try:
+        return lookup(block, project_name)
+    except Exception:
+        return False
 
 
 def _analyze_shotname(base_name):
@@ -120,9 +182,18 @@ def _analyze_shotname(base_name):
 
     # Base de 4 bloques para:
     # - Series (PROYECTO_EP_SEQ_SHOT numérico)
-    # - Vendor (PROYECTO_VENDOR_SEQ_SHOT)
+    # - Vendor delante (PROYECTO_VENDOR_SEQ_SHOT)
     is_series = _is_series_format(core_parts) or _is_vendor_format(core_parts)
     base_count = 4 if is_series else 3
+
+    # Vendor al final del bloque base: PROYECTO_SEQ_SHOT_VENDOR (y su variante
+    # de serie PROYECTO_EP_SEQ_SHOT_VENDOR). Se aplica sobre la base ya
+    # resuelta, asi que cubre las dos formas sin duplicar reglas.
+    if len(core_parts) > base_count and _is_known_vendor_code(
+        core_parts[base_count], core_parts[0]
+    ):
+        base_count += 1
+
     has_description = len(core_parts) >= (base_count + 2)
 
     return core_parts, is_series, has_description, base_count
@@ -171,6 +242,54 @@ def extract_shot_code(base_name):
         return "_".join(core_parts[:target_count])
 
     return "_".join(core_parts)
+
+
+_SHOT_FOLDER_RE = re.compile(
+    r"^[A-Za-z0-9]+(?:_[A-Za-z]+|_[0-9]{3,5}[A-Za-z]?)?_[0-9]{3,5}[A-Za-z]?_[0-9]{3,4}$"
+)
+
+
+def is_shot_folder_name(segment, project_name=None):
+    """
+    True si un segmento de ruta es el nombre de carpeta de un shot.
+
+    Sirve para encontrar la carpeta del shot recorriendo una ruta de disco, que
+    es un problema distinto al de parsear un filename: aca no hay task ni
+    version, solo el nombre del directorio.
+
+    Acepta el patron historico (PROYECTO[_VENDOR|_EP]_SEQ_SHOT) y, ademas, ese
+    mismo patron con un vendor code al final (PROYECTO_SEQ_SHOT_VENDOR). El
+    vendor se valida contra la DB de PipeSync, igual que en _analyze_shotname.
+
+    LIMITE CONOCIDO: no cubre los shots con bloques de descripcion
+    (PROYECTO_SEQ_SHOT_DESC1_DESC2, con o sin vendor). Nunca los cubrio: el
+    patron historico solo contempla el bloque base. Esos shots se resuelven por
+    la deteccion de estructura de ruta que los callers usan como paso 2. Ampliar
+    el patron a descripciones cambiaria el comportamiento de shots sin vendor,
+    asi que es una decision aparte.
+
+    Args:
+        segment (str): Un unico segmento de ruta (sin barras).
+        project_name (str | None): Proyecto al que pertenece, para acotar la
+            lista de vendors validos.
+
+    Returns:
+        bool
+    """
+    if not segment:
+        return False
+
+    if _SHOT_FOLDER_RE.match(segment):
+        return True
+
+    # Variante con vendor al final: se le saca el ultimo bloque y se revalida el
+    # resto con el patron historico.
+    if "_" in segment:
+        cuerpo, _, ultimo = segment.rpartition("_")
+        if _is_known_vendor_code(ultimo, project_name or cuerpo.split("_")[0]):
+            return bool(_SHOT_FOLDER_RE.match(cuerpo))
+
+    return False
 
 
 def extract_project_name(base_name):

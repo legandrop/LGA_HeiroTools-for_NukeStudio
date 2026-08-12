@@ -1,12 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerS3_OpenPath v1.01 | Lega
+  LGA_NKS_FileManagerS3_OpenPath v1.02 | Lega
 
   Abre la carpeta del shot seleccionado en FileManagerS3 usando CLI.
   Extrae la ruta del shot tomando las primeras 4 partes: unidad/proyecto/grupo/shot.
   Soporta modo desarrollo con variable Desarrollo = True y verificación automática.
 
+  v1.02: la carpeta del shot se detecta con is_shot_folder_name() de
+         NamingUtils, que valida el vendor code contra la DB de PipeSync.
+         El regex local no reconocia el naming PROYECTO_SEQ_SHOT_VENDOR y
+         caia al fallback por profundidad de ruta.
   v1.01: migra al helper central FileManagerS3 + --context studio/client.
 ____________________________________________________________________
 """
@@ -32,6 +36,18 @@ if utils_path.exists():
         build_filemanagers3_command,
         resolve_context_mode,
     )
+
+# Deteccion de la carpeta del shot: el helper central conoce los vendor codes de
+# la DB de PipeSync (naming PROYECTO_SEQ_SHOT_VENDOR). Si no se puede importar,
+# get_shot_path() cae al regex local, que no entiende vendor.
+try:
+    from LGA_NKS_Shared.LGA_NKS_Flow_NamingUtils import (
+        is_shot_folder_name,
+        extract_project_name_from_path,
+    )
+except ImportError:
+    is_shot_folder_name = None
+    extract_project_name_from_path = None
 
 # Variables globales de logging (valores por defecto)
 DEBUG = True
@@ -153,11 +169,23 @@ def get_shot_path(file_path):
     debug_print(f"Partes de la ruta: {path_parts}")
 
     # 1) Deteccion por patron de nombre de shot (ej: PROJF_050_010)
+    # El helper central valida el vendor code contra la DB de PipeSync; el regex
+    # queda como fallback para cuando NamingUtils no se pudo importar.
     shot_pattern = re.compile(
         r"^[A-Za-z0-9]+(?:_[A-Za-z]+|_[0-9]{3,5}[A-Za-z]?)?_[0-9]{3,5}[A-Za-z]?_[0-9]{3,4}$"
     )
+    project_name = (
+        extract_project_name_from_path(file_path)
+        if extract_project_name_from_path
+        else None
+    )
     for i in range(len(path_parts) - 1, -1, -1):
-        if shot_pattern.match(path_parts[i]):
+        segmento = path_parts[i]
+        if is_shot_folder_name:
+            es_shot = is_shot_folder_name(segmento, project_name)
+        else:
+            es_shot = bool(shot_pattern.match(segmento))
+        if es_shot:
             shot_path = "/".join(path_parts[: i + 1])
             debug_print(f"Ruta del shot detectada por patron: {shot_path}")
             return shot_path

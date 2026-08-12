@@ -130,6 +130,68 @@ PROJB_101_060_010_Chroma_Auto
 - **Sequence:** `TEMP_EP` (ej: `101`)
 - **Shot Code:** Mantiene el bloque de temporada/episodio dentro del nombre del shot
 
+## Sistema de Nomenclatura con Vendor Code
+
+### Estructura del Shotname
+Cuando el estudio trabaja como vendor de un proyecto, el shotname lleva el codigo
+del vendor **al final del bloque base**, despues de secuencia y shot:
+
+```
+PROYECTO_SEQ_SHOT_VENDOR
+```
+
+**Ejemplo:**
+```
+PROJA_1013_0800_VEN
+```
+
+Se combina con las demas variantes: puede haber descripcion
+(`PROYECTO_SEQ_SHOT_VENDOR_DESC1_DESC2`) y puede aplicarse sobre la base de
+serie (`PROYECTO_TEMP_EP_SEQ_SHOT_VENDOR`).
+
+### Campos y su Significado
+
+| Campo | Posición | Descripción | Ejemplo |
+|-------|----------|-------------|---------|
+| PROYECTO | 1 | Código del proyecto | `PROJA` |
+| SEQ | 2 | Número de secuencia | `1013` |
+| SHOT | 3 | Número de shot | `0800` |
+| VENDOR | 4 | Código del vendor | `VEN` |
+| TASK | 5 | Nombre de la tarea | `comp` |
+| VERSION | 6 | Número de versión | `v001` |
+
+### Por que el vendor NO se detecta por estructura
+
+Los vendor codes validos se leen de la **DB de PipeSync**, no se adivinan. La
+fuente de verdad es Flow: los codigos se cargan en el Projects tab de PipeSync,
+viajan en el envelope de Project Settings del proyecto y quedan en
+`project_settings_cache.settings_json` de `pipesync_stats.db`, bajo la clave
+`vendors`.
+
+El motivo es que una regla estructural no alcanza. Estos dos nombres son
+indistinguibles por forma:
+
+```
+PROJA_1013_0800_VEN     → VEN es un VENDOR (parte del shot name)
+PROJA_1048_060_Compo    → Compo es una TASK (no es parte del shot name)
+```
+
+Los dos tienen un bloque alfabetico despues de dos bloques numericos. Solo la
+lista de vendors del proyecto permite decidir cual es cual.
+
+**Degradacion:** si PipeSync nunca sincronizo, la DB no existe o el proyecto no
+tiene vendors cargados, el naming se comporta como si no hubiera vendor. No hay
+fallback estructural, a proposito.
+
+### Uso en Flow/ShotGrid (Vendor)
+- **Shot Code:** incluye el bloque del vendor (ej: `PROJA_1013_0800_VEN`)
+- **Task:** el bloque que sigue al vendor (ej: `comp`)
+
+### Formato historico (vendor adelante)
+Existe tambien la variante `PROYECTO_VENDOR_SEQ_SHOT`, con el vendor pegado al
+proyecto. Se sigue soportando por estructura (`_is_vendor_format`), sin
+consultar la DB.
+
 ## Problemas Identificados en los Scripts de Hiero
 
 ### 1. LGA_NKS_Flow_CreateShot.py (Problema CRÍTICO)
@@ -176,6 +238,9 @@ Si después del proyecto los 3 bloques siguientes empiezan con dígito:
 Sino:
     → Formato estándar (base = 3 bloques: PROYECTO_SEQ_SHOT)
 
+Si el bloque que sigue al bloque base es un vendor code conocido (DB de PipeSync):
+    → El bloque base crece 1 (PROYECTO_SEQ_SHOT_VENDOR)
+
 Si existen al menos 2 bloques adicionales tras el bloque base:
     → Formato con Descripción
 Sino:
@@ -184,6 +249,7 @@ Sino:
 
 **Casos de Uso:**
 - `PROJA_000_140_comp_v19.exr` → **Simplificado** → Shot Code: `PROJA_000_140`
+- `PROJA_1013_0800_VEN_comp_v001.exr` → **Vendor** → Shot Code: `PROJA_1013_0800_VEN`
 - `PROJA_000_140_Chroma_Auto_comp_v19.exr` → **Con Descripción** → Shot Code: `PROJA_000_140_Chroma_Auto`
 - `PROJB_101_060_010_comp_v05.exr` → **Serie Simplificado** → Shot Code: `PROJB_101_060_010`
 - `PROJB_101_060_010_Chroma_Auto_comp_v05.exr` → **Serie con Descripción** → Shot Code: `PROJB_101_060_010_Chroma_Auto`

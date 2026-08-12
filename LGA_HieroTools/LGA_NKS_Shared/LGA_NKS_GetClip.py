@@ -113,6 +113,14 @@ try:
 except ImportError as e:
     NAMING_UTILS_AVAILABLE = False
     debug_print(f"NamingUtils NO importado, usando fallback: {e}")
+
+    # OJO: este fallback es CODIGO MUERTO y esta DESACTUALIZADO a proposito.
+    # extract_shot_code_from_filename() corta antes con "" cuando
+    # NAMING_UTILS_AVAILABLE es False, asi que nada de esto llega a ejecutarse.
+    # Ademas no reconoce el naming PROYECTO_SEQ_SHOT_VENDOR (v1.14 de
+    # NamingUtils), porque los vendor codes salen de la DB de PipeSync y no se
+    # pueden adivinar por estructura. Si algun dia se reactiva esta rama, hay
+    # que borrarla y resolver el import, no sincronizar la copia a mano.
     _VERSION_RE = re.compile(r"^v\d+$", re.IGNORECASE)
 
     def _strip_version_suffix(parts):

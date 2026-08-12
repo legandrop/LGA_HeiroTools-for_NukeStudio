@@ -1,10 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_PipeSync_CreatePsync v1.00 | Lega
+  LGA_NKS_PipeSync_CreatePsync v1.01 | Lega
 
   Genera un archivo .psync portátil con la ruta del shot seleccionado.
   Shift+Click en el panel crea el token en el Desktop listo para compartir.
+
+  v1.01: la carpeta del shot se detecta con is_shot_folder_name() de
+         NamingUtils, que valida el vendor code contra la DB de PipeSync.
+         El regex local no reconocia el naming PROYECTO_SEQ_SHOT_VENDOR y
+         caia al fallback por profundidad de ruta.
 ____________________________________________________________________
 """
 
@@ -26,6 +31,18 @@ if utils_path.exists():
     sys.path.insert(0, str(utils_path))
     from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process
     from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
+
+# Deteccion de la carpeta del shot: el helper central conoce los vendor codes de
+# la DB de PipeSync (naming PROYECTO_SEQ_SHOT_VENDOR). Si no se puede importar,
+# get_shot_path() cae al regex local, que no entiende vendor.
+try:
+    from LGA_NKS_Shared.LGA_NKS_Flow_NamingUtils import (
+        is_shot_folder_name,
+        extract_project_name_from_path,
+    )
+except ImportError:
+    is_shot_folder_name = None
+    extract_project_name_from_path = None
 
 DEBUG = True
 DEBUG_CONSOLE = False
@@ -135,11 +152,23 @@ def get_shot_path(file_path):
     path_parts = normalized_path.replace("\\", "/").split("/")
     debug_print(f"Partes de la ruta: {path_parts}")
 
+    # El helper central valida el vendor code contra la DB de PipeSync; el regex
+    # queda como fallback para cuando NamingUtils no se pudo importar.
     shot_pattern = re.compile(
         r"^[A-Za-z0-9]+(?:_[A-Za-z]+|_[0-9]{3,5}[A-Za-z]?)?_[0-9]{3,5}[A-Za-z]?_[0-9]{3,4}$"
     )
+    project_name = (
+        extract_project_name_from_path(file_path)
+        if extract_project_name_from_path
+        else None
+    )
     for i in range(len(path_parts) - 1, -1, -1):
-        if shot_pattern.match(path_parts[i]):
+        segmento = path_parts[i]
+        if is_shot_folder_name:
+            es_shot = is_shot_folder_name(segmento, project_name)
+        else:
+            es_shot = bool(shot_pattern.match(segmento))
+        if es_shot:
             shot_path = "/".join(path_parts[: i + 1])
             debug_print(f"Ruta del shot detectada por patrón: {shot_path}")
             return shot_path
