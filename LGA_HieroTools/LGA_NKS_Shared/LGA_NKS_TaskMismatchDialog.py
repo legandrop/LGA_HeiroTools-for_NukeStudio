@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskMismatchDialog v1.02 | Lega
+  LGA_NKS_TaskMismatchDialog v1.03 | Lega
 
   Ventana de advertencia compartida para cuando la task detectada en
   el filename de un clip NO coincide con el nombre del track donde
@@ -14,6 +14,9 @@ ____________________________________________________________________
 
   Convencion de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.03: La tabla usa la hoja del pack. La fila seleccionada iba en gris
+         claro con texto negro, el unico lugar de las tools donde una
+         seleccion se pinta MAS clara que el fondo.
   v1.02: Emite senial closed para encadenar la ventana siguiente al cierre,
          aclara que se puede clickear una fila para navegar al clip y usa
          seleccion gris/blanca en la tabla.
@@ -33,6 +36,7 @@ from pathlib import Path
 
 import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore, Qt
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Metric, Style
 
 _CONFIG_DIR_NAME = "LGA"
 _CONFIG_SUBDIR_NAME = "HieroTools"
@@ -196,6 +200,10 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
     def __init__(self, mismatches, parent=None):
         super(_TaskMismatchDialog, self).__init__(parent)
         self.setWindowTitle("Task / Track Mismatch")
+        # La hoja va en la VENTANA y no solo en la tabla: con la tabla estilada
+        # y el resto heredando el tema de Hiero, la tabla quedaba mas oscura
+        # que su propio contenedor, o sea la jerarquia al reves.
+        self.setStyleSheet(Style.FORM)
         self.setModal(False)
         self._mismatches = list(mismatches or [])
         self._keep_on_top = _load_keep_on_top()
@@ -223,14 +231,10 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.cellClicked.connect(self.navigate_to_table_row)
-        self.table.setStyleSheet(
-            """
-            QTableView::item:selected {
-                color: black;
-                background-color: #b8b8b8;
-            }
-            """
-        )
+        # La seleccion iba en gris claro con texto negro, el unico lugar de
+        # las tools donde una fila seleccionada se pinta mas clara que el
+        # fondo. Ahora usa la misma que las demas tablas del pack.
+        self.table.setStyleSheet(Style.TABLE)
 
         for row, mismatch in enumerate(self._mismatches):
             self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(mismatch.get("clip", "")))
@@ -254,6 +258,8 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
         bottom_row.addWidget(self.keep_on_top_chk, 0, Qt.AlignLeft | Qt.AlignVCenter)
         bottom_row.addStretch(1)
         close_btn = QtWidgets.QPushButton("Close")
+        close_btn.setStyleSheet(Style.BTN_SECONDARY)
+        close_btn.setFixedHeight(Metric.BUTTON_HEIGHT)
         close_btn.clicked.connect(self.close)
         bottom_row.addWidget(close_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
         layout.addLayout(bottom_row)

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskSelectionDialog v1.41 | Lega
+  LGA_NKS_TaskSelectionDialog v1.42 | Lega
 
   Detección y selección de task entre los tracks EXR del playhead.
 
@@ -22,6 +22,9 @@ ____________________________________________________________________
 
   Convención de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.42: El look sale de LGA_UI_Style_HieroTools. La ventana iba mas
+         clara que los botones que contiene y el separador salia como
+         una barra blanca por el shadow Sunken de Qt.
   v1.41: Los mismatches reportados desde el selector incluyen el TrackItem y
         rango de timeline para que la ventana compartida pueda navegar al clip.
   v1.40: Los botones del selector muestran un atajo de teclado (1-9) en un
@@ -42,6 +45,7 @@ ____________________________________________________________________
 """
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore, PYSIDE_VER
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Metric
 from LGA_NKS_Shared.LGA_NKS_GetClip import (
     TASK_EXR_TRACKS,
     TRACK_comp_EXR,
@@ -161,28 +165,32 @@ def prompt_task_selection(task_names, title="Select task"):
     dialog.setWindowTitle("Select Task")
     dialog.setModal(True)
     dialog.setMinimumWidth(240)
+    # La ventana va al fondo de la app, como el resto de las tools. Iba en
+    # #2B2B2B, mas claro que los botones que contiene.
     dialog.setStyleSheet(
-        """
-        QDialog {
-            background-color: #2B2B2B;
-            border: 1px solid #555555;
-        }
-        """
+        "QDialog { background-color: %s; border: 1px solid %s; }"
+        % (Color.WINDOW, Color.BORDER_STRONG)
     )
 
     layout = QtWidgets.QVBoxLayout(dialog)
     layout.setSpacing(8)
-    layout.setContentsMargins(16, 14, 16, 14)
+    layout.setContentsMargins(*([Metric.WINDOW_MARGIN] * 4))
 
     label = QtWidgets.QLabel(title)
     label.setAlignment(QtCore.Qt.AlignCenter)
-    label.setStyleSheet("color: #CCCCCC; font-weight: bold; font-size: 12px; padding: 2px 0px;")
+    label.setStyleSheet(
+        "color: %s; font-weight: bold; font-size: 12px; padding: 2px 0px;"
+        % Color.TEXT_STRONG
+    )
     layout.addWidget(label)
 
     sep = QtWidgets.QFrame()
+    # Sin el shadow Sunken y con alto fijo: con el, Qt le dibuja encima su
+    # doble linea clara y el separador salia como una barra blanca.
     sep.setFrameShape(QtWidgets.QFrame.HLine)
-    sep.setFrameShadow(QtWidgets.QFrame.Sunken)
-    sep.setStyleSheet("color: #444444; margin: 0px;")
+    sep.setFrameShadow(QtWidgets.QFrame.Plain)
+    sep.setFixedHeight(1)
+    sep.setStyleSheet("background-color: %s; border: none;" % Color.BORDER)
     layout.addWidget(sep)
 
     def make_handler(task):
@@ -199,19 +207,28 @@ def prompt_task_selection(task_names, title="Select task"):
         btn.setStyleSheet(
             """
             QPushButton {
-                background-color: #2B2B2B;
-                border: 1px solid #444444;
-                border-radius: 3px;
+                background-color: %(surface)s;
+                border: 1px solid %(border)s;
+                border-radius: %(radius)dpx;
             }
             QPushButton:hover {
-                background-color: #3a3a3a;
+                background-color: %(hover)s;
                 border: 1px solid %(color)s;
             }
             QPushButton:pressed {
-                background-color: #333333;
+                background-color: %(pressed)s;
             }
             """
-            % {"color": task_color}
+            % {
+                "color": task_color,
+                "surface": Color.SURFACE,
+                "border": Color.BORDER_STRONG,
+                "hover": Color.SURFACE_HOVER,
+                # No hay token propio de pressed: se usa el de fila
+                # seleccionada, que es el escalon justo debajo del hover.
+                "pressed": Color.SURFACE_SELECTED,
+                "radius": Metric.RADIUS_SMALL,
+            }
         )
 
         # Layout interno: cuadradito de atajo a la izquierda y nombre centrado.
@@ -226,8 +243,9 @@ def prompt_task_selection(task_names, title="Select task"):
         # Transparente al mouse para que el click/hover llegue al boton.
         shortcut_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
         shortcut_label.setStyleSheet(
-            "background: transparent; border: 1px solid #666666; "
-            "border-radius: 2px; color: #999999; font-size: 10px; font-weight: normal;"
+            "background: transparent; border: 1px solid %s; "
+            "border-radius: 2px; color: %s; font-size: 10px; font-weight: normal;"
+            % (Color.BORDER_HOVER, Color.TEXT_HEADER)
         )
 
         # Nombre de la task, centrado en el ancho total del boton.
