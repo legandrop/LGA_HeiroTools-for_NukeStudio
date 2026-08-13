@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assign_Assignee v1.26 | Lega
+  LGA_NKS_Flow_Assign_Assignee v1.27 | Lega
 
   Asigna un usuario a una tarea en ShotGrid (Flow) a partir del base_name y nombre de usuario
 
+  v1.27: El look sale de LGA_UI_Style_HieroTools. La ventana no tenia
+         ningun fondo propio y heredaba el tema de Hiero; los botones
+         iban estirados a lo ancho y ahora van en una fila a la
+         derecha, con el de accion ultimo y marcado.
   v1.26: los usuarios salen de la DB de PipeSync (tabla flow_users), no del JSON local.
   v1.25: Recibe file_path desde el panel para extraer project_name desde el
          segmento VFX-NOMBRE del path (corrige proyectos como PROJALT con
@@ -28,6 +32,7 @@ import sqlite3
 import platform
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_name
 
 # Reasignar clases para compatibilidad con código existente
@@ -215,17 +220,17 @@ def get_user_info_from_config(user_name):
         user_name (str): Nombre del usuario en Flow
 
     Returns:
-        tuple: (user_name, user_color) o (user_name, "#666666") si no se encuentra
+        tuple: (user_name, user_color) o (user_name, Color.TEXT_DIM) si no se encuentra
     """
     try:
         user = find_user_by_name(user_name)
         if user:
             return user["name"], user["color"]
-        return user_name, "#666666"
+        return user_name, Color.TEXT_DIM
 
     except Exception as e:
         debug_print(f"Error leyendo usuarios de PipeSync: {e}")
-        return user_name, "#666666"
+        return user_name, Color.TEXT_DIM
 
 
 # Clase de ventana de estado para mostrar progreso de asignación en Flow
@@ -244,6 +249,9 @@ class FlowStatusWindow(QDialog):
 
         layout = QVBoxLayout()
         self.setLayout(layout)
+        # Sin esto la ventana heredaba el tema de Hiero y no se
+        # parecia a ninguna otra ventana de las tools.
+        self.setStyleSheet(Style.WINDOW)
 
         self.status_label = QLabel()
         self.status_label.setAlignment(Qt.AlignCenter)
@@ -261,14 +269,14 @@ class FlowStatusWindow(QDialog):
         if user_name:
             initial_message = (
                 f"<div style='text-align: left;'>"
-                f"<span style='color: #CCCCCC;'>{task_text} </span>"
-                f"<span style='color: #CCCCCC; background-color: {user_color};'>{user_name}</span>"
+                f"<span style='color: {Color.TEXT};'>{task_text} </span>"
+                f"<span style='color: {Color.TEXT_ON_ACCENT}; background-color: {user_color};'>{user_name}</span>"
                 f"</div>"
             )
         else:
             initial_message = (
                 f"<div style='text-align: left;'>"
-                f"<span style='color: #CCCCCC;'>{task_text}</span>"
+                f"<span style='color: {Color.TEXT};'>{task_text}</span>"
                 f"</div>"
             )
 
@@ -290,7 +298,7 @@ class FlowStatusWindow(QDialog):
         self.validation_label.setAlignment(Qt.AlignLeft)
         self.validation_label.setWordWrap(True)
         self.validation_label.setTextFormat(Qt.RichText)
-        self.validation_label.setStyleSheet("padding: 10px; color: #CCCCCC;")
+        self.validation_label.setStyleSheet(f"padding: 10px; color: {Color.TEXT};")
         layout.addWidget(self.validation_label)
 
         self.task_widget = QWidget()
@@ -308,28 +316,37 @@ class FlowStatusWindow(QDialog):
         layout.addWidget(self.result_label)
 
         self.action_button = QPushButton("Aplicar")
+        self.action_button.setStyleSheet(Style.BTN_PRIMARY)
         self.action_button.setVisible(False)
         self.action_button.setEnabled(False)
         self.action_button.clicked.connect(self._handle_apply_clicked)
-        layout.addWidget(self.action_button)
-
         self.close_button = QPushButton("Close")
+        self.close_button.setStyleSheet(Style.BTN_SECONDARY)
         self.close_button.clicked.connect(self.close)
-        layout.addWidget(self.close_button)
+        # Los botones van en una fila alineada a la derecha, con el de accion
+        # ultimo: estirados a lo ancho de la ventana no se leian como botones
+        # y ademas no habia forma de saber cual es el que ejecuta la accion.
+        buttons_row = QtWidgets.QHBoxLayout()
+        buttons_row.setContentsMargins(10, 0, 10, 4)
+        buttons_row.setSpacing(8)
+        buttons_row.addStretch()
+        buttons_row.addWidget(self.close_button)
+        buttons_row.addWidget(self.action_button)
+        layout.addLayout(buttons_row)
         self.set_close_enabled(False)
 
     def update_shot_info(self, shot_name, task_name=None):
         shot_html = "<div style='text-align: left;'>"
-        shot_html += f"<span style='color: #CCCCCC;'>Shot:</span> <span style='color: #6AB5CA;'>{shot_name}</span>"
+        shot_html += f"<span style='color: {Color.TEXT};'>Shot:</span> <span style='color: {Color.INFO};'>{shot_name}</span>"
         if task_name:
-            shot_html += f"<br><span style='color: #CCCCCC;'>Task:</span> <span style='color: #B56AB5;'>{task_name}</span>"
+            shot_html += f"<br><span style='color: {Color.TEXT};'>Task:</span> <span style='color: {Color.ENTITY};'>{task_name}</span>"
         shot_html += "</div>"
         self.shot_label.setText(shot_html)
         self._adjust_window_size()
 
     def show_validation_message(self, shot_name):
         message = (
-            f"Verificando en Flow que el shot <span style='color:#6AB5CA;'>{shot_name}</span> exista "
+            f"Verificando en Flow que el shot <span style='color:{Color.INFO};'>{shot_name}</span> exista "
             "y recuperando sus tasks disponibles..."
         )
         self.validation_label.setText(message)
@@ -337,13 +354,13 @@ class FlowStatusWindow(QDialog):
 
     def show_shot_not_found(self, shot_name):
         message = (
-            f"<span style='color:#C05050;'>El shot '{shot_name}' no existe en Flow Production Tracking.</span>"
+            f"<span style='color:{Color.ERROR_TEXT};'>El shot '{shot_name}' no existe en Flow Production Tracking.</span>"
         )
         self.validation_label.setText(message)
         self.show_error("No hay tareas para procesar.")
 
     def show_processing_message(self, custom_text=None):
-        processing_html = custom_text or "<span style='color: #CCCCCC;'>Conectando a Flow Production Tracking...</span>"
+        processing_html = custom_text or f"<span style='color: {Color.TEXT};'>Conectando a Flow Production Tracking...</span>"
         self.result_label.setText(processing_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.clear_validation_message()
@@ -367,7 +384,7 @@ class FlowStatusWindow(QDialog):
 
         if tasks:
             instruction = QLabel(
-                "<span style='color:#CCCCCC;'>Seleccioná las tasks a las que querés aplicar el cambio:</span>"
+                f"<span style='color:{Color.TEXT};'>Seleccioná las tasks a las que querés aplicar el cambio:</span>"
             )
             instruction.setWordWrap(True)
             self.task_widget_layout.addWidget(instruction)
@@ -418,12 +435,12 @@ class FlowStatusWindow(QDialog):
 
     def _format_assignees(self, assignees):
         if not assignees:
-            return "<span style='color:#888888;'>Sin asignados</span>"
+            return f"<span style='color:{Color.TEXT};'>Sin asignados</span>"
         chips = []
         for user in assignees:
             user_name = user.get("name", "Sin nombre")
             chips.append(
-                f"<span style='color:#CCCCCC; background-color:#2E2E2E; padding:2px 6px; border-radius:4px;'>{user_name}</span>"
+                f"<span style='color:{Color.TEXT}; background-color:{Color.SURFACE_RAISED}; padding:2px 6px; border-radius:4px;'>{user_name}</span>"
             )
         return " ".join(chips)
 
@@ -457,7 +474,7 @@ class FlowStatusWindow(QDialog):
         self.close_button.setEnabled(enabled)
 
     def show_success(self, message):
-        self.result_label.setText(f"<span style='color: #00ff00;'>{message}</span>")
+        self.result_label.setText(f"<span style='color: {Color.OK_TEXT};'>{message}</span>")
         self.result_label.setStyleSheet("padding: 10px;")
         self.set_close_enabled(True)
         self.clear_status_message()
@@ -465,7 +482,7 @@ class FlowStatusWindow(QDialog):
         self._adjust_window_size()
 
     def show_error(self, message):
-        self.result_label.setText(f"<span style='color: #C05050;'>{message}</span>")
+        self.result_label.setText(f"<span style='color: {Color.ERROR_TEXT};'>{message}</span>")
         self.result_label.setStyleSheet("padding: 10px;")
         self.set_close_enabled(True)
         self._adjust_window_size()
@@ -974,7 +991,7 @@ def assign_assignee_to_task(base_name, user_name, file_path=None):
                 return
             _status_window.clear_validation_message()
             _status_window.show_processing_message(
-                "<span style='color:#CCCCCC;'>Asignando tasks seleccionadas en Flow...</span>"
+                f"<span style='color:{Color.TEXT};'>Asignando tasks seleccionadas en Flow...</span>"
             )
             _status_window.set_close_enabled(False)
             worker = AssignSelectedTasksWorker(
