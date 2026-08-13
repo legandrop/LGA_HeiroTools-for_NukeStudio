@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_UI_Style_HieroTools v1.01 | Lega
+  LGA_UI_Style_HieroTools v1.02 | Lega
 
   Punto UNICO de ajuste del look de las ventanas de HieroTools. Todo lo
   visual sale de aca: colores, fondos, bordes, esquinas, espaciados y
@@ -28,6 +28,9 @@ ____________________________________________________________________
       button.setStyleSheet(Style.BTN_PRIMARY)
       label.setText("Saving to:<br>%s" % colorize_path(destination))
 
+  v1.02: Style.FORM pinta tambien los QSpinBox. Las flechitas NO se
+         tocan: estilarlas sin redefinir ::up-arrow deja el boton
+         gris y sin el triangulo, o sea sin senal de que se clickea.
   v1.01: Color.ENTITY, para destacar el nombre de una task o de un
          nodo sin colgarse del color de la paleta de paths.
   v1.00: Copia del modulo de estilo de los ToolPacks. Es codigo
@@ -511,6 +514,16 @@ QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
     border-color: %(accent_hover)s;
+}
+/* El spinbox se deja NATIVO a proposito. En cuanto el QSS le define caja o
+   flechitas, Qt deja de dibujar los triangulos y encima la sub-control queda
+   pisando el numero. Lo unico que hace falta es sacarle de encima la regla de
+   QLineEdit de arriba, que le cae al campo interno y le suma un segundo borde
+   y un segundo padding adentro de su propia caja. */
+QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {
+    border: none;
+    padding: 0px;
+    background: transparent;
 }
 %(scrollbar)s
 """ % {
