@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.94 | Lega
+  LGA_NKS_Flow_Shot_info v1.95 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.95: Task history colapsable (chips + grafico), Assigned then en notas,
+         colores atenuados como PipeSync y autores de playlist en amarillo fijo.
+         El titulo usa los assignees activos del historial (ya no un solo
+         nombre que a veces no era el vigente).
   v1.94: Los colores de autor salen de la DB de PipeSync (tabla flow_users). Se
          eliminan el JSON local, el mapa de colores hardcodeado y el caso
          especial de Nombre Apellido.
@@ -64,6 +68,27 @@ from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QShortcut, QApplication
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import load_flow_users
+from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
+    active_at as history_active_at,
+    currently_active as history_currently_active,
+    load_for_task as load_assignment_history,
+)
+from LGA_NKS_Shared.LGA_NKS_TaskHistoryBand import (
+    assignee_title_text,
+    build_assignment_history_band,
+)
+
+try:
+    from LGA_NKS_Shared.LGA_tooltip_helper import apply_tooltip_stylesheet, set_rich_tooltip
+except Exception:
+    try:
+        from LGA_tooltip_helper import apply_tooltip_stylesheet, set_rich_tooltip
+    except Exception:
+        def apply_tooltip_stylesheet(target=None):
+            return None
+
+        def set_rich_tooltip(widget, html):
+            widget.setToolTip(html)
 
 # Usar directamente las clases del adapter (ya manejan compatibilidad PySide2/6)
 QCoreApplication = QApplication  # Para compatibilidad
@@ -331,6 +356,78 @@ QPushButton#flowVersionCommentThumbnail {
 QPushButton#flowVersionCommentThumbnail:hover {
     border-color: #606060; background-color: rgba(255, 255, 255, 0.05);
 }
+QWidget#flowTaskHistory {
+    background-color: #1e1e1e;
+    border: 1px solid rgba(48, 48, 48, 0.6);
+    border-radius: 6px;
+}
+QLabel#flowTaskHistoryTitle {
+    background-color: transparent; font-size: 13px; border: none; padding: 0px;
+}
+QLabel#flowTaskHistoryChevron {
+    background-color: transparent; border: none; padding: 0px;
+}
+QWidget#flowTaskHistoryHeader,
+QWidget#flowTaskHistoryToggle {
+    background-color: transparent;
+}
+QScrollArea#flowTaskHistoryChipsScroll,
+QScrollArea#flowTaskHistoryChipsScroll > QWidget#qt_scrollarea_viewport {
+    background: transparent; border: none;
+}
+QWidget#flowTaskHistoryChips { background-color: transparent; }
+QWidget#flowTaskHistoryChip { background-color: transparent; }
+QLabel#flowTaskHistoryChipName,
+QLabel#flowTaskHistoryChipDot {
+    background-color: transparent; border: none;
+}
+QWidget#flowTaskHistoryChipsBarRow { background-color: transparent; }
+QScrollBar#flowTaskHistoryChipsBar {
+    background-color: #1e1e1e; height: 10px; margin: 0px; border: none;
+}
+QScrollBar#flowTaskHistoryChipsBar::handle {
+    background-color: #3a3a3a; border-radius: 3px; min-width: 20px; margin: 2px;
+}
+QScrollBar#flowTaskHistoryChipsBar::handle:hover { background-color: #4a4a4a; }
+QScrollBar#flowTaskHistoryChipsBar::add-line,
+QScrollBar#flowTaskHistoryChipsBar::sub-line {
+    width: 0px; height: 0px; background: none; border: none;
+}
+QScrollBar#flowTaskHistoryChipsBar::add-page,
+QScrollBar#flowTaskHistoryChipsBar::sub-page {
+    background: none; border: none;
+}
+QScrollArea#flowTaskHistoryScroll,
+QScrollArea#flowTaskHistoryScroll > QWidget#qt_scrollarea_viewport {
+    background: transparent; border: none;
+}
+QScrollArea#flowTaskHistoryScroll QScrollBar:horizontal {
+    background-color: #1e1e1e; height: 10px; margin: 0px; border: none;
+}
+QScrollArea#flowTaskHistoryScroll QScrollBar::handle:horizontal {
+    background-color: #3a3a3a; border-radius: 3px; min-width: 20px; margin: 2px;
+}
+QScrollArea#flowTaskHistoryScroll QScrollBar::handle:horizontal:hover {
+    background-color: #4a4a4a;
+}
+QScrollArea#flowTaskHistoryScroll QScrollBar::add-line,
+QScrollArea#flowTaskHistoryScroll QScrollBar::sub-line {
+    width: 0px; height: 0px; background: none; border: none;
+}
+QWidget#flowTaskHistoryNodes { background-color: transparent; }
+QWidget#flowTaskHistoryNode { background-color: transparent; }
+QLabel#flowTaskHistoryName {
+    background-color: transparent; font-size: 12px; font-weight: 600; border: none;
+}
+QLabel#flowTaskHistoryRange {
+    background-color: transparent; color: #8a8a8a; font-size: 11px; border: none;
+}
+QLabel#flowTaskHistoryDays {
+    background-color: transparent; color: #6a6a6a; font-size: 11px; border: none;
+}
+QLabel#flowAssignedThen {
+    background-color: transparent; border: none; padding: 0px; margin: 0px;
+}
 """ % COLORS
 
 
@@ -401,9 +498,13 @@ def _html_escape(text):
 
 
 # --------------------------------------------------------------------------- #
-# Colores de autores en notas (port de ShotCard_UI.cpp / getAssigneeReadableTextColor)
+# Colores de autores en notas (port de ShotCard_UI.cpp)
 # --------------------------------------------------------------------------- #
 _USER_COLOR_UNKNOWN = "#d6c94a"
+_PLAYLIST_AUTHOR_COLOR = "#d6c94a"  # fijo; NO pasa por el mix atenuador
+_ASSIGNEE_NEUTRAL_BG = QColor("#3C3C3C")
+# Mismo mix que kAssigneeHistoryColorMix de PipeSync (chips/nodos + autores).
+_ASSIGNEE_HISTORY_COLOR_MIX = 0.55
 
 
 def _load_user_colors():
@@ -436,23 +537,17 @@ def _load_user_colors():
 _USER_COLORS = _load_user_colors()
 
 
-def _get_user_text_color(user_name):
-    """Devuelve color CSS legible para un autor (port de getAssigneeReadableTextColor).
-
-    Reglas:
-    - Buscar el color configurado en Flow.
-    - Si no se encuentra: amarillo #d6c94a.
-    - El color base se aclara iterativamente hasta brillo percibido >= 155.
-    """
+def _get_user_readable_color(user_name):
+    """Color legible para fondo oscuro (sin atenuar). Port de getAssigneeReadableTextColor."""
     if not user_name:
-        return _USER_COLOR_UNKNOWN
+        return QColor(_USER_COLOR_UNKNOWN)
     normalized = user_name.strip().casefold()
     base_hex = _USER_COLORS.get(normalized)
     if not base_hex:
-        return _USER_COLOR_UNKNOWN
+        return QColor(_USER_COLOR_UNKNOWN)
     color = QColor(base_hex)
     if not color.isValid():
-        return _USER_COLOR_UNKNOWN
+        return QColor(_USER_COLOR_UNKNOWN)
     for _ in range(50):
         brightness = (color.red() * 299 + color.green() * 587 + color.blue() * 114) // 1000
         if brightness >= 155:
@@ -460,7 +555,36 @@ def _get_user_text_color(user_name):
         color = color.lighter(118)
         if color.red() >= 245 and color.green() >= 245 and color.blue() >= 245:
             break
-    return color.name()
+    return color
+
+
+def _blend_assignee_color(user_color, mix=_ASSIGNEE_HISTORY_COLOR_MIX):
+    """Mezcla hacia el neutro #3C3C3C. Port de blendAssigneeColor()."""
+    clamped = max(0.0, min(1.0, float(mix)))
+    if not user_color or not user_color.isValid() or clamped <= 0.0:
+        return QColor(_ASSIGNEE_NEUTRAL_BG)
+    if clamped >= 1.0:
+        return QColor(user_color)
+
+    def lerp(base, target):
+        return int(round(base + (target - base) * clamped))
+
+    n = _ASSIGNEE_NEUTRAL_BG
+    return QColor(
+        lerp(n.red(), user_color.red()),
+        lerp(n.green(), user_color.green()),
+        lerp(n.blue(), user_color.blue()),
+    )
+
+
+def _get_history_accent_color(user_name):
+    """Acento atenuado para Task history y nombres de autor en notas."""
+    return _blend_assignee_color(_get_user_readable_color(user_name))
+
+
+def _get_user_text_color(user_name):
+    """Color CSS atenuado para autores (port de userColorSpan / history accent)."""
+    return _get_history_accent_color(user_name).name()
 
 
 def _user_name_span(user_name):
@@ -469,6 +593,14 @@ def _user_name_span(user_name):
     if not safe:
         return ""
     return f"<span style='color: {_get_user_text_color(user_name)};'>{safe}</span>"
+
+
+def _playlist_author_span(user_name):
+    """Autor de nota from_playlist: amarillo fijo, sin mix."""
+    safe = _html_escape((user_name or "").strip())
+    if not safe:
+        return ""
+    return f"<span style='color: {_PLAYLIST_AUTHOR_COLOR};'>{safe}</span>"
 
 
 def _playlist_meta_span(playlist_name):
@@ -480,6 +612,28 @@ def _playlist_meta_span(playlist_name):
     if safe_name:
         return f"{playlist_word}: {safe_name}"
     return playlist_word
+
+
+def _assigned_then_html(spans, moment):
+    """HTML 'Assigned then:' si los de ese momento != los de hoy. Port C++."""
+    if not spans or moment is None:
+        return ""
+    then = history_active_at(spans, moment)
+    if not then:
+        return ""
+    now = sorted(history_currently_active(spans))
+    then_sorted = sorted(then)
+    if now == then_sorted:
+        return ""
+    k_max = 3
+    shown = [_user_name_span(n) for n in then[:k_max]]
+    names = ", ".join(shown)
+    if len(then) > k_max:
+        names += f"<span style='color: #8a8a8a;'> +{len(then) - k_max}</span>"
+    return (
+        "<span style='color: #8a8a8a; font-size: 12px;'>Assigned then:&nbsp;</span>"
+        f"<span style='font-size: 12px;'>{names}</span>"
+    )
 
 
 def _parse_pipesync_datetime(value):
@@ -868,6 +1022,8 @@ class ShotGridManager:
                 "task_type": task["task_type"],
                 "task_description": task["task_description"],
                 "task_status": task["task_status"],
+                # tasks.task_id = id de Flow (clave de task_assignment_history en stats).
+                "task_sg_id": int(task["task_id"] or 0) if task["task_id"] is not None else 0,
                 "task_assigned_to": None,
                 "versions": [],
             }
@@ -1122,6 +1278,7 @@ class HieroOperations:
                 )
                 assignee = task["task_assigned_to"] if task else "No assignee"
                 versions = task["versions"] if task else []
+                task_sg_id = int(task.get("task_sg_id") or 0) if task else 0
 
                 last_versions = sorted(
                     versions, key=lambda v: v["version_date"], reverse=True
@@ -1152,6 +1309,7 @@ class HieroOperations:
                     "task_type": task_type_display,
                     "description": task_description,
                     "assignee": assignee,
+                    "task_sg_id": task_sg_id,
                     "versions": version_info,
                 }
                 results.append(shot_info)
@@ -1166,12 +1324,14 @@ class GUIWindow(QWidget):
         super(GUIWindow, self).__init__(parent)
         self.hiero_ops = hiero_ops
         self._wrapping_labels = []
+        self._assignment_spans = []
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Info")
         self.setObjectName("flowNotesContentWidget")
         self.setStyleSheet(SHOT_INFO_QSS)
+        apply_tooltip_stylesheet(self)
         self.setMinimumSize(900, 700)
 
         main_layout = QVBoxLayout(self)
@@ -1414,6 +1574,23 @@ class GUIWindow(QWidget):
 
         return section
 
+    def _make_assigned_then_label(self, moment):
+        html = _assigned_then_html(self._assignment_spans, moment)
+        if not html:
+            return None
+        label = QLabel()
+        label.setObjectName("flowAssignedThen")
+        label.setTextFormat(Qt.RichText)
+        label.setWordWrap(True)
+        label.setText(html)
+        set_rich_tooltip(
+            label,
+            "Quien tenia asignada la task cuando se escribio esto. "
+            "Solo aparece cuando no son los mismos que ahora.",
+        )
+        self._configure_wrapping_label(label, extra_width=30)
+        return label
+
     def create_comment_widget(self, comment):
         """Crea el widget para un comentario con header, contenido y thumbnails."""
         w = QWidget()
@@ -1431,7 +1608,10 @@ class GUIWindow(QWidget):
         from_playlist = comment.get("from_playlist", False)
         playlist_name = (comment.get("playlist_name") or "").strip()
 
-        meta_parts = _user_name_span(author) + f", {_html_escape(date_str)}"
+        author_span = (
+            _playlist_author_span(author) if from_playlist else _user_name_span(author)
+        )
+        meta_parts = author_span + f", {_html_escape(date_str)}"
         if from_playlist:
             meta_parts += f", {_playlist_meta_span(playlist_name)}"
 
@@ -1446,6 +1626,12 @@ class GUIWindow(QWidget):
         self._configure_wrapping_label(header_label, extra_width=30)
         header_label.setContentsMargins(0, 8, 0, 0)
         wl.addWidget(header_label)
+
+        assigned_then = self._make_assigned_then_label(n_dt)
+        if assigned_then:
+            assigned_then.setContentsMargins(0, 2, 0, 0)
+            wl.addWidget(assigned_then)
+
         wl.addSpacing(6)
 
         text = (comment.get("text") or "").strip()
@@ -1466,11 +1652,11 @@ class GUIWindow(QWidget):
             wl.addWidget(self.create_thumbnails_widget(attachments, frame_texts))
 
         for reply in comment.get("replies", []) or []:
-            wl.addWidget(self.create_reply_widget(reply))
+            wl.addWidget(self.create_reply_widget(reply, from_playlist=from_playlist))
 
         return w
 
-    def create_reply_widget(self, reply):
+    def create_reply_widget(self, reply, from_playlist=False):
         reply_widget = QWidget()
         reply_widget.setObjectName("flowVersionCommentReply")
         reply_layout = QVBoxLayout(reply_widget)
@@ -1481,9 +1667,12 @@ class GUIWindow(QWidget):
         r_dt = _parse_pipesync_datetime(reply.get("date"))
         date_str = _format_friendly_date(r_dt, include_time=True)
 
+        author_span = (
+            _playlist_author_span(author) if from_playlist else _user_name_span(author)
+        )
         header_html = (
             f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 14px;'>"
-            f"{_user_name_span(author)}</span>"
+            f"{author_span}</span>"
             f"<span style='color: {COLORS['txt_desc_meta']}; font-size: 13px;'>&nbsp;{_html_escape(date_str)}</span>"
         )
         header_label = QLabel(header_html)
@@ -1567,6 +1756,8 @@ class GUIWindow(QWidget):
             child = self.scroll_layout.itemAt(i).widget()
             if child:
                 child.setParent(None)
+        self._wrapping_labels = []
+        self._assignment_spans = []
 
         if not results:
             no_results_label = QLabel("No se encontraron resultados")
@@ -1576,13 +1767,30 @@ class GUIWindow(QWidget):
             self.show()
             return
 
-        # Titulo: datos del primer resultado
+        # Titulo + historial: datos del primer resultado (una task por invocacion).
         first = results[0]
+        task_sg_id = int(first.get("task_sg_id") or 0)
+        if task_sg_id > 0:
+            self._assignment_spans = load_assignment_history(task_sg_id)
+            debug_print(
+                f"Historial de assignees: {len(self._assignment_spans)} tramos "
+                f"para task_sg_id={task_sg_id}"
+            )
+
+        assignee_for_title = assignee_title_text(
+            self._assignment_spans, first.get("assignee", "")
+        )
         self._set_title(
             first.get("shot_code", ""),
             first.get("task_type", ""),
-            first.get("assignee", ""),
+            assignee_for_title,
         )
+
+        history_band = build_assignment_history_band(
+            self._assignment_spans, _get_history_accent_color, parent=self.scroll_content
+        )
+        if history_band:
+            self.scroll_layout.addWidget(history_band)
 
         for result in results:
             debug_print(f"Processing result: {result}")

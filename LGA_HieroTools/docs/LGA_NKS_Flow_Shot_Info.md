@@ -10,11 +10,15 @@ Archivo: [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Panel
 2. Se obtiene el `project_name` del segmento `VFX-NOMBRE` de la ruta del clip (`extract_project_name_from_path`), con fallback al primer bloque del nombre del clip; el `shot_code` se parsea del nombre del clip. Ver [Docu_ProjectName_Extraction.md](Docu_ProjectName_Extraction.md).
 3. Se consulta `pipesync.db` (`ShotGridManager`) y se arma una estructura `shot -> tasks -> versions -> comments -> replies`.
 4. Si el timeline activo es un proyecto vendor (prefijo distinto al del clip) y el `Playlist Panel` esta registrado o el usuario es Master, se delega a `LGA_NKS_FlowPlaylist_Shot_info`.
-5. La GUI (`GUIWindow`) lista cabecera del shot, descripcion, versiones, comentarios con thumbnails clickeables y replies anidados.
+5. La GUI (`GUIWindow`) lista cabecera del shot, franja **Task history**, descripcion, versiones, comentarios con thumbnails clickeables y replies anidados.
 
 ## Origen de los datos
 
-Tablas usadas: `projects`, `shots`, `tasks`, `task_assignments`, `versions`, `version_notes`, `version_note_replies`. Detalle en [Documentacion_DB PipeSync.md](../LGA_NKS_Flow_Panel_py/Documentacion_DB%20PipeSync.md).
+Tablas usadas en `pipesync.db`: `projects`, `shots`, `tasks`, `task_assignments`, `versions`, `version_notes`, `version_note_replies`, `task_timelogs`.
+
+Historial de artistas (Task history / Assigned then): `task_assignment_history` (+ assignees actuales en `task_assignments`/`users`) de `pipesync_stats.db`, via `LGA_NKS_Shared/LGA_NKS_TaskAssignmentHistory.py`. La clave es `tasks.task_id` de la main DB (id de Flow), no el `id` local.
+
+Detalle de la main DB en [Documentacion_DB PipeSync.md](../LGA_NKS_Flow_Panel_py/Documentacion_DB%20PipeSync.md).
 
 Mapeo:
 
@@ -22,7 +26,8 @@ Mapeo:
 | --- | --- |
 | `shot_code` | `shots.shot_name` |
 | `description` | `tasks.task_description` (de la task resuelta) |
-| `assignee` | `task_assignments.assigned_to` |
+| `assignee` (titulo) | Assignees **activos** del historial (`currently_active`); fallback a `task_assignments.assigned_to` |
+| `task_sg_id` | `tasks.task_id` (id de Flow) |
 | Version `version_number` | `versions.version_number` (formateado `vNNN`) |
 | Version `created_by` | `versions.created_by` |
 | Version `version_description` | `versions.description` |
@@ -38,6 +43,19 @@ Mapeo:
 ## Hilos de comentarios
 
 Si existe `version_note_replies`, cada reply se carga por `version_note_id` en orden cronologico y se muestra debajo de su comentario raiz. La linea vertical izquierda se aplica exclusivamente al contenedor `flowVersionCommentReply`; los labels de autor y contenido no reciben bordes propios.
+
+## Task history (artistas de la task)
+
+Port de la franja de PipeSync (`FlowNotesPopover::buildAssignmentHistoryBand`):
+
+- Modulo de datos: `LGA_NKS_Shared/LGA_NKS_TaskAssignmentHistory.py` (`load_for_task`, `active_at`, `currently_active`, `persons_from_spans`).
+- UI: `LGA_NKS_Shared/LGA_NKS_TaskHistoryBand.py` (`build_assignment_history_band`).
+- Arranca **colapsada** con chips (borde del color, circulito lleno = activo / hueco = past). Click en chevron + "Task history" expande el grafico de nodos.
+- Scrollbar de chips **externo**, debajo del header e indentado bajo el area de chips (no debajo del titulo).
+- Colores: mismo mix atenuado que PipeSync (`readable` + blend 0.55 hacia `#3C3C3C`). Autores de notas `from_playlist` van en `#d6c94a` fijo, sin mix.
+- Bajo el header de cada comentario, si los assignees de ese momento no son los de hoy: linea `Assigned then:`.
+
+Funciones clave en `LGA_NKS_Flow_Shot_info.py`: `_get_history_accent_color`, `_playlist_author_span`, `_assigned_then_html`, `GUIWindow._make_assigned_then_label`, `GUIWindow.display_results`.
 
 ## Filtro de notas auto-generadas por upload de version
 
