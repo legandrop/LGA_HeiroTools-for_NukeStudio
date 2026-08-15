@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.95 | Lega
+  LGA_NKS_Flow_Shot_info v1.96 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.96: El header interno (shot | task | artistas) se elimina. El titulo de la
+         ventana pasa a ser "shot | task"; los artistas quedan solo en Task history.
   v1.95: Task history colapsable (chips + grafico), Assigned then en notas,
          colores atenuados como PipeSync y autores de playlist en amarillo fijo.
          El titulo usa los assignees activos del historial (ya no un solo
@@ -73,10 +75,7 @@ from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
     currently_active as history_currently_active,
     load_for_task as load_assignment_history,
 )
-from LGA_NKS_Shared.LGA_NKS_TaskHistoryBand import (
-    assignee_title_text,
-    build_assignment_history_band,
-)
+from LGA_NKS_Shared.LGA_NKS_TaskHistoryBand import build_assignment_history_band
 
 try:
     from LGA_NKS_Shared.LGA_tooltip_helper import apply_tooltip_stylesheet, set_rich_tooltip
@@ -1338,18 +1337,7 @@ class GUIWindow(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Header (titulo del shot/task/assignee)
-        self.header_widget = QWidget()
-        self.header_widget.setObjectName("flowNotesHeaderWidget")
-        header_layout = QHBoxLayout(self.header_widget)
-        header_layout.setContentsMargins(16, 12, 12, 12)
-        self.title_label = QLabel("")
-        self.title_label.setObjectName("flowNotesTitle")
-        self._configure_wrapping_label(self.title_label)
-        header_layout.addWidget(self.title_label, 1)
-        main_layout.addWidget(self.header_widget)
-
-        # Scroll area
+        # Scroll area (sin header interno: shot|task van en setWindowTitle)
         self.scroll_area = QScrollArea()
         self.scroll_area.setObjectName("flowNotesScrollArea")
         self.scroll_area.setWidgetResizable(True)
@@ -1382,9 +1370,10 @@ class GUIWindow(QWidget):
             self.hiero_ops.sg_manager = None
         super(GUIWindow, self).closeEvent(event)
 
-    def _set_title(self, shot_code, task_type, assignee):
-        parts = [p for p in (shot_code, task_type, assignee) if p]
-        self.title_label.setText("  |  ".join(parts))
+    def _set_window_title(self, shot_code, task_type):
+        """Titulo de la barra de ventana: shot | task (sin artistas)."""
+        parts = [p for p in ((shot_code or "").strip(), (task_type or "").strip()) if p]
+        self.setWindowTitle("  |  ".join(parts) if parts else "Info")
 
     def _configure_wrapping_label(self, label, extra_width=0):
         label.setWordWrap(True)
@@ -1777,15 +1766,6 @@ class GUIWindow(QWidget):
                 f"para task_sg_id={task_sg_id}"
             )
 
-        assignee_for_title = assignee_title_text(
-            self._assignment_spans, first.get("assignee", "")
-        )
-        self._set_title(
-            first.get("shot_code", ""),
-            first.get("task_type", ""),
-            assignee_for_title,
-        )
-
         history_band = build_assignment_history_band(
             self._assignment_spans, _get_history_accent_color, parent=self.scroll_content
         )
@@ -1800,7 +1780,12 @@ class GUIWindow(QWidget):
             for version in result.get("versions", []):
                 self.scroll_layout.addWidget(self.create_version_widget(version))
 
+        # setWindowFlags puede recrear la ventana: el titulo va despues.
         self.setWindowFlags(self.windowFlags() | Qt.Window)
+        self._set_window_title(
+            first.get("shot_code", ""),
+            first.get("task_type", ""),
+        )
         self.show()
         self._update_wrapping_widths()
         QtCore.QTimer.singleShot(0, self._update_wrapping_widths)

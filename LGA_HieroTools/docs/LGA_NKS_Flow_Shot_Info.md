@@ -26,7 +26,8 @@ Mapeo:
 | --- | --- |
 | `shot_code` | `shots.shot_name` |
 | `description` | `tasks.task_description` (de la task resuelta) |
-| `assignee` (titulo) | Assignees **activos** del historial (`currently_active`); fallback a `task_assignments.assigned_to` |
+| `assignee` (titulo) | Ya no va en el titulo. Los activos/pasados se ven en Task history |
+| Titulo de ventana | `shot_code | task_type` via `setWindowTitle` |
 | `task_sg_id` | `tasks.task_id` (id de Flow) |
 | Version `version_number` | `versions.version_number` (formateado `vNNN`) |
 | Version `created_by` | `versions.created_by` |
