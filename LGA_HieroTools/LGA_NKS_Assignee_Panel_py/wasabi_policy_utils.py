@@ -1,8 +1,13 @@
 """
 ______________________________________________________________________
 
-  Wasabi Policy Utils v0.95 | Lega
+  Wasabi Policy Utils v0.96 | Lega
   Funciones auxiliares para gestión de políticas IAM de Wasabi
+
+  v0.96: al sacar un shot de una policy, prefijos y recursos se comparan por
+         segmento exacto y no con `in`. Con el naming que lleva vendor code al
+         final, el shot base es un prefijo literal del shot con vendor, asi que
+         sacar uno borraba tambien el otro.
 ______________________________________________________________________
 
 """
@@ -332,6 +337,32 @@ def read_user_policy_shots(username):
         return None
 
 
+def _prefijo_es_del_shot(prefix, shot_name):
+    """
+    True si un `s3:prefix` corresponde EXACTAMENTE a este shot.
+
+    Se compara segmento por segmento y no con `in`. Con el naming que lleva vendor code
+    al final (PROYECTO_SEQ_SHOT_VENDOR), el shot base es un PREFIJO literal del shot con
+    vendor: sacar `PROYA_010_020` con una comparacion por substring borraba tambien
+    `PROYA_010_020_VND`, o sea le quitaba al artista un shot que nadie pidio sacar.
+    """
+    if not prefix:
+        return False
+    # Los prefijos son `<seq>/`, `<seq>/<shot>/*` o `<seq>/<shot>`; el comodin y las
+    # barras sobrantes no son parte del nombre.
+    partes = [p for p in prefix.replace("*", "").split("/") if p]
+    return shot_name in partes
+
+
+def _recurso_es_del_shot(resource, shot_name):
+    """Idem `_prefijo_es_del_shot` para un ARN de recurso (`arn:aws:s3:::bucket/seq/shot`)."""
+    if not resource:
+        return False
+    ruta = resource.split(":::", 1)[-1]
+    partes = [p for p in ruta.replace("*", "").split("/") if p]
+    return shot_name in partes
+
+
 def remove_shot_from_policy(username, shot_name):
     """
     Elimina un shot específico de la policy del usuario.
@@ -394,7 +425,7 @@ def remove_shot_from_policy(username, shot_name):
                     )
                     new_prefixes = []
                     for prefix in prefixes:
-                        if shot_name not in prefix:
+                        if not _prefijo_es_del_shot(prefix, shot_name):
                             new_prefixes.append(prefix)
                         else:
                             modified = True
@@ -412,7 +443,7 @@ def remove_shot_from_policy(username, shot_name):
                     if isinstance(resources, list):
                         new_resources = []
                         for resource in resources:
-                            if shot_name not in resource:
+                            if not _recurso_es_del_shot(resource, shot_name):
                                 new_resources.append(resource)
                             else:
                                 modified = True

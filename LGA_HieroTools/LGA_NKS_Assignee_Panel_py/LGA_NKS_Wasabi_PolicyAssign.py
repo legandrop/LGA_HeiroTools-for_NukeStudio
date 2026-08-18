@@ -1,7 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v0.99 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v1.00 | Lega
+
+  v1.00
+  - La carpeta del shot se detecta con is_shot_folder_name() de NamingUtils, que
+    valida el vendor code contra la DB de PipeSync, y la secuencia pasa a ser su
+    directorio padre. Antes se tomaban los segmentos 0 y 1 del prefijo, o sea por
+    profundidad: cualquier clip que no colgara de <secuencia>/<shot> escribia la
+    policy sobre un prefijo inexistente, sin error y sin acceso.
 
   v0.99
   - El nombre y el color del usuario se resuelven por wasabi_user contra la
@@ -56,6 +63,19 @@ import boto3
 from boto3 import Session
 from SecureConfig_Reader import get_s3_credentials
 from LGA_NKS_BucketResolver import resolve_bucket_from_local_path
+
+# La carpeta del shot se detecta por NOMBRE y no por profundidad de ruta. El helper
+# central valida ademas el vendor code contra la DB de PipeSync, que es lo que el
+# posicional no podia saber (naming PROYECTO_SEQ_SHOT_VENDOR). Si no se puede importar
+# se cae al comportamiento viejo, que sirve mientras el shot este a profundidad 2.
+try:
+    from LGA_NKS_Flow_NamingUtils import (
+        is_shot_folder_name,
+        extract_project_name_from_path,
+    )
+except ImportError:
+    is_shot_folder_name = None
+    extract_project_name_from_path = None
 
 # Configuracion
 DEBUG = False
@@ -275,8 +295,57 @@ def parse_path_for_policy(file_path):
             }
 
         bucket_name = resolution.get("bucket", "")
-        folder_path = prefix_parts[0]
-        subfolder_path = prefix_parts[1]
+
+        # La policy necesita `<secuencia>/<shot>`, y hasta v1.03 eso se tomaba como
+        # `prefix_parts[0]` y `[1]`, o sea POSICIONAL: salia bien solo si el clip colgaba
+        # exactamente de <proyecto>/<secuencia>/<shot>/... Con un clip suelto bajo la
+        # secuencia, un .mov de referencia o una carpeta de supervision, el segundo
+        # segmento no es el shot y la policy quedaba escrita sobre un prefijo que no
+        # existe -sin ningun error: IAM acepta cualquier string-. El artista quedaba sin
+        # acceso y la ventana decia que se habia asignado bien.
+        #
+        # Ahora el shot se busca POR NOMBRE de atras para adelante, y la secuencia es su
+        # directorio padre. Es la misma regla que usa PipeSync, donde la secuencia nunca
+        # se infiere del nombre del shot.
+        shot_index = -1
+        if is_shot_folder_name:
+            project_name = (
+                extract_project_name_from_path(file_path)
+                if extract_project_name_from_path
+                else None
+            )
+            for i in range(len(prefix_parts) - 1, -1, -1):
+                if is_shot_folder_name(prefix_parts[i], project_name):
+                    shot_index = i
+                    break
+
+        if shot_index >= 1:
+            folder_path = prefix_parts[shot_index - 1]
+            subfolder_path = prefix_parts[shot_index]
+        elif len(prefix_parts) == 2 and os.path.splitext(prefix_parts[1])[1]:
+            # El segundo segmento es un ARCHIVO, no una carpeta de shot: pasa con un clip
+            # suelto colgado de la secuencia. El posicional escribia el prefijo
+            # `<secuencia>/<archivo.mov>`, que no existe en el bucket: IAM lo acepta sin
+            # chistar, la ventana decia "asignada exitosamente" y el artista se quedaba
+            # sin acceso. Es mejor no asignar y decir por que.
+            message = (
+                "El clip no cuelga de una carpeta de shot, asi que no se puede saber "
+                "que prefijo habilitar"
+            )
+            debug_print(f"{message}: {file_path}")
+            return {"ok": False, "value": None, "error": f"{message}: {file_path}"}
+        else:
+            # Sin helper, o con un nombre de shot que no matchea ningun patron conocido
+            # (por ejemplo los que llevan bloques de descripcion, limite documentado de
+            # is_shot_folder_name). Se conserva el comportamiento historico, que es
+            # correcto en la estructura estandar.
+            folder_path = prefix_parts[0]
+            subfolder_path = prefix_parts[1]
+            if is_shot_folder_name:
+                debug_print(
+                    "No se reconocio ninguna carpeta de shot por nombre; se usa la "
+                    f"profundidad de ruta: {folder_path}/{subfolder_path}"
+                )
 
         debug_print(f"Bucket: {bucket_name}")
         debug_print(f"Carpeta: {folder_path}")
@@ -572,6 +641,21 @@ def create_and_manage_policy(username, paths_info):
     if not paths_info:
         debug_print("No hay información de rutas para procesar")
         raise Exception("No hay información de rutas para procesar")
+
+    # A quien tiene `skip_wasabi_policy` NO se le arma policy por shot: son los admins y
+    # los que acceden a proyectos completos, y en los dos casos el permiso por shot no le
+    # agrega nada. Peor: PipeSync deja de administrar esa policy en cuanto la persona
+    # queda marcada asi -su reconciliador filtra por ese flag- y tampoco la borra, o sea
+    # que lo que se escriba aca queda concedido para siempre, sin caducar y sin que
+    # ninguna UI lo muestre.
+    perfil = find_user_by_wasabi_user(username)
+    if perfil and perfil.get("skip_wasabi_policy"):
+        message = (
+            f"{perfil['name']} no lleva policies por shot: su acceso se maneja por "
+            "proyecto completo. No se asigno nada."
+        )
+        debug_print(message)
+        raise Exception(message)
 
     policy_name = f"{username}_policy"
 

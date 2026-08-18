@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Users_Config v2.01 | Lega
+  LGA_NKS_Flow_Users_Config v2.02 | Lega
 
   Usuarios de Flow (nombre, color y usuario de Wasabi) para HieroTools.
 
@@ -20,6 +20,11 @@ ____________________________________________________________________
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py
+
+  v2.02: se expone `skip_wasabi_policy`. Marca a quien NO se le administran
+         policies por shot -admins y accesos por proyecto completo-, y las
+         herramientas de Wasabi lo necesitan para no crearle una policy que
+         despues nadie recalcula ni borra.
 
   v2.01: el orden de los usuarios sale de `panel_order`: los que lo tienen van
          primero por ese numero, el resto alfabetico.
@@ -65,8 +70,8 @@ def load_flow_users(assignable_only=True):
     # ordenar por el numero crudo pondria a esos primeros. Es la MISMA regla que aplica
     # PipeSync en `FlowUsersStore::assignableNames()`.
     query = (
-        "SELECT user_name, color, vendor_color, wasabi_user, short_name "
-        "FROM flow_users"
+        "SELECT user_name, color, vendor_color, wasabi_user, short_name, "
+        "skip_wasabi_policy FROM flow_users"
     )
     if assignable_only:
         query += " WHERE assignable = 1 AND status = 'act'"
@@ -89,7 +94,14 @@ def load_flow_users(assignable_only=True):
             connection.close()
 
     users = []
-    for user_name, color, vendor_color, wasabi_user, short_name in rows:
+    for (
+        user_name,
+        color,
+        vendor_color,
+        wasabi_user,
+        short_name,
+        skip_wasabi_policy,
+    ) in rows:
         name = (user_name or "").strip()
         if not name:
             continue
@@ -102,6 +114,7 @@ def load_flow_users(assignable_only=True):
                 "color": resolved_color or DEFAULT_USER_COLOR,
                 "wasabi_user": (wasabi_user or "").strip(),
                 "short_name": (short_name or "").strip(),
+                "skip_wasabi_policy": bool(skip_wasabi_policy),
             }
         )
     return users
