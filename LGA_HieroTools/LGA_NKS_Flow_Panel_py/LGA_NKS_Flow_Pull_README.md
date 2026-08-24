@@ -58,7 +58,8 @@ Script de integración entre Hiero y Flow Production Tracker. Compara los estado
 ## Configuración y Dependencias
 
 ### Base de Datos
-- **Windows**: `C:/Portable/LGA/PipeSync/cache/pipesync.db`
+- **Windows studio**: `C:/Portable/LGA/PipeSync/cache/pipesync.db`
+- **Windows client**: `C:/Portable/LGA/PipeSync_Client/cacheClient/pipesync.db`
 - **macOS**: `~/Library/Caches/LGA/PipeSync/pipesync.db`
 
 ### Requisitos del Sistema

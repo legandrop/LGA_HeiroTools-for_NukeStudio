@@ -1,8 +1,16 @@
 """
-Resolver de contexto Studio/Client para LGA_HieroTools.
+____________________________________________________________________
 
-Lee un INI junto a LGA_HieroTools_Startup.py para decidir qué perfil de
-PipeSync debe usarse al resolver config.secure y bases locales.
+  LGA_NKS_ContextProfile v1.00 | Lega
+
+  Resolver de contexto Studio/Client para LGA_HieroTools.
+
+  Lee un INI junto a LGA_HieroTools_Startup.py para decidir qué perfil de
+  PipeSync debe usarse al resolver config.secure y bases locales.
+
+  v1.00: La cache client de Windows se resuelve en la instalación hermana
+         `PipeSync_Client/cacheClient`.
+____________________________________________________________________
 """
 
 import configparser
@@ -109,7 +117,7 @@ def _default_cache_dir():
     if sys.platform == "win32":
         # Mantenemos compatibilidad con el layout histórico del entorno portable.
         if is_client_context():
-            return Path("C:/Portable/LGA/PipeSync/cacheClient")
+            return Path("C:/Portable/LGA/PipeSync_Client/cacheClient")
         return Path("C:/Portable/LGA/PipeSync/cache")
     if sys.platform == "darwin":
         if is_client_context():

@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_PipeSyncPaths v1.01 | Lega
+  LGA_NKS_PipeSyncPaths v1.02 | Lega
 
   Helpers de rutas de PipeSync para LGA_HieroTools.
   Centraliza resolución de DB/cache por contexto (studio/client).
@@ -13,6 +13,7 @@ ____________________________________________________________________
   desarrollo (C:/Portable/LGA_PipeSync_2/...) cuando se corrió el PipeSync de
   dev, y no queremos que HieroTools lea/escriba ahí.
 
+  v1.02: La cache del perfil client usa el layout instalado `PipeSync_Client/cacheClient`.
   v1.01: get_pipesync_db_path resuelve siempre a la instalación estándar e ignora
          el CachePath del config.secure (que podía apuntar al build de dev).
          Eliminados helpers de fallback (_legacy_cache_candidates, get_db_path).
@@ -33,6 +34,8 @@ def _installed_cache_dir():
     """Directorio de cache INSTALADO estándar de PipeSync, por plataforma y contexto."""
     if sys.platform == "win32":
         cache_name = "cacheClient" if is_client_context() else "cache"
+        if is_client_context():
+            return Path("C:/Portable/LGA/PipeSync_Client") / cache_name
         return Path("C:/Portable/LGA/PipeSync") / cache_name
 
     if sys.platform == "darwin":
