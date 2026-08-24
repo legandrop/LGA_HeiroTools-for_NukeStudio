@@ -28,8 +28,20 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - El switch Studio/Client actualiza INI, fuerza recarga del Projects Panel y
   avisa por el bus a los paneles suscriptos.
 - Scope de tasks por contexto:
-  - `studio`: tasks `comp`, `roto`, `cleanup`.
-  - `client`: solo task `comp` (no se consideran `roto`/`cleanup`).
+  - `studio`: tasks `comp`, `roto`, `cleanup` (no existe `cg`).
+  - `client`: tasks `comp` y `cg` (no se consideran `roto`/`cleanup`).
+  - La task `cg` agrupa todas las disciplinas/streams del shot (layout,
+    lighting, anim, fx, ...); el filename de cada versión lleva el stream,
+    nunca el token "cg". Ver
+    [Docu_Logica_Nombres_Tracks.md](Docu_Logica_Nombres_Tracks.md) y
+    [Docu_MultiTask.md](Docu_MultiTask.md) para la convención de tracks y el
+    concepto de stream.
+  - `normalize_task_name()` (en `LGA_NKS_Flow_NamingUtils.py`) aplica en
+    client la **familia CG por exclusión**: toda task que no esté en
+    `registered_task_names()` (los tracks EXR registrados: `comp`, `roto`,
+    `cleanup`, `cg`) normaliza a `cg`. No hay una lista de streams que
+    mantener. En studio esta regla no se activa. Detalle en
+    [Docu_TaskName_Aliases.md](Docu_TaskName_Aliases.md).
 
 ## Paneles dinamicos por contexto
 
@@ -79,16 +91,20 @@ problema distinto y con arreglo.
 
 ## Impacto en herramientas de Edit
 
-- `Create v000`:
-  - En `client` la UI muestra únicamente el botón `comp`.
-  - El chequeo de solape/versions en timeline para elegibilidad de shot se hace
-    solo sobre el track de `comp`.
-  - Un shot se considera completo en `client` cuando `comp` ya tiene clip
-    superpuesto en el rango del shot.
+- `Create v000` ([LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py)):
+  - En `client`, `_resolve_active_tasks()` fija `CLIENT_TASKS = ("comp", "cg")`:
+    la UI muestra los botones `comp` y `cg`.
+  - `TASK_FOLDER["cg"] = "CG"` y `TASK_COLORS["cg"] = "#27c8c3"` (el mismo
+    color que cleanup en studio; en client no coexisten, así que no hay
+    ambigüedad visual).
+  - Orden de tracks en el timeline de client: `BurnIn` > `_comp_` > `_cg_` >
+    plates.
+  - El chequeo de solape/versions en timeline para elegibilidad de shot
+    considera ambas tasks de client.
 - `Import Shot`:
   - El import mantiene su comportamiento general.
   - En `client`, el flujo post-import `Create v000` hereda el scope de tasks
-    del contexto (solo `comp`).
+    del contexto (`comp` y `cg`).
 
 ## Archivos adaptados (confirmados)
 

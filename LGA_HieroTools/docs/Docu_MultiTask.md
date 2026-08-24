@@ -3,7 +3,7 @@
 
 # Soporte Multi-Task en las herramientas de Hiero / Nuke Studio
 
-Este documento describe el **objetivo** del soporte multi-task del pipeline, la **convención de nombres** que lo hace posible, y el **estado actual** de cada herramienta respecto de las tres tasks vigentes: **comp**, **roto**, **cleanup**.
+Este documento describe el **objetivo** del soporte multi-task del pipeline, la **convención de nombres** que lo hace posible, y el **estado actual** de cada herramienta respecto de las tasks vigentes: **comp**, **roto**, **cleanup** (studio) y **cg** (client, ver más abajo).
 
 Complementa a [Docu_Logica_Nombres_Tracks.md](Docu_Logica_Nombres_Tracks.md), que define la convención de nombres. Este documento se enfoca en **qué scripts ya soportan multi-task y cuáles todavía no**.
 
@@ -33,20 +33,37 @@ Todo está centralizado en [LGA_NKS_Shared/LGA_NKS_GetClip.py](../LGA_NKS_Shared
 TRACK_comp_EXR    = "_comp_"
 TRACK_roto_EXR    = "_roto_"
 TRACK_cleanup_EXR = "_cleanup_"
+TRACK_cg_EXR      = "_cg_"        # solo contexto client
 
 TRACK_comp_REV    = "_compRev_"
 TRACK_roto_REV    = "_rotoRev_"
 TRACK_cleanup_REV = "_cleanupRev_"
+TRACK_cg_REV      = "_cgRev_"     # solo contexto client
 
-TASK_EXR_TRACKS = [TRACK_comp_EXR, TRACK_roto_EXR, TRACK_cleanup_EXR]
-TASK_REV_TRACKS = [TRACK_comp_REV, TRACK_roto_REV, TRACK_cleanup_REV]
+TASK_EXR_TRACKS = [TRACK_comp_EXR, TRACK_roto_EXR, TRACK_cleanup_EXR, TRACK_cg_EXR]
+TASK_REV_TRACKS = [TRACK_comp_REV, TRACK_roto_REV, TRACK_cleanup_REV, TRACK_cg_REV]
 ```
 
 Los scripts deben importar estas variables o las listas y no hardcodear los strings.
 
+### El concepto de "stream" en CG
+
+CG es distinta de comp/roto/cleanup en un punto clave: **el filename no lleva
+el token de task**. En comp, un archivo se llama `..._comp_v003`; en CG, un
+archivo se llama `PROJA_1013_0800_layout_v003` — `layout` es la
+**disciplina** (a la que en este pipeline se llama **stream**: layout,
+lighting, anim, fx, etc.), no un token de task reconocible por nombre. Por
+eso puede haber varios tracks `_cg_` en el mismo timeline (uno por stream) y
+los helpers de `GetClip.py` que buscan por nombre de track recorren todos los
+que coincidan, en vez de asumir uno solo. El emparejamiento de versión más
+alta por stream se resuelve en la DB de PipeSync vía la columna
+`version_code`, no por nombre de track (ver sección 4.2, Flow Pull/Push).
+
 ## 3. Tasks y su estado en Flow / SG
 
-Las tres tasks (**comp**, **roto**, **cleanup**) tienen en Flow/SG **sus propios status, versiones y assignee**. Es decir: un shot puede tener simultáneamente una task `comp` con status "Review Lega" y una task `roto` con status "In Progress", cada una con su propia historia de versiones.
+Las tasks de studio (**comp**, **roto**, **cleanup**) tienen en Flow/SG **sus propios status, versiones y assignee**. Es decir: un shot puede tener simultáneamente una task `comp` con status "Review Lega" y una task `roto` con status "In Progress", cada una con su propia historia de versiones.
+
+**CG (client) es distinta:** una sola task `cg` en Flow agrupa las versiones de **todos los streams** (layout, lighting, anim, fx, ...) de un shot. Como el número de versión se repite entre streams (cada stream tiene su propio `v001`, `v002`, ...), la task sola no alcanza para identificar una versión: hace falta además el `version_code` (el nombre completo, ej. `PROJA_1013_0800_layout_v003`) guardado en la DB de PipeSync. Ver sección 4.2 para cómo Pull/Push resuelven esto por stream.
 
 ## 4. Estado actual por herramienta
 
@@ -59,32 +76,35 @@ Leyenda:
 
 ### 4.1. Módulo central — `LGA_NKS_Shared/LGA_NKS_GetClip.py`
 
-| Dominio | comp | roto | cleanup |
-|---|---|---|---|
-| Variables `TRACK_*_EXR` | ✅ | ✅ | ✅ |
-| Variables `TRACK_*_REV` | ✅ | ✅ | ✅ |
-| Lista `TASK_EXR_TRACKS` | ✅ | ✅ | ✅ |
-| Lista `TASK_REV_TRACKS` | ✅ | ✅ | ✅ |
+| Dominio | comp | roto | cleanup | cg (client) |
+|---|---|---|---|---|
+| Variables `TRACK_*_EXR` | ✅ | ✅ | ✅ | ✅ |
+| Variables `TRACK_*_REV` | ✅ | ✅ | ✅ | ✅ |
+| Lista `TASK_EXR_TRACKS` | ✅ | ✅ | ✅ | ✅ |
+| Lista `TASK_REV_TRACKS` | ✅ | ✅ | ✅ | ✅ |
+| `find_clip_at_playhead_in_track()` / `get_selected_clips_in_track()` | ✅ | ✅ | ✅ | ✅ (múltiples tracks `_cg_`, uno por stream) |
 
 Nada pendiente.
 
 ### 4.2. Flow Panel
 
-| Script | comp EXR | roto EXR | cleanup EXR | comp Rev | roto Rev | cleanup Rev |
-|---|---|---|---|---|---|---|
-| [LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py) | ✅ | ✅ | ✅ | — | — | — |
-| [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py) | ✅ | ✅ | 🟡 | — | — | — |
-| [LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py) | ✅ | ✅ | ✅ | — | — | — |
-| [LGA_NKS_ReviewPic.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_ReviewPic.py) | ✅ | ❓ | ❓ | — | — | — |
+| Script | comp EXR | roto EXR | cleanup EXR | cg EXR (client) | comp Rev | roto Rev | cleanup Rev |
+|---|---|---|---|---|---|---|---|
+| [LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py) | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py) | ✅ | ✅ | 🟡 | ✅ | — | — | — |
+| [LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py) | ✅ | ✅ | ✅ | ❓ | — | — | — |
+| [LGA_NKS_ReviewPic.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_ReviewPic.py) | ✅ | ❓ | ❓ | ❓ | — | — | — |
 
 **Flow Pull — notas:**
-- Multi-task completo (v3.41). El filtro de filename acepta cualquier task de `TASK_EXR_TRACKS` (`_comp_`, `_roto_`, `_cleanup_`); antes hardcodeaba `_comp_` y descartaba roto/cleanup.
+- Multi-task completo (v3.41). El filtro de filename acepta cualquier task de `TASK_EXR_TRACKS` (`_comp_`, `_roto_`, `_cleanup_`, `_cg_`); antes hardcodeaba `_comp_` y descartaba roto/cleanup.
 - Comparación de versión SG vs NKS por task: `find_highest_version_for_task(shot, task, task_name)` ([Flow_Pull.py:312](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py:312)) recorre solo `task["versions"]` de la task detectada y devuelve el string como `_{task}_v{n}`. Antes mezclaba todas las tasks del shot y rotulaba como `_comp_`, lo que producía falsos mismatches (ej: comp v9 en NKS comparado contra roto v33 en SG).
 - Tabla de cambios incluye columna `Task` (la detectada del filename), para distinguir a qué task corresponden la versión y el status mostrados.
+- v3.58: los clips que viven en un track `_cg_` se procesan aunque el filename no traiga un token de task conocido (ahi el filename lleva el stream y no "cg"); los demas tracks conservan el filtro historico por filename. Para CG, `find_highest_version_for_task()` recibe además `stream_token` (helper `_stream_token_from_code()`) y compara la versión más alta **por stream**, usando la columna `version_code` de la DB de PipeSync — no alcanza con el número de versión porque cada stream tiene su propia numeración. Al terminar el pull, si la DB tiene streams de CG sin clip en ningún track `_cg_` del timeline, se muestra un aviso listando shot/stream/código.
 
 **Flow Push — notas:**
 - v3.97 implementó multi-task correctamente: itera `TASK_EXR_TRACKS`, detecta la task del filename y, cuando hay clips de varias tasks seleccionadas, muestra un diálogo para elegir a cuál aplicar el status (`_show_task_selection_dialog`, [Flow_Push.py:2325](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py:2325)).
 - Para cleanup: apenas se agregue a `TASK_EXR_TRACKS` (ya hecho), Push lo detecta automáticamente. Pendiente validar con timeline real.
+- v4.07: mismo bypass de filtro que Pull, limitado al track `_cg_` (procesa clips de CG aunque el filename no tenga token de task; los demas tracks conservan el filtro historico). `find_version_by_number`, `find_latest_version` y `update_version_status` del DBManager aceptan `stream_token` y discriminan por `version_code` entre versiones que comparten número dentro de la task CG.
 - [Flow_Push.py:839](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py:839) tiene `get_comp_assignee()` que busca siempre la task "comp" del shot para decidir el assignee. → **Pendiente revisar:** definir si el assignee del shot debe venir siempre de comp o depender de la task activa.
 
 **Flow Shot_info — notas:**
@@ -140,6 +160,14 @@ API:
 - `track_for_task(task_name) -> str | None`
 - `prompt_task_selection(task_names, title) -> str | None`
 - `resolve_task_at_playhead(seq, title) -> str | None`
+
+El mapa interno `_TASK_TO_TRACK` (y su inverso `_TRACK_TO_TASK`) ya no se
+hardcodea: se deriva de `TASK_EXR_TRACKS` (`{t.strip("_").lower(): t for t in
+TASK_EXR_TRACKS}`). Sumar una task nueva en `GetClip.py` la registra sola acá
+— así entró `cg` sin tocar este módulo. El chequeo de mismatch
+(`get_valid_tasks_at_playhead_with_check`) normaliza la task del filename con
+`normalize_task_name()`, así un clip de stream (layout, lighting, ...) en el
+track `_cg_` no se reporta como mismatch.
 
 Estado de adopción:
 
@@ -213,7 +241,7 @@ Con un timeline que tenga un shot con clips en `_comp_`, `_roto_`, `_cleanup_`, 
 - **Convención de nombres:** [Docu_Logica_Nombres_Tracks.md](Docu_Logica_Nombres_Tracks.md)
 - **Selección de clips:** [Docu_Metodos_Seleccion_Clip.md](Docu_Metodos_Seleccion_Clip.md)
 - **Módulo central:** [LGA_NKS_Shared/LGA_NKS_GetClip.py](../LGA_NKS_Shared/LGA_NKS_GetClip.py)
-  - Variables: `TRACK_comp_EXR`, `TRACK_roto_EXR`, `TRACK_cleanup_EXR`, `TRACK_comp_REV`, `TRACK_roto_REV`, `TRACK_cleanup_REV`, `TASK_EXR_TRACKS`, `TASK_REV_TRACKS`
+  - Variables: `TRACK_comp_EXR`, `TRACK_roto_EXR`, `TRACK_cleanup_EXR`, `TRACK_cg_EXR`, `TRACK_comp_REV`, `TRACK_roto_REV`, `TRACK_cleanup_REV`, `TRACK_cg_REV`, `TASK_EXR_TRACKS`, `TASK_REV_TRACKS`, `CG_TASK_NAME`, `registered_task_names()`
 - **Flow Pull:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py)
   - Métodos: `HieroOperations.process_selected_clips()`, `HieroOperations.enable_or_disable_clips()`, `SGManager.find_highest_version_for_task()`
 - **Flow Push:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py)

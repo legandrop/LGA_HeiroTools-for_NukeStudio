@@ -1,12 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.11 | Lega
+  LGA_NKS_CreateV000 v1.12 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
-  tasks destino (comp siempre; roto/cleanup solo en contexto studio),
-  procesadas en orden.
+  tasks destino (comp siempre; roto/cleanup solo en contexto studio; cg solo
+  en contexto client), procesadas en orden.
 
   La v000 se importa al bin del shot, se colorea como v_00, y si se coloca en
   timeline queda deshabilitada. Tambien permite previsualizar el rango con
@@ -16,6 +16,9 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.12: Task cg activa en contexto client (CLIENT_TASKS = comp + cg), con
+         carpeta CG y color de cleanup. Orden de tracks en client:
+         BurnIn > _comp_ > _cg_ > plates.
   v1.11: En client, comp queda seleccionada por defecto. El botón batch indica
          cuántos shots tienen tasks seleccionadas. Los avisos de EXR existente
          muestran Shot | Task y los tabs suman margen horizontal configurable.
@@ -86,13 +89,18 @@ CONFIG_HANDLE_KEY = "handle"
 CONFIG_CREATE_FOLDERS_KEY = "create_folders"
 BURNIN_TRACK_NAME = "BurnIn"
 ALL_TASKS = ("comp", "roto", "cleanup")
+CLIENT_TASKS = ("comp", "cg")
 
 
 def _resolve_active_tasks():
-    """Define las tasks activas según contexto Studio/Client."""
+    """Define las tasks activas según contexto Studio/Client.
+
+    En client existen solo comp y cg (la task CG agrupa las entregas 3D de los
+    vendors); roto y cleanup no existen ahí. En studio no existe cg.
+    """
     try:
         if is_client_context():
-            return ("comp",)
+            return CLIENT_TASKS
     except Exception:
         pass
     return ALL_TASKS
@@ -113,6 +121,7 @@ TASK_FOLDER = {
     "comp": "Comp",
     "roto": "Roto",
     "cleanup": "Cleanup",
+    "cg": "CG",
 }
 TASK_SUBFOLDERS = ("0_assets", "1_projects", "2_prerenders", "3_review", "4_publish")
 RANGE_SOURCE_EDITREF = "editref"
@@ -120,6 +129,7 @@ TASK_COLORS = {
     "comp":    "#3381e0",
     "roto":    "#2abf7e",
     "cleanup": "#27c8c3",
+    "cg":      "#27c8c3",  # mismo color que cleanup: en client no coexisten
 }
 PROJECT_NAME_COLOR = "#6AB5CA"
 SHOT_NAME_COLOR = "#B56AB5"
@@ -1043,7 +1053,8 @@ def _collect_range_sources(seq, current_time):
 def _get_above_neighbor_for_task(seq, task):
     """Returns the track that should be just above the given task track in the panel.
 
-    Panel order top-to-bottom: BurnIn > _comp_ > _roto_ > _cleanup_ > plates.
+    Panel order top-to-bottom: BurnIn > _comp_ > _roto_ > _cleanup_ > plates
+    (client: BurnIn > _comp_ > _cg_ > plates).
     For each task, candidates are the task tracks that come before it in TASKS order,
     then BurnIn. Returns the first one found, or None if none exist.
     """
@@ -1064,7 +1075,8 @@ def _insert_task_track(seq, task):
 
     Must be called inside a project.beginUndo() block — undo is managed by the caller.
     Uses the remove-all/re-add workaround since Hiero has no insertTrack() API.
-    Panel order: BurnIn > _comp_ > _roto_ > _cleanup_ > plates.
+    Panel order: BurnIn > _comp_ > _roto_ > _cleanup_ > plates
+    (client: BurnIn > _comp_ > _cg_ > plates).
     Returns (track, error_string). error_string is None on success.
     """
     track_name = track_for_task(task)

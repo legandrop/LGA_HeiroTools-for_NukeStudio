@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.05 | Lega
+  LGA_NKS_Flow_Push_connector v1.06 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,10 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.06: Task CG (client): los codigos de Version en Flow llevan la DISCIPLINA
+         del clip, asi que las busquedas se filtran por el stream extraido del
+         filename (version_filter_token) y update_version_status acepta
+         require_token para no pisar el otro stream que comparte numero.
   v1.05: status_translation sale de LGA_NKS_Flow_Status_Config en vez de una copia
          propia que ya se habia desincronizado de la del panel.
 
@@ -102,6 +106,30 @@ except ImportError as e:
     raise
 
 status_translation = get_status_translation()
+
+# Nombre de la task CG (contexto client). Import tolerante: sin GetClip el
+# conector sigue funcionando y la regla CG simplemente no aplica.
+try:
+    from LGA_NKS_GetClip import CG_TASK_NAME
+except ImportError:
+    try:
+        from LGA_NKS_Shared.LGA_NKS_GetClip import CG_TASK_NAME
+    except ImportError:
+        CG_TASK_NAME = "cg"
+
+
+def version_filter_token(task_name, extracted_task):
+    """Token con el que se filtran los CODIGOS de Version en Flow.
+
+    Las tasks clasicas llevan su nombre en el codigo (_comp_); la task CG lleva
+    la DISCIPLINA del clip (layout, lighting, ...), asi que se filtra por el
+    token crudo extraido del filename (el stream). Si no hay token extraido se
+    devuelve el nombre de la task (para CG no va a matchear nada y el flujo cae
+    a los caminos de fallback/task-only existentes).
+    """
+    if task_name == CG_TASK_NAME and extracted_task:
+        return extracted_task.lower()
+    return task_name
 
 
 class ShotGridManager:
@@ -365,12 +393,18 @@ class ShotGridManager:
             debug_print(f"Error al actualizar el estado de la tarea: {e}")
             return False, f"Error al actualizar el estado de la tarea: {e}"
 
-    def update_version_status(self, project_name, shot_code, version_str, new_status):
+    def update_version_status(self, project_name, shot_code, version_str, new_status,
+                              require_token=None):
         """Actualiza el estado de la/las Version en Flow.
 
         Devuelve (ok, error). Si no se encontró ninguna Version que coincida
         se considera fallo: no hubo escritura real en Flow y por lo tanto la
         DB local no debe reflejar el nuevo estado.
+
+        require_token (task CG): dentro de CG conviven streams que repiten
+        numero (layout_v003 y lighting_v003), y el filtro por "contains vNNN"
+        solo tocaria las dos. Con el token, solo se actualizan las versiones
+        cuyo codigo contiene _<token>_.
         """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
@@ -384,7 +418,13 @@ class ShotGridManager:
                 ["entity.Shot.code", "is", shot_code],
                 ["code", "contains", version_str],
             ]
-            versions = self.sg.find("Version", filters, ["id"])
+            versions = self.sg.find("Version", filters, ["id", "code"])
+            if require_token:
+                token_pattern = f"_{require_token.lower()}_"
+                versions = [
+                    v for v in versions
+                    if token_pattern in (v.get("code") or "").lower()
+                ]
             if not versions:
                 msg = (
                     f"No se encontró ninguna Version en Flow para {shot_code} "
@@ -768,10 +808,16 @@ def execute_full_push_operation(
         if not task_id:
             return {"success": False, "error": f"No se encontró la tarea {task_name}"}
 
+        # Token de filtrado de codigos de Version: para CG es el stream del clip
+        # (los codigos llevan la disciplina, no "cg").
+        version_token = version_filter_token(task_name, task_name_extracted)
+        if version_token != task_name:
+            debug_print(f"Task CG: filtrando versiones por stream '{version_token}'")
+
         # Buscar versión objetivo explícita (Shift+Click) o la del clip actual.
         sg_specific_version, sg_version_number_str, user_id = (
             sg_manager.find_specific_version_for_shot(
-                shot["id"], requested_version_number, task_name
+                shot["id"], requested_version_number, version_token
             )
         )
 
@@ -792,7 +838,7 @@ def execute_full_push_operation(
                 f"para task '{task_name}', usando versión más alta como fallback"
             )
             sg_specific_version, sg_version_number_str, user_id = (
-                sg_manager.find_highest_version_for_shot(shot["id"], task_name)
+                sg_manager.find_highest_version_for_shot(shot["id"], version_token)
             )
 
         if not sg_specific_version:
@@ -849,10 +895,15 @@ def execute_full_push_operation(
 
         target_version_label = f"v{effective_version_number:03d}"
 
+        # Para CG el update de Version discrimina por stream; en las tasks
+        # clasicas se conserva el comportamiento historico (sin token).
+        version_require_token = version_token if version_token != task_name else None
+
         if sg_status in ["rev_di", "corr", "revleg", "revcha", "revjua", "revjav"]:
             debug_print(f"Actualizando versión a vwd")
             version_ok, version_error = sg_manager.update_version_status(
-                project_name, shot_code, target_version_label, "vwd"
+                project_name, shot_code, target_version_label, "vwd",
+                require_token=version_require_token
             )
             if version_ok:
                 applied["version_status"] = True
@@ -945,7 +996,8 @@ def execute_full_push_operation(
         elif sg_status == "rev_su":
             debug_print(f"Actualizando versión a rev")
             version_ok, version_error = sg_manager.update_version_status(
-                project_name, shot_code, target_version_label, "rev"
+                project_name, shot_code, target_version_label, "rev",
+                require_token=version_require_token
             )
             if version_ok:
                 applied["version_status"] = True
@@ -1007,6 +1059,7 @@ def execute_flow_operation(operation, **kwargs):
 
             extracted_task = extract_task_name(base_name_for_detection or base_name)
             task_name = normalize_task_name(extracted_task) if extracted_task else "comp"
+            list_token = version_filter_token(task_name, extracted_task)
 
             project, shot, _ = sg_manager.find_shot_and_tasks(project_name, shot_code)
             if not shot:
@@ -1017,7 +1070,7 @@ def execute_flow_operation(operation, **kwargs):
                     ),
                 }
 
-            versions = sg_manager.list_versions_for_task(shot["id"], task_name)
+            versions = sg_manager.list_versions_for_task(shot["id"], list_token)
             return {
                 "success": True,
                 "versions": versions,

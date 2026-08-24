@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskSelectionDialog v1.42 | Lega
+  LGA_NKS_TaskSelectionDialog v1.43 | Lega
 
   Detección y selección de task entre los tracks EXR del playhead.
 
@@ -22,6 +22,9 @@ ____________________________________________________________________
 
   Convención de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.43: _TASK_TO_TRACK se deriva de TASK_EXR_TRACKS (suma cg sin hardcodear).
+         El chequeo de mismatch normaliza la task del filename, asi un clip de
+         disciplina (layout, lighting, ...) en el track _cg_ no es mismatch.
   v1.42: El look sale de LGA_UI_Style_HieroTools. La ventana iba mas
          clara que los botones que contiene y el separador salia como
          una barra blanca por el shadow Sunken de Qt.
@@ -48,19 +51,15 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore, PYSIDE_VE
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Metric
 from LGA_NKS_Shared.LGA_NKS_GetClip import (
     TASK_EXR_TRACKS,
-    TRACK_comp_EXR,
-    TRACK_roto_EXR,
-    TRACK_cleanup_EXR,
     find_clip_at_playhead_in_track,
 )
 from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import get_task_color
+from LGA_NKS_Shared.LGA_NKS_Flow_NamingUtils import normalize_task_name
 
 
-_TASK_TO_TRACK = {
-    "comp": TRACK_comp_EXR,
-    "roto": TRACK_roto_EXR,
-    "cleanup": TRACK_cleanup_EXR,
-}
+# Derivados de la lista central de tracks: agregar una task nueva en
+# TASK_EXR_TRACKS (GetClip) la registra aca sin tocar este modulo.
+_TASK_TO_TRACK = {t.strip("_").lower(): t for t in TASK_EXR_TRACKS}
 
 _TRACK_TO_TASK = {v: k for k, v in _TASK_TO_TRACK.items()}
 
@@ -323,7 +322,10 @@ def get_valid_tasks_at_playhead_with_check(seq, extract_task_name, clean_base_na
                 continue
             filename = os.path.basename(fileinfos[0].filename())
             base = clean_base_name(filename)
-            task_from_name = extract_task_name(base)
+            # normalize_task_name resuelve aliases (compo→comp) y la familia CG
+            # en client (layout/lighting/... → cg): un clip de disciplina en el
+            # track _cg_ NO es un mismatch.
+            task_from_name = normalize_task_name(extract_task_name(base))
             if task_from_name and task_from_name.lower() != task_from_track:
                 mismatches.append({
                     "clip": clip.name(),

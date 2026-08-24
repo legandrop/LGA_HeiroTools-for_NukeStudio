@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.15 | Lega
+  LGA_NKS_Flow_NamingUtils v1.16 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -45,6 +45,9 @@ ____________________________________________________________________
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push_connector.py
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py
 
+  v1.16: normalize_task_name() aplica la familia CG en contexto client: toda
+         task que no sea un track registrado (layout, lighting, anim, ...)
+         se mapea por exclusion a la task CG. En studio no cambia nada.
   v1.15: extract_shot_code_from_path() devuelve el nombre de la carpeta de
          shot validada contra los vendor codes de PipeSync. Pull la usa para
          no confundir sufijos de publish con descripciones del shot.
@@ -82,11 +85,54 @@ TASK_NAME_ALIASES = {
 }
 
 
+def _apply_cg_family(name):
+    """En contexto client, mapea cualquier task no registrada a la task CG.
+
+    En client solo existen dos tasks de Flow: comp y CG. Los archivos de la
+    task CG llevan la DISCIPLINA en el filename (layout, lighting, anim, ...),
+    asi que todo token de task que no corresponda a un track registrado
+    pertenece por exclusion a la familia CG. No se mantiene una lista de
+    disciplinas: es una regla por exclusion, deliberadamente.
+
+    En studio no cambia nada: la resolucion de task de Push/Pull se gobierna
+    por la PRESENCIA del track en el timeline (TASK_EXR_TRACKS), y en studio
+    no existe el track CG; este mapeo ademas solo se activa en client.
+
+    Los imports son lazy y tolerantes a fallas, igual que _get_vendor_lookup:
+    este modulo tiene que seguir funcionando sin la cadena de imports de
+    contexto (scripts sueltos, tests).
+    """
+    try:
+        try:
+            from LGA_NKS_ContextProfile import is_client_context
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_ContextProfile import is_client_context
+        if not is_client_context():
+            return name
+        try:
+            from LGA_NKS_GetClip import registered_task_names, CG_TASK_NAME
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_GetClip import (
+                registered_task_names,
+                CG_TASK_NAME,
+            )
+        if name in registered_task_names():
+            return name
+        return CG_TASK_NAME
+    except Exception:
+        return name
+
+
 def normalize_task_name(name):
-    """Devuelve el nombre canonical de una task, resolviendo aliases conocidos."""
+    """Devuelve el nombre canonical de una task, resolviendo aliases conocidos.
+
+    En contexto client aplica ademas la regla de familia CG: toda task que no
+    sea un track registrado se considera CG (ver _apply_cg_family).
+    """
     if not name:
         return name
-    return TASK_NAME_ALIASES.get(name.lower(), name.lower())
+    normalized = TASK_NAME_ALIASES.get(name.lower(), name.lower())
+    return _apply_cg_family(normalized)
 
 
 def _strip_version_suffix(parts):

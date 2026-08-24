@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Task_Config v1.25 | Lega
+  LGA_NKS_Flow_Task_Config v1.26 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assignee.py
@@ -13,6 +13,8 @@ ____________________________________________________________________
   La lista está sincronizada con los scripts de creación/modificación de shots y
   provee colores consistentes para las UIs compactas (assignee panel, create shot, etc.).
 
+  v1.26: Color para la task CG (client) en _TASK_COLOR_MAP, sin sumarla a
+         AVAILABLE_TASKS: CG no se ofrece en los catalogos de creacion.
   1.25: Actualizado para usar colores de tasks alineados con los colores de create v000
   v1.24: Actualiza la UI para mostrar las tasks y los asignados en Flow.
          Funciona con todas las tasks disponibles en Flow.
@@ -101,6 +103,11 @@ AVAILABLE_TASKS: List[Dict[str, str]] = [
 DEFAULT_TASK_NAME = "Comp"
 _TASK_ORDER = {task["name"].lower(): index for index, task in enumerate(AVAILABLE_TASKS)}
 _TASK_COLOR_MAP = {task["name"].lower(): task["color"] for task in AVAILABLE_TASKS}
+
+# Tasks que existen en Flow pero NO se ofrecen en los catalogos de creacion
+# (AVAILABLE_TASKS alimenta Create Shot / Assignee en studio). La task CG es
+# exclusiva del contexto client y usa el color de cleanup en los dialogos.
+_TASK_COLOR_MAP["cg"] = "#27c8c3"
 
 
 def get_task_color(task_name: str, fallback: str = "#4A4A4A") -> str:

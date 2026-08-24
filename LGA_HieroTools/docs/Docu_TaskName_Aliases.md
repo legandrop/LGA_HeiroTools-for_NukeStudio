@@ -48,6 +48,43 @@ normalize_task_name("roto")   # → "roto"  (sin alias, solo lowercase)
 
 ---
 
+## Familia CG por exclusión (solo contexto client)
+
+Además de los aliases explícitos, `normalize_task_name()` aplica en contexto
+**client** una segunda regla, después de resolver aliases: la **familia CG
+por exclusión** (`_apply_cg_family()`, en el mismo módulo).
+
+### El problema
+
+En client, la task `cg` de Flow agrupa versiones de varias disciplinas
+(streams: layout, lighting, anim, fx, ...), y el filename de esas versiones
+lleva el **stream**, nunca el token "cg" (ej: `PROJA_1013_0800_layout_v003`).
+Si se mantuviera una lista fija de streams reconocidos, cada disciplina nueva
+que sumara el pipeline de un cliente obligaría a tocar código.
+
+### La solución
+
+`_apply_cg_family()` no mantiene una lista de streams: en contexto client,
+**toda task que no esté en `registered_task_names()`** (los nombres
+derivados de `TASK_EXR_TRACKS` en `LGA_NKS_GetClip.py`: `comp`, `roto`,
+`cleanup`, `cg`) se normaliza a `CG_TASK_NAME` (`"cg"`) por exclusión. En
+studio esta regla no se activa nunca — ahí la resolución de task se gobierna
+por la presencia del track en el timeline, y studio no tiene track `_cg_`.
+
+```python
+normalize_task_name("layout")    # en client → "cg"; en studio → "layout"
+normalize_task_name("lighting")  # en client → "cg"; en studio → "lighting"
+normalize_task_name("comp")      # en client y studio → "comp" (track registrado)
+```
+
+Esta regla se aplica **después** de resolver `TASK_NAME_ALIASES`: primero se
+resuelve un alias explícito (ej. `compo` → `comp`), y solo si el resultado
+sigue sin ser un track registrado se cae en la familia CG. La familia CG en
+sí **no es un alias** — no vive en el diccionario `TASK_NAME_ALIASES` — es
+una regla de exclusión que solo tiene sentido en client.
+
+---
+
 ## Patrón de implementación — 4 puntos por script
 
 ### 1. Import

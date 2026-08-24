@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.06 | Lega
+  LGA_NKS_Flow_Push v4.07 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,13 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.07: Soporte de la task CG (contexto client). Los clips del track _cg_
+         pasan el filtro aunque el filename lleve una disciplina (layout,
+         lighting, ...) en vez de un token de task; los demas tracks conservan
+         el filtro historico. La familia CG la resuelve normalize_task_name.
+         La DB local discrimina por stream
+         (version_code) al buscar/actualizar versiones de CG que comparten
+         numero, y los fallbacks de task tambien normalizan.
   v4.06: status_translation y task_status_dict salen de LGA_NKS_Flow_Status_Config,
          que es la misma fuente que usa el panel para armar los botones.
 
@@ -106,6 +113,8 @@ if utils_path.exists():
         get_clips_to_process,
         get_selected_clips,
         TASK_EXR_TRACKS,
+        TRACK_cg_EXR,
+        CG_TASK_NAME,
     )
 
     # Sincronizar el debug con el módulo utilitario
@@ -593,8 +602,44 @@ class DBManager:
             )
             return False
 
-    def update_version_status(self, task_id, version_number, status):
-        """Actualiza el estado de una versión específica en la base de datos."""
+    @staticmethod
+    def _version_stream_token(row):
+        """Token de stream (disciplina) del version_code de una fila, o None.
+
+        En la task CG conviven streams de naming (layout_v003 / lighting_v003)
+        que repiten numero dentro de la misma task; el stream sale del bloque
+        antes de _vNNN del version_code. Filas legacy sin columna o sin code
+        devuelven None.
+        """
+        try:
+            code = row["version_code"] if "version_code" in row.keys() else None
+        except Exception:
+            code = None
+        if not code:
+            return None
+        match = re.search(r"_([^_]+)_v\d+", str(code), re.IGNORECASE)
+        return match.group(1).lower() if match else None
+
+    def _pick_version_row(self, rows, stream_token):
+        """Elige la fila correcta entre candidatas con el mismo numero.
+
+        Con stream_token, prioriza la fila cuyo version_code pertenece a ese
+        stream; si ninguna matchea (filas legacy sin code), cae a la primera.
+        """
+        if not rows:
+            return None
+        if stream_token:
+            for row in rows:
+                if self._version_stream_token(row) == stream_token.lower():
+                    return row
+        return rows[0]
+
+    def update_version_status(self, task_id, version_number, status, stream_token=None):
+        """Actualiza el estado de una versión específica en la base de datos.
+
+        stream_token (task CG): discrimina entre versiones que comparten numero
+        dentro de la task, para no pisar el stream equivocado.
+        """
         if not self.conn:
             debug_print("No hay conexión a la base de datos")
             return False
@@ -602,12 +647,22 @@ class DBManager:
         try:
             cur = self.conn.cursor()
             cur.execute(
-                "UPDATE versions SET status = ? WHERE task_id = ? AND version_number = ?",
-                (status, task_id, version_number),
+                "SELECT * FROM versions WHERE task_id = ? AND version_number = ?",
+                (task_id, version_number),
+            )
+            row = self._pick_version_row(cur.fetchall(), stream_token)
+            if row is None:
+                debug_print(
+                    f"No se encontró versión {version_number} (task_id: {task_id}) para actualizar"
+                )
+                return False
+            cur.execute(
+                "UPDATE versions SET status = ? WHERE id = ?",
+                (status, row["id"]),
             )
             self.conn.commit()
             debug_print(
-                f"Estado de la versión {version_number} (task_id: {task_id}) actualizado a '{status}' en la base de datos local"
+                f"Estado de la versión {version_number} (task_id: {task_id}, id: {row['id']}) actualizado a '{status}' en la base de datos local"
             )
             return True
         except Exception as e:
@@ -684,8 +739,13 @@ class DBManager:
             debug_print(f"Error al añadir nota a la versión en la DB local: {e}")
             return False
 
-    def find_latest_version(self, task_id):
-        """Encuentra la versión más reciente para una tarea específica."""
+    def find_latest_version(self, task_id, stream_token=None):
+        """Encuentra la versión más reciente para una tarea específica.
+
+        stream_token (task CG): acota al stream del clip (layout, lighting...).
+        Si ninguna fila tiene version_code de ese stream, cae al listado
+        completo (comportamiento legacy).
+        """
         if not self.conn:
             debug_print("No hay conexión a la base de datos")
             return None
@@ -694,22 +754,37 @@ class DBManager:
             cur = self.conn.cursor()
             cur.execute(
                 """
-                SELECT * FROM versions 
-                WHERE task_id = ? 
-                ORDER BY version_number DESC 
-                LIMIT 1
+                SELECT * FROM versions
+                WHERE task_id = ?
+                ORDER BY version_number DESC
                 """,
                 (task_id,),
             )
-            return cur.fetchone()
+            rows = cur.fetchall()
+            if not rows:
+                return None
+            if stream_token:
+                stream_rows = [
+                    r for r in rows
+                    if self._version_stream_token(r) == stream_token.lower()
+                ]
+                if stream_rows:
+                    return stream_rows[0]
+                debug_print(
+                    f"Sin versiones del stream '{stream_token}' en task_id {task_id}; fallback a la más alta de la task"
+                )
+            return rows[0]
         except Exception as e:
             debug_print(
                 f"Error al buscar la última versión para task_id {task_id}: {e}"
             )
             return None
 
-    def find_version_by_number(self, task_id, version_number):
-        """Busca una versión específica por número para una tarea."""
+    def find_version_by_number(self, task_id, version_number, stream_token=None):
+        """Busca una versión específica por número para una tarea.
+
+        stream_token (task CG): discrimina entre versiones que comparten numero.
+        """
         if not self.conn:
             debug_print("No hay conexión a la base de datos")
             return None
@@ -720,11 +795,10 @@ class DBManager:
                 """
                 SELECT * FROM versions
                 WHERE task_id = ? AND version_number = ?
-                LIMIT 1
                 """,
                 (task_id, version_number),
             )
-            return cur.fetchone()
+            return self._pick_version_row(cur.fetchall(), stream_token)
         except Exception as e:
             debug_print(
                 f"Error al buscar versión {version_number} para task_id {task_id}: {e}"
@@ -1666,7 +1740,8 @@ class Worker(QRunnable):
                     try:
                         version_index = parts.index(version_number_str)
                         if version_index > 0:
-                            task_name = parts[version_index - 1].lower()
+                            # normalize aplica aliases y la familia CG en client
+                            task_name = normalize_task_name(parts[version_index - 1])
                         else:
                             task_name = "comp"  # Fallback por defecto
                     except ValueError:
@@ -1712,11 +1787,20 @@ class Worker(QRunnable):
                 )
                 return
 
+            # Task CG: el stream (disciplina) del clip discrimina entre
+            # versiones que comparten numero dentro de la misma task.
+            stream_token = None
+            if task_name == CG_TASK_NAME:
+                raw_stream = extract_task_name(self.base_name)
+                stream_token = raw_stream.lower() if raw_stream else None
+                debug_print(f"Worker: stream CG del clip: '{stream_token}'")
+
             # Obtener versión target (Shift+Click) o fallback a la más reciente.
             target_version = None
             if self.target_version_number is not None:
                 target_version = db_manager.find_version_by_number(
-                    db_task["id"], int(self.target_version_number)
+                    db_task["id"], int(self.target_version_number),
+                    stream_token=stream_token,
                 )
                 if target_version:
                     debug_print(
@@ -1728,7 +1812,9 @@ class Worker(QRunnable):
                     )
 
             if not target_version:
-                target_version = db_manager.find_latest_version(db_task["id"])
+                target_version = db_manager.find_latest_version(
+                    db_task["id"], stream_token=stream_token
+                )
 
             if target_version:
                 # El estado de versión se replica tal cual lo aplicó Flow,
@@ -1748,6 +1834,7 @@ class Worker(QRunnable):
                         db_task["id"],
                         target_version["version_number"],
                         version_status,
+                        stream_token=stream_token,
                     )
                 else:
                     debug_print(
@@ -2653,8 +2740,18 @@ def push_from_selected_clips(
         file_path = fileinfos[0].filename()
         exr_name = os.path.basename(file_path)
 
-        # Filtrar solo clips cuyo filename corresponde a un task track registrado
-        if not any(f"_{p}_" in exr_name.lower() for p in task_name_patterns):
+        # Filtrar solo clips cuyo filename corresponde a un task track registrado.
+        # Excepción: un clip que vive en un track _cg_ pasa siempre, porque ahi el
+        # filename lleva la DISCIPLINA (layout, lighting, ...) y no un token de
+        # task conocido. SOLO el track CG: en los demas tracks el filtro por
+        # filename se conserva igual que siempre (comportamiento studio intacto).
+        _parent_track = clip.parentTrack()
+        _on_cg_track = bool(
+            _parent_track and _parent_track.name().upper() == TRACK_cg_EXR.upper()
+        )
+        if not _on_cg_track and not any(
+            f"_{p}_" in exr_name.lower() for p in task_name_patterns
+        ):
             debug_print(
                 f"Clip no corresponde a ningún task track, se omite: {_describe_clip_for_log(clip)}"
             )

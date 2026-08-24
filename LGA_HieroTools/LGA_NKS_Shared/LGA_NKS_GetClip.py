@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_GetClip v1.84 | Lega
+  LGA_NKS_GetClip v1.85 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
@@ -44,6 +44,9 @@ ____________________________________________________________________
   5. Intenta obtener el clip del track especificado en la posición del playhead.
   6. Si no encuentra, usa el clip seleccionado como fallback.
 
+  v1.85: Agrega TRACK_cg_EXR/_REV y la task CG (contexto client): CG_TASK_NAME,
+         registered_task_names(). Los helpers por nombre de track aceptan
+         MULTIPLES tracks con el mismo nombre (caso tipico: varios _cg_).
   v1.84: Renombra TRACK_comp_REV de "_compMov_" a "_compRev_" (nueva convención taskRev).
          Agrega TRACK_cleanup_EXR, TRACK_roto_REV, TRACK_cleanup_REV y la lista TASK_REV_TRACKS.
   v1.83: Renombra TRACK_comp_REV de "_rev_" a "_compMov_" para mayor claridad
@@ -95,15 +98,27 @@ def debug_print(*message):
 TRACK_comp_EXR = "_comp_"        # EXR con el render de COMP
 TRACK_roto_EXR = "_roto_"        # EXR con el render de ROTO
 TRACK_cleanup_EXR = "_cleanup_"  # EXR con el render de CLEANUP
+TRACK_cg_EXR = "_cg_"            # EXR de la task CG (solo contexto client)
 
 # Tracks Review (MOV/MXF) por task
 TRACK_comp_REV = "_compRev_"         # MOV/MXF de review de COMP
 TRACK_roto_REV = "_rotoRev_"         # MOV/MXF de review de ROTO
 TRACK_cleanup_REV = "_cleanupRev_"   # MOV/MXF de review de CLEANUP
+TRACK_cg_REV = "_cgRev_"             # MOV/MXF de review de CG (solo contexto client)
 
 # Listas centralizadas. Para agregar soporte a una nueva task, sumar su track aquí.
-TASK_EXR_TRACKS = [TRACK_comp_EXR, TRACK_roto_EXR, TRACK_cleanup_EXR]
-TASK_REV_TRACKS = [TRACK_comp_REV, TRACK_roto_REV, TRACK_cleanup_REV]
+TASK_EXR_TRACKS = [TRACK_comp_EXR, TRACK_roto_EXR, TRACK_cleanup_EXR, TRACK_cg_EXR]
+TASK_REV_TRACKS = [TRACK_comp_REV, TRACK_roto_REV, TRACK_cleanup_REV, TRACK_cg_REV]
+
+# Task CG (contexto client): agrupa en Flow todas las entregas 3D de los vendors
+# (layout, lighting, animation, ...). El nombre de la task en Flow se deriva del
+# token del track, asi que renombrar TRACK_cg_EXR renombra la familia entera.
+CG_TASK_NAME = TRACK_cg_EXR.strip("_").lower()
+
+
+def registered_task_names():
+    """Nombres de task (lowercase) derivados de los tracks EXR registrados."""
+    return [t.strip("_").lower() for t in TASK_EXR_TRACKS]
 
 # Intentar importar funciones de naming para comparación inteligente de shots
 try:
@@ -384,9 +399,14 @@ def find_clip_at_playhead_in_track(seq, track_name=None):
         
         current_time = viewer.time()
         debug_print(f"Buscando clip en track '{track_name}' en posición {current_time}")
-        
+
+        # Puede haber MAS de un track con el mismo nombre (caso tipico: varios
+        # tracks _cg_ para disciplinas distintas del mismo shot). Se recorren
+        # todos y se devuelve el primer clip que caiga bajo el playhead.
+        track_found = False
         for track in seq.videoTracks():
             if track.name().upper() == track_name.upper():
+                track_found = True
                 for clip in track:
                     if isinstance(clip, hiero.core.EffectTrackItem):
                         continue
@@ -395,10 +415,11 @@ def find_clip_at_playhead_in_track(seq, track_name=None):
                             f">>> Clip encontrado en track {track_name} en posicion {current_time}: {clip.name()}"
                         )
                         return clip
-                debug_print(f"No se encontró clip en track '{track_name}' en la posición del playhead.")
-                return None
-        
-        debug_print(f"No se encontró el track '{track_name}' en la secuencia.")
+
+        if track_found:
+            debug_print(f"No se encontró clip en track '{track_name}' en la posición del playhead.")
+        else:
+            debug_print(f"No se encontró el track '{track_name}' en la secuencia.")
         return None
         
     except Exception as e:
@@ -422,27 +443,27 @@ def get_selected_clips_in_track(seq, track_name=None):
     
     te = hiero.ui.getTimelineEditor(seq)
     selected_clips = te.selection() if te else []
-    
-    # Encontrar el track especificado
-    target_track = None
-    for track in seq.videoTracks():
-        if track.name().upper() == track_name.upper():
-            target_track = track
-            break
-    
-    if not target_track:
+
+    # Encontrar los tracks con ese nombre. Puede haber mas de uno (varios
+    # tracks _cg_), asi que se aceptan clips de cualquiera de ellos.
+    target_tracks = [
+        track for track in seq.videoTracks()
+        if track.name().upper() == track_name.upper()
+    ]
+
+    if not target_tracks:
         debug_print(f"No se encontró el track '{track_name}' en la secuencia.")
         return []
-    
+
     # Filtrar clips seleccionados que pertenecen al track especificado
     clips_in_track = []
     for clip in selected_clips:
         if isinstance(clip, hiero.core.EffectTrackItem):
             continue
-        # Verificar si el clip pertenece al track especificado
-        if clip.parentTrack() == target_track:
+        # Verificar si el clip pertenece a alguno de los tracks con ese nombre
+        if clip.parentTrack() in target_tracks:
             clips_in_track.append(clip)
-    
+
     return clips_in_track
 
 

@@ -1,12 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.57 | Lega
+  LGA_NKS_Flow_Pull v3.58 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.58: Soporte de la task CG (contexto client). Los clips del track _cg_ se
+         procesan aunque el filename no tenga token de task conocido (ahi el
+         filename lleva la disciplina); los demas tracks conservan el filtro
+         historico por filename. La version mas
+         alta de CG se compara por stream (version_code de la DB), y al final
+         se avisa con un dialogo si la DB tiene streams de CG sin clip en
+         ningun track _cg_ del timeline.
   v3.57: El lookup prioriza la carpeta de shot de la ruta, validada contra los
          vendor codes de PipeSync, y compara project_name sin distinguir case.
          Asi los sufijos de publish no se buscan como parte del shot.
@@ -120,11 +127,18 @@ from LGA_NKS_Flow_NamingUtils import (
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
 if utils_path.exists():
     sys.path.insert(0, str(utils_path))
-    from LGA_NKS_Shared.LGA_NKS_GetClip import TRACK_comp_EXR, TASK_EXR_TRACKS
+    from LGA_NKS_Shared.LGA_NKS_GetClip import (
+        TRACK_comp_EXR,
+        TRACK_cg_EXR,
+        TASK_EXR_TRACKS,
+        CG_TASK_NAME,
+    )
 else:
     # Fallback si no se encuentra el módulo
     TRACK_comp_EXR = "_comp_"
+    TRACK_cg_EXR = "_cg_"
     TASK_EXR_TRACKS = [TRACK_comp_EXR]
+    CG_TASK_NAME = "cg"
 
 tools_root = Path(__file__).parent.parent
 if str(tools_root) not in sys.path:
@@ -715,6 +729,21 @@ def extract_version_number(version_str):
     return 0
 
 
+_STREAM_TOKEN_RE = re.compile(r"_([^_]+)_v\d+", re.IGNORECASE)
+
+
+def _stream_token_from_code(version_code):
+    """Token de stream (disciplina) de un codigo de version: el bloque antes de _vNNN.
+
+    Ej: "SHOT_layout_v003" → "layout". Devuelve None si el codigo no tiene el
+    patron (filas legacy sin version_code, naming no estandar).
+    """
+    if not version_code:
+        return None
+    match = _STREAM_TOKEN_RE.search(str(version_code))
+    return match.group(1).lower() if match else None
+
+
 class ShotGridManager:
     """Clase para manejar operaciones con datos de la base de datos SQLite en lugar de JSON."""
 
@@ -782,23 +811,47 @@ class ShotGridManager:
                 return t
         return None
 
-    def find_highest_version_for_task(self, shot, task, task_name):
+    def find_highest_version_for_task(self, shot, task, task_name, stream_token=None):
         """Encuentra la version mas alta de una task especifica del shot.
 
         Solo recorre las versiones de esa task: no mezcla comp/roto/cleanup.
         El string devuelto usa el task_name real (no hardcoded a comp).
+
+        stream_token (task CG): dentro de CG conviven streams de naming por
+        disciplina (layout, lighting, ...). Si se pasa el token, la comparacion
+        se acota a las versiones cuyo version_code pertenece a ese stream, para
+        no comparar un layout contra el numero de un lighting. Las filas legacy
+        sin version_code no se pueden clasificar; si el filtro deja la lista
+        vacia se cae al comportamiento historico (todas las versiones).
         """
         task_versions = task.get("versions", []) if task else []
         if not task_versions:
             return None
+
+        if stream_token:
+            filtered = [
+                v for v in task_versions
+                if _stream_token_from_code(v.get("version_code")) == stream_token.lower()
+            ]
+            if filtered:
+                task_versions = filtered
+            else:
+                debug_print(
+                    f"Sin versiones con version_code del stream '{stream_token}'; "
+                    "se usa el listado completo de la task (fallback legacy)."
+                )
+
         highest_version = max(
             task_versions,
             key=lambda v: (
                 v["version_number"] if v["version_number"] is not None else 0
             ),
         )
+        display_code = highest_version.get("version_code") or (
+            f"{shot['shot_name']}_{task_name}_v{highest_version['version_number']:03d}"
+        )
         return {
-            "version_number": f"{shot['shot_name']}_{task_name}_v{highest_version['version_number']:03d}",
+            "version_number": display_code,
             "version_status": highest_version.get("status", ""),
             "version_description": highest_version.get("description", ""),
         }
@@ -971,6 +1024,27 @@ class GUI_Table(QtWidgets.QDialog):
                 next_action = show_shots_not_found_warning
             else:
                 next_action = show_no_changes_info
+
+            # Aviso de streams CG en la DB sin clip en el timeline. Va antes de
+            # la ventana de mismatches: es un aviso puntual y modal, y el resto
+            # del flujo sigue igual al cerrarlo.
+            missing_cg = getattr(self.hiero_ops, "missing_cg_streams", [])
+            if missing_cg:
+                lines = "\n".join(
+                    f"  •  {shot_code}  —  {stream}   ({code})"
+                    for shot_code, stream, code in missing_cg
+                )
+                QMessageBox.warning(
+                    self,
+                    "CG tasks sin clip en el timeline",
+                    (
+                        "La DB de PipeSync tiene versiones de la task CG cuyo "
+                        f"stream no tiene ningun clip en un track {TRACK_cg_EXR} del timeline:\n\n"
+                        f"{lines}\n\n"
+                        f"Importa esas versiones a un track {TRACK_cg_EXR} (puede haber mas "
+                        f"de un track {TRACK_cg_EXR}, uno por disciplina) para poder verlas y pullearlas."
+                    ),
+                )
 
             task_mismatches = getattr(self.hiero_ops, "task_mismatches", [])
             if task_mismatches:
@@ -1391,6 +1465,9 @@ class HieroOperations:
         self.shots_not_found = 0
         self.current_user_review_status_codes = _current_user_review_status_codes()
         self.task_mismatches = []
+        # Streams (disciplinas) de la task CG presentes en la DB pero sin clip
+        # en el timeline: [(shot_code, stream, version_code_mas_alto), ...]
+        self.missing_cg_streams = []
 
     def parse_exr_name(self, file_name):
         """Extrae el nombre base del archivo y el numero de version con prefijo."""
@@ -1692,6 +1769,13 @@ class HieroOperations:
                 debug_print(f"[MismatchCheck] Error en pre-pass: {_e_pre}")
                 task_mismatches = []
 
+            # Rastreo de la task CG: que shots aparecen en el timeline y que
+            # streams (disciplinas) tiene cada uno, para avisar al final si en
+            # la DB hay streams de CG sin clip en ningun track _cg_.
+            self.missing_cg_streams = []
+            cg_shots_seen = {}          # shot_code -> shot dict (de la DB)
+            cg_streams_in_timeline = {} # shot_code -> set de stream tokens
+
             if selected_clips:
                 project = hiero.core.projects()[0]
                 for clip in selected_clips:
@@ -1717,9 +1801,21 @@ class HieroOperations:
                         file_basename = os.path.basename(file_path).lower()
                         debug_print(f"Basename del archivo: {file_basename}")
 
+                        # Un clip que vive en un track _cg_ se procesa siempre: ahi los
+                        # filenames llevan la DISCIPLINA (layout, lighting, ...), no un
+                        # token de task conocido. SOLO el track CG: en el resto de los
+                        # tracks el filtro por filename se conserva igual que siempre
+                        # (comportamiento studio intacto).
+                        _parent_track = clip.parentTrack()
+                        _on_cg_track = bool(
+                            _parent_track
+                            and _parent_track.name().upper() == TRACK_cg_EXR.upper()
+                        )
                         _alias_patterns = {f"_{k}_" for k in TASK_NAME_ALIASES}
                         _all_task_patterns = set(TASK_EXR_TRACKS) | _alias_patterns
-                        if not any(t in file_basename for t in _all_task_patterns):
+                        if not _on_cg_track and not any(
+                            t in file_basename for t in _all_task_patterns
+                        ):
                             debug_print(
                                 f"El archivo no contiene ninguna task conocida ({sorted(_all_task_patterns)}) en el nombre: {file_basename}"
                             )
@@ -1776,7 +1872,10 @@ class HieroOperations:
                                         pass
                             
                             if version_index and version_index > 0:
-                                task_name = parts_original[version_index - 1].lower()
+                                # normalize aplica aliases y la familia CG en client
+                                task_name = normalize_task_name(
+                                    parts_original[version_index - 1]
+                                )
                             else:
                                 # Último recurso: buscar 'comp' en el nombre
                                 if "comp" in base_name.lower():
@@ -1833,6 +1932,18 @@ class HieroOperations:
                         self.shots_found_in_db += 1
                         debug_print(f"Shot encontrado: {shot_code}")
                         debug_print(f"Buscando task '{task_name}' en el shot")
+
+                        # Task CG: registrar shot y stream del clip para el
+                        # chequeo final de streams sin clip en el timeline.
+                        cg_stream_token = None
+                        if task_name == CG_TASK_NAME:
+                            cg_shots_seen.setdefault(shot_code, shot)
+                            if task_name_extracted:
+                                cg_stream_token = task_name_extracted.lower()
+                                cg_streams_in_timeline.setdefault(shot_code, set()).add(
+                                    cg_stream_token
+                                )
+
                         task = sg_manager.find_task(shot, task_name)
                         if task:
                             debug_print(f"Task encontrada: {task_name}")
@@ -1859,7 +1970,7 @@ class HieroOperations:
                                 current_color_hex
                             )
                             highest_version = sg_manager.find_highest_version_for_task(
-                                shot, task, task_name
+                                shot, task, task_name, stream_token=cg_stream_token
                             )
                             if highest_version:
                                 debug_print(
@@ -2002,6 +2113,34 @@ class HieroOperations:
             pass
 
         self.task_mismatches = task_mismatches if 'task_mismatches' in locals() else []
+
+        # Task CG: detectar streams (disciplinas) presentes en la DB pero sin
+        # clip en ningun track _cg_ del timeline, para avisar al usuario.
+        try:
+            for shot_code, shot in cg_shots_seen.items():
+                cg_task = sg_manager.find_task(shot, CG_TASK_NAME)
+                if not cg_task:
+                    continue
+                streams_in_db = {}
+                for v in cg_task.get("versions", []):
+                    stream = _stream_token_from_code(v.get("version_code"))
+                    if not stream:
+                        continue
+                    prev = streams_in_db.get(stream)
+                    if prev is None or (v.get("version_number") or 0) > (prev.get("version_number") or 0):
+                        streams_in_db[stream] = v
+                timeline_streams = cg_streams_in_timeline.get(shot_code, set())
+                for stream, v in sorted(streams_in_db.items()):
+                    if stream not in timeline_streams:
+                        self.missing_cg_streams.append(
+                            (shot_code, stream, v.get("version_code") or "")
+                        )
+            if self.missing_cg_streams:
+                debug_print(
+                    f"Streams CG sin clip en el timeline: {self.missing_cg_streams}"
+                )
+        except Exception as e:
+            debug_print(f"Error detectando streams CG faltantes: {e}")
 
         return changes_made
 
