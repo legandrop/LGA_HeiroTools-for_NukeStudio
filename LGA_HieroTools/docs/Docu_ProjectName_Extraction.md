@@ -67,6 +67,17 @@ if not project_name:
 - Devuelve el primer bloque del nombre base antes del primer `_`.
 - Comportamiento original, sin cambios.
 
+### `extract_shot_code_from_path(file_path, project_name)`
+- Recorre la ruta desde el archivo hacia la raíz y devuelve la carpeta de shot
+  validada por `is_shot_folder_name()`.
+- Si la carpeta termina con un vendor code, este se valida contra
+  `project_settings_cache.settings_json` de PipeSync; no se infiere por forma.
+- Pull la usa antes del parser de filename: un publish como
+  `PROJA_1013_0800_VEN_PLATE_comp_v001` se busca como el shot
+  `PROJA_1013_0800_VEN`, no con los sufijos de publish.
+- Si no hay carpeta reconocible, devuelve `""` y el caller conserva el fallback
+  histórico que extrae el nombre desde el filename.
+
 ---
 
 ## Extensión: Sequence Name desde el path
@@ -144,7 +155,7 @@ Leyenda:
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py` | ✅ Actualizado v3.44 |
+| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py` | ✅ Actualizado v3.57 — prioriza la carpeta de shot validada contra los vendors de PipeSync y compara el proyecto sin distinguir mayúsculas/minúsculas |
 | `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py` | ✅ Actualizado v4.01 |
 | `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push_connector.py` | ✅ Actualizado v1.01 — proceso separado; recibe file_path vía JSON |
 | `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py` | ✅ Actualizado v1.92 — fix en `process_selected_clips()` |

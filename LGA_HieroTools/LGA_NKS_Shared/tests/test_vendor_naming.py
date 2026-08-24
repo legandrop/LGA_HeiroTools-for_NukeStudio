@@ -22,6 +22,7 @@ import LGA_NKS_Vendors_Config as vendors_config  # noqa: E402
 from LGA_NKS_Flow_NamingUtils import (  # noqa: E402
     clean_base_name,
     extract_shot_code,
+    extract_shot_code_from_path,
     extract_task_name,
     is_shot_folder_name,
 )
@@ -121,6 +122,27 @@ def _check_shot_folder():
                 segmento, got, esperado
             ),
         )
+
+
+def _check_shot_code_from_path():
+    ruta = (
+        "N:/VFX-PROJA/101/PROJA_1013_0800_VEN/Comp/4_publish/"
+        "PROJA_1013_0800_VEN_PLATE_comp_v001/"
+        "PROJA_1013_0800_VEN_PLATE_comp_v001_%04d.exr"
+    )
+    _expect(
+        extract_shot_code_from_path(ruta, "PROJA") == "PROJA_1013_0800_VEN",
+        "La carpeta de shot con vendor debe ganar sobre el sufijo de publish",
+    )
+    _expect(
+        extract_shot_code_from_path(ruta.replace("/", "\\\\"), "PROJA")
+        == "PROJA_1013_0800_VEN",
+        "La extraccion desde carpeta debe aceptar separadores de Windows",
+    )
+    _expect(
+        extract_shot_code_from_path("N:/VFX-PROJA/101/Comp/file.exr", "PROJA") == "",
+        "Una ruta sin carpeta de shot debe conservar el fallback del caller",
+    )
 
 
 def _check_sin_db():
@@ -261,6 +283,7 @@ def _run_con_db_sintetica():
 
         _check_naming()
         _check_shot_folder()
+        _check_shot_code_from_path()
         _check_cache_no_envenena()
 
 

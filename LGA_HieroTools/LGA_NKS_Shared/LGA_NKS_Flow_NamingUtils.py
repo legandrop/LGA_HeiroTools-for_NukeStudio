@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.14 | Lega
+  LGA_NKS_Flow_NamingUtils v1.15 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -45,6 +45,9 @@ ____________________________________________________________________
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push_connector.py
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py
 
+  v1.15: extract_shot_code_from_path() devuelve el nombre de la carpeta de
+         shot validada contra los vendor codes de PipeSync. Pull la usa para
+         no confundir sufijos de publish con descripciones del shot.
   v1.14: soporte de vendor code al final del bloque base
          (PROYECTO_SEQ_SHOT_VENDOR). Los vendor codes validos se leen de la DB
          de PipeSync via LGA_NKS_Vendors_Config; NO se adivinan por estructura,
@@ -345,6 +348,27 @@ def extract_project_name_from_path(file_path):
     return None
 
 
+def extract_shot_code_from_path(file_path, project_name=None):
+    """Devuelve el nombre de la carpeta de shot presente en una ruta de media.
+
+    Recorre la ruta desde el archivo hacia la raíz y acepta solamente segmentos
+    que ``is_shot_folder_name()`` valida. Esa validación consulta los vendor
+    codes de PipeSync cuando el último bloque puede ser un vendor; por eso no
+    confunde un sufijo de publish con parte del nombre del shot.
+
+    Devuelve ``""`` cuando la ruta no contiene una carpeta de shot reconocible,
+    para que el caller conserve su parser de filename como fallback.
+    """
+    if not file_path:
+        return ""
+
+    normalized = re.sub(r"[\\/]+", "/", str(file_path))
+    for segment in reversed(normalized.split("/")):
+        if is_shot_folder_name(segment, project_name):
+            return segment
+    return ""
+
+
 def extract_sequence_name_from_path(file_path):
     """
     Extrae el nombre de la secuencia desde el segmento de ruta que sigue
@@ -435,4 +459,3 @@ def extract_task_name(base_name):
         return core_parts[task_index]
 
     return None
-

@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.56 | Lega
+  LGA_NKS_Flow_Pull v3.57 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.57: El lookup prioriza la carpeta de shot de la ruta, validada contra los
+         vendor codes de PipeSync, y compara project_name sin distinguir case.
+         Asi los sufijos de publish no se buscan como parte del shot.
   v3.56: task_status_dict, los nombres visibles y los colores de review pasan a
          LGA_NKS_Flow_Status_Config. El catalogo NO se filtra por contexto: la DB
          puede tener codigos del otro sitio y filtrarlos los haria desaparecer.
@@ -106,6 +109,7 @@ from LGA_NKS_Flow_NamingUtils import (
     extract_shot_code,
     extract_project_name,
     extract_project_name_from_path,
+    extract_shot_code_from_path,
     extract_task_name,
     clean_base_name,
     TASK_NAME_ALIASES,
@@ -737,7 +741,7 @@ class ShotGridManager:
             """
             SELECT s.* FROM shots s
             JOIN projects p ON s.project_id = p.id
-            WHERE p.project_name = ? AND s.shot_name = ?
+            WHERE p.project_name COLLATE NOCASE = ? AND s.shot_name = ?
         """,
             (project_name, shot_code),
         )
@@ -1804,6 +1808,22 @@ class HieroOperations:
                         shot_base_path = ""  # Ruta inválida
                         debug_print(f"Ruta base del shot: VACIA (no se puede calcular)")
                     debug_print(f"Ruta base del shot final: {shot_base_path}")
+
+                    path_shot_code = extract_shot_code_from_path(
+                        file_path, project_name
+                    )
+                    if path_shot_code:
+                        if path_shot_code != shot_code:
+                            debug_print(
+                                "Shot code desde carpeta validada: "
+                                f"{path_shot_code} (parser de filename: {shot_code})"
+                            )
+                        shot_code = path_shot_code
+                    else:
+                        debug_print(
+                            "No se reconocio una carpeta de shot en la ruta; "
+                            "se conserva el parser de filename."
+                        )
                     # Obtener el estado y el tag correspondiente
                     debug_print(
                         f"Buscando shot en SG: project='{project_name}', shot='{shot_code}'"
