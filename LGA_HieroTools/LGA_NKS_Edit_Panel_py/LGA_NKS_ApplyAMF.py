@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.40 | Lega
+  LGA_NKS_ApplyAMF v0.50 | Lega
 
   Crea los soft effects de color sobre los clips seleccionados del timeline,
   siguiendo lo que declara el .amf que viene con el shot.
@@ -53,6 +53,10 @@ ____________________________________________________________________
     - Cartel de aviso cuando hay mas de un archivo de la misma extension.
       Hoy solo avisa por consola y usa el primero.
 
+  v0.50: No vuelve a crear un efecto que el clip ya tiene: se saltea y se
+         crea solo el que falta. La deteccion no se queda con linkedItems():
+         tambien barre los subtracks del track, porque un efecto creado a
+         mano queda suelto y ahi no figura.
   v0.40: El .amf pasa a ser la fuente de verdad: de ahi salen el orden, el
          applied de cada transform, el working space del CDL y el nombre
          del .clf. El working space se matchea contra las opciones reales
@@ -94,9 +98,10 @@ FALLBACK_EFFECTS = (
     {"type": "OCIOFileTransform", "extension": ".clf"},
 )
 
-# Si el clip ya tiene un efecto de ese tipo linkeado, se actualiza ese en vez de
-# crear otro. Asi el boton es idempotente y no apila efectos al reintentar.
-REUSE_EXISTING = True
+# Si el clip ya tiene un efecto de ese tipo, se lo deja como esta y se crea solo
+# el que falta. Asi el boton es idempotente y no apila efectos al reintentar, ni
+# pisa un archivo que alguien haya cambiado a mano.
+SKIP_IF_EXISTS = True
 
 
 def debug_print(*message):
@@ -492,23 +497,149 @@ def _fallback_plan(look_dir):
 # ============================
 
 
-def find_linked_effect(track_item, effect_type):
-    """Devuelve el soft effect del tipo pedido ya linkeado al clip, si existe."""
+def _guid(obj):
+    """guid() del objeto, para comparar identidad entre dos barridos distintos."""
     try:
-        linked = track_item.linkedItems()
-    except Exception as e:
-        debug_print(f"  [WARN] No se pudo leer linkedItems(): {e}")
+        return obj.guid()
+    except Exception:
         return None
 
-    for item in linked:
-        if not isinstance(item, hiero.core.EffectTrackItem):
-            continue
-        node = _safe_call(item, "node", None)
+
+def _node_class(effect):
+    """Clase del nodo de un EffectTrackItem ('OCIOCDLTransform', ...)."""
+    node = _safe_call(effect, "node", None)
+    try:
+        return node.Class() if node else None
+    except Exception:
+        return None
+
+
+def _node_file(effect):
+    """Valor del knob file, para poder mostrar a que archivo apunta el efecto."""
+    node = _safe_call(effect, "node", None)
+    if not node:
+        return None
+    try:
+        return node["file"].value()
+    except Exception:
+        return None
+
+
+def scan_clip_effects(track_item):
+    """Todos los soft effects que afectan al clip, con como fueron encontrados.
+
+    Hay dos formas de que un efecto quede sobre un clip y solo una figura en
+    linkedItems():
+
+      - LINKEADO: creado con createEffect(trackItem=...). Se mueve con el clip.
+      - SUELTO: creado con timelineIn/timelineOut, o arrastrado a mano en la
+        UI. Vive en un subtrack del track y afecta al clip por solaparse en
+        tiempo, pero el clip no sabe nada de el.
+
+    Si solo miraramos linkedItems(), un efecto hecho a mano no se veria y el
+    boton crearia un duplicado encima.
+
+    Devuelve una lista de dicts con effect, class, linked, same_range, in, out
+    y file.
+    """
+    resultado = []
+    vistos = set()
+
+    try:
+        clip_in = track_item.timelineIn()
+        clip_out = track_item.timelineOut()
+    except Exception as e:
+        debug_print(f"  [WARN] No se pudo leer el rango del clip: {e}")
+        clip_in = clip_out = None
+
+    def _agregar(effect, linked):
+        guid = _guid(effect)
+        if guid is not None and guid in vistos:
+            return
+        if guid is not None:
+            vistos.add(guid)
         try:
-            if node and node.Class() == effect_type:
-                return item
+            efecto_in = effect.timelineIn()
+            efecto_out = effect.timelineOut()
         except Exception:
+            efecto_in = efecto_out = None
+        resultado.append(
+            {
+                "effect": effect,
+                "class": _node_class(effect),
+                "linked": linked,
+                "same_range": (
+                    clip_in is not None
+                    and efecto_in == clip_in
+                    and efecto_out == clip_out
+                ),
+                "in": efecto_in,
+                "out": efecto_out,
+                "file": _node_file(effect),
+            }
+        )
+
+    # 1. Los linkeados al clip.
+    try:
+        for item in track_item.linkedItems():
+            if isinstance(item, hiero.core.EffectTrackItem):
+                _agregar(item, linked=True)
+    except Exception as e:
+        debug_print(f"  [WARN] No se pudo leer linkedItems(): {e}")
+
+    # 2. Los sueltos del track que se solapan en tiempo con el clip.
+    track = track_item.parent()
+    if track and clip_in is not None:
+        try:
+            sub_tracks = track.subTrackItems()
+        except Exception as e:
+            debug_print(f"  [WARN] No se pudo leer subTrackItems(): {e}")
+            sub_tracks = ()
+
+        for sub_track in sub_tracks:
+            items = sub_track if isinstance(sub_track, (list, tuple)) else [sub_track]
+            for item in items:
+                if not isinstance(item, hiero.core.EffectTrackItem):
+                    continue
+                try:
+                    if item.timelineIn() <= clip_out and item.timelineOut() >= clip_in:
+                        _agregar(item, linked=False)
+                except Exception:
+                    continue
+
+    return resultado
+
+
+def report_clip_effects(efectos):
+    """Vuelca lo que hay sobre el clip antes de tocar nada."""
+    if not efectos:
+        debug_print("  [EFECTOS EN EL CLIP] ninguno")
+        return
+
+    debug_print(f"  [EFECTOS EN EL CLIP] {len(efectos)}")
+    for info in efectos:
+        origen = "linkeado" if info["linked"] else "suelto en el track"
+        rango = f"{info['in']}-{info['out']}"
+        exacto = "" if info["same_range"] else " (otro rango que el clip)"
+        debug_print(
+            f"      {info['class'] or '<sin nodo>':<20} {origen:<18} {rango}{exacto}"
+        )
+        if info["file"]:
+            debug_print(f"      {'':<20} file: {info['file']}")
+
+
+def find_existing_effect(efectos, effect_type):
+    """El efecto de ese tipo que ya esta sobre el clip, o None.
+
+    Cuenta como propio del clip el que esta linkeado y el que cubre exactamente
+    su rango. Uno que solapa parcial se reporta pero no bloquea: puede ser un
+    grade que abarca varios clips del track y no tiene por que ser este.
+    """
+    for info in efectos:
+        if info["class"] != effect_type:
             continue
+        if info["linked"] or info["same_range"]:
+            return info
     return None
 
 
@@ -673,21 +804,30 @@ def verify_node(node, effect_type):
             debug_print(f"      {knob_name:<16} = <no legible: {e}>")
 
 
-def apply_effect(track_item, spec):
-    """Crea/actualiza un soft effect del clip con su archivo de look. True si ok."""
+def apply_effect(track_item, spec, efectos_existentes):
+    """Crea el soft effect si falta. Devuelve 'creado', 'salteado' o 'error'."""
     effect_type = spec["type"]
     debug_print(f"\n  --- {effect_type} ---")
+
+    if SKIP_IF_EXISTS:
+        existente = find_existing_effect(efectos_existentes, effect_type)
+        if existente:
+            origen = "linkeado" if existente["linked"] else "suelto en el track"
+            debug_print(
+                f"    [SALTEADO] El clip ya tiene un {effect_type} ({origen}): "
+                f"'{_safe_name(existente['effect'])}'"
+            )
+            if existente["file"]:
+                debug_print(f"               apunta a: {existente['file']}")
+            return "salteado"
+
     debug_print(f"    archivo   : {spec['file']}")
     if spec.get("cccid"):
         debug_print(f"    cccid     : {spec['cccid']}")
 
-    effect = find_linked_effect(track_item, effect_type) if REUSE_EXISTING else None
-    if effect:
-        debug_print(f"    [INFO] El clip ya tenia uno: se actualiza '{_safe_name(effect)}'")
-    else:
-        effect = create_effect_on_track_item(track_item, effect_type)
-        if not effect:
-            return False
+    effect = create_effect_on_track_item(track_item, effect_type)
+    if not effect:
+        return "error"
 
     debug_print(f"    subTrackIndex : {_safe_call(effect, 'subTrackIndex')}")
     debug_print(f"    timelineIn/Out: {_safe_call(effect, 'timelineIn')} / {_safe_call(effect, 'timelineOut')}")
@@ -705,7 +845,7 @@ def apply_effect(track_item, spec):
     if _safe_call(effect, "nodeHasError", False):
         debug_print("    [WARN] El nodo quedo en error. Revisar la ruta del archivo.")
 
-    return ok
+    return "creado" if ok else "error"
 
 
 # ============================
@@ -714,40 +854,61 @@ def apply_effect(track_item, spec):
 
 
 def process_track_item(track_item):
-    """Resuelve el look del clip y le aplica los soft effects. True si todos ok."""
+    """Resuelve el look del clip y le crea los efectos que le falten.
+
+    Devuelve un dict con cuantos quedaron creados, salteados y con error.
+    """
     debug_print("\n" + "-" * 70)
     debug_print(f"[CLIP] {_safe_name(track_item)}")
     debug_print("-" * 70)
 
+    resumen = {"creado": 0, "salteado": 0, "error": 0}
+
     track = track_item.parent()
     debug_print(f"  track                : {_safe_name(track) if track else '<sin track>'}")
+
+    # Se mira que hay sobre el clip ANTES de tocar nada, asi el barrido no ve
+    # los efectos que estamos por crear en esta misma pasada.
+    efectos_existentes = scan_clip_effects(track_item)
+    report_clip_effects(efectos_existentes)
 
     media_path = get_media_path(track_item)
     debug_print(f"  media                : {media_path}")
     if not media_path:
-        return False
+        resumen["error"] += 1
+        return resumen
 
     shot_dir = resolve_shot_dir(media_path)
     debug_print(f"  shot dir             : {shot_dir}")
     if not shot_dir:
         debug_print("  [ERROR] No se pudo resolver la carpeta del shot.")
-        return False
+        resumen["error"] += 1
+        return resumen
 
     look_dir = resolve_look_dir(shot_dir)
     debug_print(f"  look dir             : {look_dir}")
     if not look_dir:
-        return False
+        resumen["error"] += 1
+        return resumen
 
     debug_print("  [PLAN SEGUN EL AMF]")
     plan = build_effect_plan(look_dir)
     if not plan:
         debug_print("  [ERROR] No quedo ningun efecto por aplicar en este clip.")
-        return False
+        resumen["error"] += 1
+        return resumen
 
     # Los efectos se crean en el orden del plan: el primero queda en el
     # subtrack de abajo, o sea que se aplica antes.
-    resultados = [apply_effect(track_item, spec) for spec in plan]
-    return all(resultados)
+    for spec in plan:
+        resumen[apply_effect(track_item, spec, efectos_existentes)] += 1
+
+    debug_print("")
+    debug_print(
+        f"  [CLIP LISTO] creados: {resumen['creado']} | "
+        f"ya estaban: {resumen['salteado']} | errores: {resumen['error']}"
+    )
+    return resumen
 
 
 # ============================
@@ -793,24 +954,28 @@ def main():
         return
 
     project = seq.project()
-    aplicados = 0
+    total = {"creado": 0, "salteado": 0, "error": 0}
 
     if project:
         project.beginUndo("Apply AMF")
     try:
         for track_item in track_items:
             try:
-                if process_track_item(track_item):
-                    aplicados += 1
+                for clave, cantidad in process_track_item(track_item).items():
+                    total[clave] += cantidad
             except Exception as e:
                 debug_print(f"[ERROR] Fallo procesando '{_safe_name(track_item)}': {e}")
                 debug_print(traceback.format_exc())
+                total["error"] += 1
     finally:
         if project:
             project.endUndo()
 
     debug_print("\n" + "=" * 70)
-    debug_print(f"  RESUMEN: {aplicados} de {len(track_items)} clips con el look completo")
+    debug_print(f"  RESUMEN sobre {len(track_items)} clip(s):")
+    debug_print(f"    efectos creados : {total['creado']}")
+    debug_print(f"    ya estaban      : {total['salteado']}")
+    debug_print(f"    con error       : {total['error']}")
     debug_print("=" * 70 + "\n")
 
 
