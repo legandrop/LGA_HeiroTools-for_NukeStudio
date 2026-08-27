@@ -12,7 +12,9 @@ ____________________________________________________________________
   v0.21: Se corrigió el problema cuando se creaba el efecto con el nombre 'Frame_Only' y ya existía uno con ese nombre.
 ____________________________________________________________________
 
-"""import hiero.core
+"""
+
+import hiero.core
 import hiero.ui
 import nuke
 # ============================

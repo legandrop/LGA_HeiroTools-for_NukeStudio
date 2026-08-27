@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.12 | Lega
+  LGA_NKS_CreateV000 v1.13 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,9 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.13: _visible_create_v000_dialog() deja de barrer
+         QApplication.topLevelWidgets() a pelo y pasa por
+         iter_live_widgets(only_top_level=True) + safe_widget_call.
   v1.12: Task cg activa en contexto client (CLIENT_TASKS = comp + cg), con
          carpeta CG y color de cleanup. Orden de tracks en client:
          BurnIn > _comp_ > _cg_ > plates.
@@ -163,7 +166,13 @@ if str(STARTUP_DIR) not in sys.path:
     sys.path.insert(0, str(STARTUP_DIR))
 
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtWidgets,
+    QtGui,
+    QtCore,
+    iter_live_widgets,
+    safe_widget_call,
+)
 from LGA_NKS_Flow_NamingUtils import (
     clean_base_name,
     extract_project_name,
@@ -3258,19 +3267,15 @@ def _clear_create_v000_dialog_instance(*args):
 
 
 def _visible_create_v000_dialog():
-    app = QtWidgets.QApplication.instance()
-    if not app:
-        return None
-
-    for widget in app.topLevelWidgets():
-        try:
-            if (
-                widget.objectName() == "LGA_NKS_CreateV000Dialog"
-                and widget.isVisible()
-            ):
-                return widget
-        except Exception:
+    # iter_live_widgets(only_top_level=True) descarta los wrappers de widgets
+    # que Qt ya destruyo del lado C++. Se los saltea de una, por consistencia
+    # con el fix de allWidgets() y para no depender del try/except de cada
+    # lectura.
+    for widget in iter_live_widgets(only_top_level=True):
+        if safe_widget_call(widget, "objectName") != "LGA_NKS_CreateV000Dialog":
             continue
+        if safe_widget_call(widget, "isVisible", False):
+            return widget
     return None
 
 

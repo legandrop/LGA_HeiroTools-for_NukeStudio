@@ -16,7 +16,7 @@ ____________________________________________________________________
 
   v1.43: Se deja de barrer QApplication.allWidgets() a pelo. Esa lista trae wrappers
          de widgets que Qt ya destruyo del lado C++, y leerles el metaObject() lee
-         memoria liberada. Ahora se itera con iter_live_widgets() y se revalida con
+         el heap. Ahora se itera con iter_live_widgets() y se revalida con
          is_widget_alive() antes de cada deleteLater().
   v1.42: Sistema A de logging — solo archivo, sin consola. Wirea set_debug_handler en
          PreCleanup y ScrollToTopTrack para que usen el mismo logger.
@@ -348,7 +348,7 @@ def find_and_close_old_viewers_and_timelines_safe(old_viewer_object_name=None, o
             return False
 
         # iter_live_widgets saltea los wrappers de widgets que Qt ya destruyo
-        # del lado C++: leerles el metaObject lee memoria liberada.
+        # del lado C++, y evita la llamada a allWidgets() que rompia el heap.
         all_widgets = list(iter_live_widgets())
         old_viewers_found = 0
         old_timelines_found = 0

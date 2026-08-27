@@ -7,7 +7,7 @@ ____________________________________________________________________
 
   v1.84: buscar_ventana_existente deja de barrer QApplication.allWidgets() a pelo:
          esa lista trae wrappers de widgets ya destruidos del lado C++ y leerles
-         el objectName lee memoria liberada
+         el barrido corrompia el heap
   v1.83: encontrar_version_mas_alta solo mira archivos del MISMO proyecto: el glob por
          prefijo tomaba PROJB_BREAKDOWN_v05 como version nueva de PROJB_v001
   v1.82: Conectado al logger compartido del Projects Panel y removidos prints directos en flujos de UI
@@ -654,7 +654,7 @@ def buscar_ventana_existente(nombre_objeto):
     Devuelve la ventana si existe y está visible, None en caso contrario
     """
     # iter_live_widgets saltea los wrappers de widgets que Qt ya destruyo del
-    # lado C++: leerles el objectName lee memoria liberada.
+    # lado C++, y evita la llamada a allWidgets() que corrompia el heap.
     for widget in iter_live_widgets():
         if (
             isinstance(widget, QtWidgets.QMainWindow)

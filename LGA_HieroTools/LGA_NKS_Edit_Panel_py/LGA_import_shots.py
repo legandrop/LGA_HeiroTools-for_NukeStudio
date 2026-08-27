@@ -1,13 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.33 | Lega
+  LGA_import_shots v1.34 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.34: Los tres barridos de ventanas ajenas dejan de usar
+         QApplication.topLevelWidgets() a pelo y pasan por
+         iter_live_widgets(only_top_level=True) + safe_widget_call.
   v1.33: Los tabs suman margen horizontal configurable mediante
          ANCHO_TAB_EXRA, aplicado a izquierda y derecha.
   v1.32: Las versiones V000 importadas se colocan deshabilitadas en el
@@ -167,7 +170,15 @@ else:
     _FFPROBE   = None
     _SUBPROCESS_EXTRA = {}
 
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtWidgets,
+    QtGui,
+    QtCore,
+    is_widget_alive,
+    iter_live_widgets,
+    safe_widget_call,
+    widget_property,
+)
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
@@ -176,30 +187,30 @@ from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 # construyen como opciones habilitables para el usuario.
 RENAME_TRANSCODE_TABS = False
 
-def _has_visible_import_shot_dialogs():
-    app = QtWidgets.QApplication.instance()
-    if not app:
-        return False
-    for widget in app.topLevelWidgets():
-        try:
-            if widget.objectName() == "LGA_ImportShotDialog" and widget.isVisible():
-                return True
-        except Exception:
+def _has_visible_top_level_by_name(object_name):
+    """
+    True si hay una ventana top level viva con ese objectName y visible.
+
+    Se barre con iter_live_widgets(only_top_level=True) y no con
+    topLevelWidgets() a pelo: esa lista trae wrappers de widgets que Qt ya
+    destruyo del lado C++. No se los barre con topLevelWidgets() a pelo por
+    consistencia con el fix de allWidgets(), y para saltearlos de una sin
+    depender del try/except de cada lectura.
+    """
+    for widget in iter_live_widgets(only_top_level=True):
+        if safe_widget_call(widget, "objectName") != object_name:
             continue
+        if safe_widget_call(widget, "isVisible", False):
+            return True
     return False
+
+
+def _has_visible_import_shot_dialogs():
+    return _has_visible_top_level_by_name("LGA_ImportShotDialog")
 
 
 def _has_visible_transcode_queue_window():
-    app = QtWidgets.QApplication.instance()
-    if not app:
-        return False
-    for widget in app.topLevelWidgets():
-        try:
-            if widget.objectName() == "LGA_TranscodeQueueWindow" and widget.isVisible():
-                return True
-        except Exception:
-            continue
-    return False
+    return _has_visible_top_level_by_name("LGA_TranscodeQueueWindow")
 
 
 # During tool development, force the helper to reload on every panel execution.
@@ -2398,23 +2409,19 @@ class ImportShotDialog(QtWidgets.QDialog):
             debug_print("show transcode queue window error: %s" % exc, level="warning")
 
     def _focus_import_shot_window(self, window_id, shot_name):
-        app = QtWidgets.QApplication.instance()
-        if not app:
-            return
         target = None
         shot_key = (shot_name or "").strip().lower()
-        for widget in app.topLevelWidgets():
-            try:
-                if widget.objectName() != "LGA_ImportShotDialog" or not widget.isVisible():
-                    continue
-                if window_id and str(widget.property("window_id") or "") == window_id:
-                    target = widget
-                    break
-                if shot_key and str(widget.property("shot_name") or "").strip().lower() == shot_key:
-                    target = widget
-                    break
-            except Exception:
+        for widget in iter_live_widgets(only_top_level=True):
+            if safe_widget_call(widget, "objectName") != "LGA_ImportShotDialog":
                 continue
+            if not safe_widget_call(widget, "isVisible", False):
+                continue
+            if window_id and widget_property(widget, "window_id") == window_id:
+                target = widget
+                break
+            if shot_key and widget_property(widget, "shot_name").strip().lower() == shot_key:
+                target = widget
+                break
         if not target:
             debug_print(
                 "focus import shot window failed window_id=%s shot=%s" % (window_id, shot_name),
@@ -7739,21 +7746,14 @@ def _clear_import_dialog(*_):
 
 
 def _visible_import_dialog_for_shot(shot_name):
-    app = QtWidgets.QApplication.instance()
-    if not app:
-        return None
-
     shot_key = (shot_name or "").strip().lower()
-    for widget in app.topLevelWidgets():
-        try:
-            if (
-                widget.objectName() == "LGA_ImportShotDialog"
-                and widget.isVisible()
-                and str(widget.property("shot_name") or "").strip().lower() == shot_key
-            ):
-                return widget
-        except Exception:
+    for widget in iter_live_widgets(only_top_level=True):
+        if safe_widget_call(widget, "objectName") != "LGA_ImportShotDialog":
             continue
+        if not safe_widget_call(widget, "isVisible", False):
+            continue
+        if widget_property(widget, "shot_name").strip().lower() == shot_key:
+            return widget
     return None
 
 

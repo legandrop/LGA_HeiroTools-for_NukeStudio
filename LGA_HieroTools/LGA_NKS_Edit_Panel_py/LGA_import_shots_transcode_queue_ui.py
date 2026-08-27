@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode_queue_ui v0.01 | Lega
+  LGA_import_shots_transcode_queue_ui v0.02 | Lega
 
   Ventana no modal para visualizar la cola global de Transcode Plates.
   Muestra jobs activos, pendientes y completados en una tabla unica
   ordenada globalmente, sin modificar la cola ni ejecutar transcodes.
 
+  v0.02: Show All Import Windows y el foco por shot dejan de barrer
+         QApplication.topLevelWidgets() a pelo y pasan por
+         iter_live_widgets(only_top_level=True) + safe_widget_call.
   v0.01: UI inicial de Open Queue. Tabla Shot/Plate/Duracion/Estado,
          Show All Import Windows, Clear Completed y Keep this window on top persistente.
 
@@ -19,7 +22,15 @@ import configparser
 import os
 from pathlib import Path
 
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtCore,
+    QtGui,
+    QtWidgets,
+    is_widget_alive,
+    iter_live_widgets,
+    safe_widget_call,
+    widget_property,
+)
 from LGA_NKS_Edit_Panel_py import LGA_import_shots_settings as settings_mod
 
 
@@ -224,6 +235,7 @@ def _job_key(job):
     ))
 
 
+
 class TranscodeQueueWindow(QtWidgets.QDialog):
     def __init__(self, manager, parent=None, focus_window_callback=None):
         super(TranscodeQueueWindow, self).__init__(parent)
@@ -389,15 +401,16 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         self.setGeometry(geom)
 
     def _show_import_shot_windows(self):
-        app = QtWidgets.QApplication.instance()
-        if not app:
-            return
-        for widget in app.topLevelWidgets():
+        # iter_live_widgets(only_top_level=True) descarta los wrappers de
+        # widgets que Qt ya destruyo del lado C++. Se los saltea de una, por
+        # consistencia con el fix de allWidgets() y para no depender del
+        # try/except de cada lectura.
+        for widget in iter_live_widgets(only_top_level=True):
+            if safe_widget_call(widget, "objectName") != "LGA_ImportShotDialog":
+                continue
             try:
-                if widget.objectName() != "LGA_ImportShotDialog":
-                    continue
                 widget.show()
-                if hasattr(widget, "showNormal") and widget.isMinimized():
+                if safe_widget_call(widget, "isMinimized", False):
                     widget.showNormal()
                 widget.raise_()
                 widget.activateWindow()
@@ -408,26 +421,27 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         if self.focus_window_callback:
             self.focus_window_callback(window_id, shot_name)
             return
-        app = QtWidgets.QApplication.instance()
-        if not app:
-            return
         shot_key = (shot_name or "").strip().lower()
-        for widget in app.topLevelWidgets():
-            try:
-                if widget.objectName() != "LGA_ImportShotDialog" or not widget.isVisible():
-                    continue
-                if window_id and str(widget.property("window_id") or "") == window_id:
-                    widget.show()
-                    widget.raise_()
-                    widget.activateWindow()
-                    return
-                if shot_key and str(widget.property("shot_name") or "").strip().lower() == shot_key:
-                    widget.show()
-                    widget.raise_()
-                    widget.activateWindow()
-                    return
-            except Exception:
+        for widget in iter_live_widgets(only_top_level=True):
+            if safe_widget_call(widget, "objectName") != "LGA_ImportShotDialog":
                 continue
+            if not safe_widget_call(widget, "isVisible", False):
+                continue
+            match = bool(window_id) and widget_property(widget, "window_id") == window_id
+            if not match:
+                match = (
+                    bool(shot_key)
+                    and widget_property(widget, "shot_name").strip().lower() == shot_key
+                )
+            if not match:
+                continue
+            try:
+                widget.show()
+                widget.raise_()
+                widget.activateWindow()
+            except Exception:
+                pass
+            return
 
     def _clear_completed(self):
         self._completed.clear()
