@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.08 | Lega
+  LGA_NKS_Flow_Push_connector v1.09 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,19 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.09: La Version destino se desempata por NOMBRE. El filtro por token y por
+         numero puede matchear mas de una Version cuando conviven dos
+         convenciones de naming que solo difieren en el orden del vendor code
+         (PROJA_..._comp_VND_v003 y PROJA_..._VND_comp_v003): las dos tienen
+         "_comp_" y las dos son v003. find_specific/highest_version_for_shot
+         se quedaban con matching_versions[0], o sea la del ID mas bajo, y la
+         nota del push se colgaba de la Version equivocada. Ahora gana la que
+         coincide exacto con el stem del filename del clip, y si quedan varias
+         sin match exacto se elige una pero se avisa por warnings en vez de
+         resolverlo en silencio. update_version_status tambien se acota por
+         nombre: antes escribia el estado en TODAS las coincidencias, y eso
+         pintaba de `vwd` la Version que el usuario miraba y tapaba que la nota
+         se habia ido a la otra. Los dos resolvers devuelven un elemento mas.
   v1.08: El branch que crea la nota y manda la Version a `vwd` se decide con
          is_note_capable() de LGA_NKS_Flow_Status_Config, no con una lista
          propia. La copia de aca no tenia "revhld": el push abria el dialogo,
@@ -139,6 +152,54 @@ except ImportError:
         CG_TASK_NAME = "cg"
 
 
+def pick_version_by_expected_code(candidates, expected_code, contexto=""):
+    """Desempata entre Versions que matchean el mismo numero de version.
+
+    El filtro por token ("_comp_") y por numero no alcanza para elegir: un
+    mismo (shot, version) puede tener DOS entidades en Flow cuando conviven dos
+    convenciones de naming que solo difieren en el orden del vendor code:
+
+        PROJA_1013_0800_comp_VND_v003     <- task antes del vendor
+        PROJA_1013_0800_VND_comp_v003     <- vendor antes de la task
+
+    Las dos contienen "_comp_" y las dos son v003, asi que quedarse con la
+    primera es una moneda al aire que siempre cae del lado del ID mas bajo. Eso
+    mandaba las notas del push a la Version equivocada mientras el estado se
+    escribia en las dos, que es lo que lo mantuvo invisible.
+
+    `expected_code` es el stem del filename del clip, que identifica sin
+    ambiguedad cual de las dos corresponde. Devuelve (elegida, warning):
+      - hay match exacto de code           -> esa, sin warning
+      - una sola candidata                 -> esa, sin warning
+      - varias y ninguna matchea exacto    -> la primera + warning explicito
+    """
+    if not candidates:
+        return None, None
+
+    if expected_code:
+        objetivo = str(expected_code).strip().lower()
+        for v in candidates:
+            if (v.get("code") or "").strip().lower() == objetivo:
+                debug_print(
+                    f"Desempate por nombre{contexto}: '{v['code']}' (ID: {v['id']}) "
+                    f"coincide exacto con el filename del clip"
+                )
+                return v, None
+
+    if len(candidates) == 1:
+        return candidates[0], None
+
+    codes = ", ".join(f"{v['code']} (ID: {v['id']})" for v in candidates)
+    warning = (
+        f"En Flow hay {len(candidates)} Versions que coinciden{contexto} y ninguna "
+        f"tiene el nombre del clip"
+        + (f" ('{expected_code}')" if expected_code else "")
+        + f". Se usa la primera. Candidatas: {codes}"
+    )
+    debug_print(f"ADVERTENCIA: {warning}")
+    return candidates[0], warning
+
+
 def version_filter_token(task_name, extracted_task):
     """Token con el que se filtran los CODIGOS de Version en Flow.
 
@@ -224,21 +285,25 @@ class ShotGridManager:
             debug_print(f"Error buscando tareas para shot_id {shot_id}: {e}")
             return []
 
-    def find_highest_version_for_shot(self, shot_id, task_name="comp"):
+    def find_highest_version_for_shot(self, shot_id, task_name="comp", expected_code=None):
         """
         Busca la versión más alta para un shot filtrando por la task indicada.
         Para 'comp' también acepta el alias '_cmp_'.
+
+        Devuelve (version, version_number_str, user_id, warning). El warning
+        avisa cuando el numero mas alto lo comparten varias Versions y ninguna
+        coincide con el nombre del clip (ver pick_version_by_expected_code).
         """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
-            return None, None, None
+            return None, None, None, None
         filters = [["entity", "is", {"type": "Shot", "id": shot_id}]]
         fields = ["code", "created_at", "user", "sg_status_list", "description"]
         try:
             versions = self.sg.find("Version", filters, fields)
         except Exception as e:
             debug_print(f"Error buscando versiones para shot_id {shot_id}: {e}")
-            return None, None, None
+            return None, None, None, None
 
         task_tokens = [f"_{task_name}_"]
         if task_name == "comp":
@@ -258,7 +323,13 @@ class ShotGridManager:
                 m = re.search(r"_v(\d+)", v["code"])
                 return int(m.group(1)) if m else -1
 
-            highest_version = max(matching_versions, key=safe_version_num)
+            # El numero mas alto puede estar repetido en varias Versions: se
+            # juntan todas las que lo tienen y se desempata por nombre.
+            tope = safe_version_num(max(matching_versions, key=safe_version_num))
+            empatadas = [v for v in matching_versions if safe_version_num(v) == tope]
+            highest_version, warning = pick_version_by_expected_code(
+                empatadas, expected_code, f" con la version mas alta (v{tope:03d})"
+            )
             m = re.search(r"_v(\d+)", highest_version["code"])
             version_number = m.group(1) if m else "0"
             user_id = (
@@ -266,10 +337,11 @@ class ShotGridManager:
                 if highest_version.get("user") and highest_version["user"].get("id")
                 else None
             )
-            return highest_version, version_number, user_id
-        return None, None, None
+            return highest_version, version_number, user_id, warning
+        return None, None, None, None
 
-    def find_specific_version_for_shot(self, shot_id, version_number, task_name="comp"):
+    def find_specific_version_for_shot(self, shot_id, version_number, task_name="comp",
+                                       expected_code=None):
         """
         Busca una versión específica por número de versión para un shot, filtrando por task.
         Para 'comp' también acepta el alias '_cmp_'.
@@ -278,20 +350,23 @@ class ShotGridManager:
             shot_id: ID del shot en ShotGrid
             version_number: Número de versión (ej: 13 para v013)
             task_name: task a buscar ('comp'/'roto'/'cleanup'). Default 'comp'.
+            expected_code: stem del filename del clip. Es lo unico que desempata
+                cuando el token y el numero matchean mas de una Version.
 
         Returns:
-            Tupla (version, version_number_str, user_id) o (None, None, None) si no se encuentra
+            Tupla (version, version_number_str, user_id, warning), o
+            (None, None, None, None) si no se encuentra.
         """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
-            return None, None, None
+            return None, None, None, None
         filters = [["entity", "is", {"type": "Shot", "id": shot_id}]]
         fields = ["code", "created_at", "user", "sg_status_list", "description"]
         try:
             versions = self.sg.find("Version", filters, fields)
         except Exception as e:
             debug_print(f"Error buscando versiones para shot_id {shot_id}: {e}")
-            return None, None, None
+            return None, None, None, None
 
         task_tokens = [f"_{task_name}_"]
         if task_name == "comp":
@@ -314,7 +389,9 @@ class ShotGridManager:
                         matching_versions.append(v)
 
         if matching_versions:
-            specific_version = matching_versions[0]
+            specific_version, warning = pick_version_by_expected_code(
+                matching_versions, expected_code, f" con v{version_number:03d}"
+            )
             m = re.search(r"_v(\d+)", specific_version["code"])
             version_number_str = m.group(1) if m else str(version_number)
             user_id = (
@@ -325,12 +402,12 @@ class ShotGridManager:
             debug_print(
                 f"Versión específica encontrada: {specific_version['code']} (ID: {specific_version['id']})"
             )
-            return specific_version, version_number_str, user_id
+            return specific_version, version_number_str, user_id, warning
 
         debug_print(
             f"No se encontró versión específica v{version_number:02d} para task '{task_name}' en shot_id {shot_id}"
         )
-        return None, None, None
+        return None, None, None, None
 
     def list_versions_for_task(self, shot_id, task_name="comp"):
         """
@@ -415,7 +492,7 @@ class ShotGridManager:
             return False, f"Error al actualizar el estado de la tarea: {e}"
 
     def update_version_status(self, project_name, shot_code, version_str, new_status,
-                              require_token=None):
+                              require_token=None, expected_code=None):
         """Actualiza el estado de la/las Version en Flow.
 
         Devuelve (ok, error). Si no se encontró ninguna Version que coincida
@@ -426,6 +503,12 @@ class ShotGridManager:
         numero (layout_v003 y lighting_v003), y el filtro por "contains vNNN"
         solo tocaria las dos. Con el token, solo se actualizan las versiones
         cuyo codigo contiene _<token>_.
+
+        expected_code: stem del filename del clip. Si entre las coincidencias
+        hay una con ese nombre exacto, se escribe SOLO en esa. Antes se escribia
+        en todas, y con dos convenciones de naming conviviendo eso pintaba de
+        `vwd` una Version que no era la del clip: el estado se veia bien en la
+        que el usuario miraba y tapaba que la nota se habia ido a la otra.
         """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
@@ -453,6 +536,27 @@ class ShotGridManager:
                 )
                 debug_print(msg)
                 return False, msg
+
+            # Si el nombre del clip identifica una sola de las coincidencias, el
+            # estado se escribe unicamente ahi. Sin expected_code se conserva el
+            # comportamiento historico de actualizar todas.
+            if expected_code and len(versions) > 1:
+                objetivo = str(expected_code).strip().lower()
+                exacta = [
+                    v for v in versions
+                    if (v.get("code") or "").strip().lower() == objetivo
+                ]
+                if exacta:
+                    descartadas = [
+                        f"{v['code']} (ID: {v['id']})"
+                        for v in versions if v["id"] != exacta[0]["id"]
+                    ]
+                    debug_print(
+                        f"Estado acotado por nombre a '{exacta[0]['code']}' "
+                        f"(ID: {exacta[0]['id']}). No se tocan: {', '.join(descartadas)}"
+                    )
+                    versions = exacta
+
             for version in versions:
                 debug_print(
                     f"Actualizando version (ID: {version['id']}) a estado: {new_status}"
@@ -903,12 +1007,21 @@ def execute_full_push_operation(
         if version_token != task_name:
             debug_print(f"Task CG: filtrando versiones por stream '{version_token}'")
 
+        # Nombre esperado de la Version: el stem del filename del clip. Es lo
+        # unico que desempata cuando conviven dos convenciones de naming y las
+        # dos matchean el mismo token y el mismo numero.
+        expected_version_code = base_name_for_detection
+        version_warnings = []
+
         # Buscar versión objetivo explícita (Shift+Click) o la del clip actual.
-        sg_specific_version, sg_version_number_str, user_id = (
+        sg_specific_version, sg_version_number_str, user_id, version_warning = (
             sg_manager.find_specific_version_for_shot(
-                shot["id"], requested_version_number, version_token
+                shot["id"], requested_version_number, version_token,
+                expected_code=expected_version_code,
             )
         )
+        if version_warning:
+            version_warnings.append(version_warning)
 
         # En modo Shift+Click (target_version_number), NO fallback silencioso.
         if target_version_number is not None and not sg_specific_version:
@@ -926,9 +1039,13 @@ def execute_full_push_operation(
                 f"No se encontró versión específica v{requested_version_number:02d} "
                 f"para task '{task_name}', usando versión más alta como fallback"
             )
-            sg_specific_version, sg_version_number_str, user_id = (
-                sg_manager.find_highest_version_for_shot(shot["id"], version_token)
+            sg_specific_version, sg_version_number_str, user_id, version_warning = (
+                sg_manager.find_highest_version_for_shot(
+                    shot["id"], version_token, expected_code=expected_version_code
+                )
             )
+            if version_warning:
+                version_warnings.append(version_warning)
 
         if not sg_specific_version:
             if allow_task_only:
@@ -973,7 +1090,10 @@ def execute_full_push_operation(
             "version_status_value": None,
             "note": False,
         }
-        warnings = []
+        # Los avisos del resolver de Version viajan al usuario: si quedaron
+        # varias candidatas y ninguna coincidia con el nombre del clip, el push
+        # eligio una y hay que decirlo, no tragarselo.
+        warnings = list(version_warnings)
 
         effective_version_number = requested_version_number
         try:
@@ -992,7 +1112,8 @@ def execute_full_push_operation(
             debug_print(f"Actualizando versión a vwd")
             version_ok, version_error = sg_manager.update_version_status(
                 project_name, shot_code, target_version_label, "vwd",
-                require_token=version_require_token
+                require_token=version_require_token,
+                expected_code=expected_version_code,
             )
             if version_ok:
                 applied["version_status"] = True
@@ -1111,7 +1232,8 @@ def execute_full_push_operation(
             debug_print(f"Actualizando versión a rev")
             version_ok, version_error = sg_manager.update_version_status(
                 project_name, shot_code, target_version_label, "rev",
-                require_token=version_require_token
+                require_token=version_require_token,
+                expected_code=expected_version_code,
             )
             if version_ok:
                 applied["version_status"] = True

@@ -81,6 +81,28 @@ efectos van siempre juntos y los decide la misma condicion.
 Los labels historicos (`Corrs_Lega`, `Rev_Dir`) siguen resolviendo por
 `LEGACY_LABEL_ALIASES`, asi que una llamada vieja no queda muda.
 
+## Como se elige la Version destino:
+
+El push resuelve la Version por token de task (`_comp_`) y numero (`_vNNN`).
+Eso NO alcanza cuando en Flow conviven dos convenciones de naming que solo
+difieren en el orden del vendor code:
+
+    PROJA_1013_0800_comp_VND_v003     <- task antes del vendor
+    PROJA_1013_0800_VND_comp_v003     <- vendor antes de la task
+
+Las dos contienen `_comp_` y las dos son v003, asi que las dos pasan el filtro.
+El desempate lo hace el **nombre**: gana la Version cuyo `code` coincide exacto
+con el stem del filename del clip. Si ninguna coincide y quedan varias, el push
+elige una **y lo avisa por `warnings`** — nunca en silencio.
+
+Lo mismo aplica al estado: `update_version_status` escribe solo en la Version
+identificada por nombre. Antes escribia en todas las coincidencias, lo que
+pintaba de `vwd` una Version que no era la del clip y ocultaba que la nota se
+habia ido a otra.
+
+Esto solo se nota en sitios donde hay Versions duplicadas por shot; con una
+sola Version por (shot, numero) el desempate es trivial.
+
 ## Fallback Sin Version:
 
 Si Flow encuentra el proyecto, el shot y la task, pero no encuentra ninguna Version para esa task, el Push muestra una confirmacion antes de continuar. Si el usuario acepta, se actualiza solo el estado de la Task: no se crea nota, no se adjuntan imagenes y no se actualiza estado de Version porque no existe Version destino. El flujo exitoso conserva los efectos locales normales: sincroniza la DB local para la task, aplica tag, pinta el clip y actualiza la ventana Pull abierta si corresponde.
