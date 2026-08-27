@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Status_Config v1.01 | Lega
+  LGA_NKS_Flow_Status_Config v1.02 | Lega
 
   Fuente unica de los estados de Task de Flow para HieroTools: codigo,
   nombre visible, color de clip, tag de XYplorer y en que contexto
@@ -29,6 +29,10 @@ ____________________________________________________________________
   los nombres tambien, salvo las divergencias declaradas en
   docs/Docu_Flow_Estados_Colores.md.
 
+  v1.02: NOTE_CAPABLE_CODES + is_note_capable: los estados que piden nota en el
+         push y mandan la Version a `vwd` salen de aca. Estaban hardcodeados en
+         cinco listas iguales que ya se habian desincronizado (`revhld` faltaba
+         en la del conector y `revprd` en las cinco).
   v1.01: Se elimina el boton Rev Dir Den (empujaba el mismo rev_di que Rev Dir).
          La cola de entrega pasa a pubsh -> check -> apr, con apr como FINAL, y
          apr se muestra "Delivery Apr" en vez de "Delivery OK", que era casi
@@ -190,6 +194,39 @@ PERSONAL_REVIEW_CODES = (
     "revleg",
     "revprd",
 )
+
+
+# Estados que abren el dialogo de nota en el push y que ademas de la Task ponen
+# la Version en `vwd` (vista). Los dos efectos van SIEMPRE juntos: si un estado
+# pide nota es porque alguien va a mirar esa version.
+#
+# Esto estaba hardcodeado en CINCO listas iguales (cuatro en Flow_Push y una en
+# el conector) y se desincronizo igual que `status_translation` antes de la
+# v1.05 del conector: `revhld` estaba en las cuatro de Flow_Push pero no en la
+# del conector, asi que el push abria el dialogo, el usuario escribia la nota y
+# el conector la descartaba devolviendo success sin un solo warning. `revprd`
+# no estaba en ninguna de las cinco.
+#
+# Ojo `rev_su`: NO va aca. Es el unico estado de review que no lleva nota y que
+# pone la Version en `rev`, no en `vwd`.
+#
+# Superset de los dos contextos, como PERSONAL_REVIEW_CODES: un codigo del otro
+# sitio no llega nunca, porque el panel ya filtro los botones por contexto.
+NOTE_CAPABLE_CODES = (
+    "corr",
+    "revcha",
+    "revjua",
+    "revjav",
+    "revleg",
+    "revhld",
+    "revprd",
+    "rev_di",
+)
+
+
+def is_note_capable(code):
+    """True si ese estado pide nota en el push y manda la Version a `vwd`."""
+    return code in NOTE_CAPABLE_CODES
 
 
 def _normalize_mode(mode):

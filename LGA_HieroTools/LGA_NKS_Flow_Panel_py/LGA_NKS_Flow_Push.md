@@ -20,6 +20,7 @@ Su propósito principal es mantener sincronizada la información entre ShotGrid 
 *   **Gestión de Versiones Asíncrona:** Identifica versiones y realiza verificaciones sin congelar la interfaz de usuario.
 *   **Notas para Versiones:** En ciertos estados específicos, abre un diálogo para introducir comentarios que se envían a ShotGrid con adjuntos visuales.
 *   **Integración con ReviewPic:** El diálogo incluye thumbnails de imágenes capturadas, adjuntándolas automáticamente a las notas en ShotGrid.
+*   **Media Arrastrada al Diálogo:** Se pueden arrastrar imágenes (`.png`, `.jpg`, `.jpeg`) sobre el diálogo de notas para adjuntarlas a la misma nota. Se suman a las capturas de ReviewPic pero se manejan aparte: se suben con su nombre original y nunca se borran del disco.
 *   **Procesamiento de Múltiples Clips:** La función `push_from_selected_clips()` permite procesar múltiples clips en una sola operación, con limitación de 4 clips con confirmación para evitar operaciones accidentales.
 *   **Aplicación de Tags en XYplorer:** Después de actualizar exitosamente un estado, aplica automáticamente el tag correspondiente en xyplorer para mantener sincronizados los colores de las carpetas. Si xyplorer no está abierto, simplemente omite esta operación sin generar errores.
 *   **Advertencia de Task/Track Mismatch:** Al iniciar el push, si detecta clips cuya task en el filename no coincide con el nombre del track donde están ubicados, muestra una ventana con la lista. Solo informa, no bloquea el push ni cambia la task que se escribe en SG. Ver [docs/Docu_MultiTask.md](/Users/leg4/.nuke/Python/Startup/docs/Docu_MultiTask.md).
@@ -54,15 +55,31 @@ Antes de abrir el diálogo de notas, el sistema verifica automáticamente si la 
 
 ## Estados que Solicitan una Nota:
 
-La ventana para introducir una nota se activa cuando el estado de la tarea se cambia a uno de los siguientes:
+La lista sale de `NOTE_CAPABLE_CODES`, en `LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py`,
+y se consulta con `is_note_capable(code)`. **No escribirla a mano en ningun otro
+lado**: estuvo copiada en cinco lugares (cuatro en `LGA_NKS_Flow_Push.py` y una
+en el conector), las copias se desincronizaron y el resultado fue un push que
+pedia la nota y despues la descartaba en silencio.
 
-*   **"Corrections"** (se traduce a `corr` en ShotGrid)
-*   **"Corrs_Lega"** (se traduce a `revleg` en ShotGrid)
-*   **"Rev_Dir"** (se traduce a `rev_di` en ShotGrid)
-*   **"Rev Lega"** (se traduce a `revleg` en ShotGrid)
-*   **"Rev Juano"** (se traduce a `revjua` en ShotGrid)
-*   **"Rev Javi"** (se traduce a `revjav` en ShotGrid)
-*   **"Rev Hold"** (se traduce a `revhld` en ShotGrid)
+Un estado que pide nota tambien manda la Version a `vwd` (vista). Los dos
+efectos van siempre juntos y los decide la misma condicion.
+
+| Boton | Codigo | studio | client |
+|---|---|:--:|:--:|
+| Corrections | `corr` | si | si |
+| Rev Charly | `revcha` | si | no |
+| Rev Juano | `revjua` | si | no |
+| Rev Javi | `revjav` | si | no |
+| Rev Lega | `revleg` | si | si |
+| Rev Hold | `revhld` | si | si |
+| Rev Prod | `revprd` | no | si |
+| Rev Dir | `rev_di` | si | si |
+
+**Rev Sebas (`rev_su`) es la excepcion**: no pide nota y manda la Version a
+`rev`, no a `vwd`. Es el unico estado de review que queda afuera.
+
+Los labels historicos (`Corrs_Lega`, `Rev_Dir`) siguen resolviendo por
+`LEGACY_LABEL_ALIASES`, asi que una llamada vieja no queda muda.
 
 ## Fallback Sin Version:
 
@@ -96,7 +113,7 @@ Cuando se abre el diálogo para introducir notas, el script automáticamente:
 
 7. **Adjuntar a ShotGrid:** Las imágenes restantes (que no fueron borradas individualmente) se adjuntan automáticamente a la nota en ShotGrid mediante `attach_images_to_note()` usando upload directo a Note con la convención de nombres `annot_version_<version_id>.<frame_number>.jpg` para que aparezcan con números de frame en la interfaz de ShotGrid.
 
-8. **Opción de Limpieza:** Un checkbox "Delete all saved review images from disk" (marcado por defecto) permite al usuario elegir si borrar automáticamente toda la carpeta `ReviewPic_Cache` después de un envío exitoso únicamente.
+8. **Opción de Limpieza:** Un checkbox "Delete all saved review images from disk" (marcado por defecto) permite al usuario elegir si borrar automáticamente toda la carpeta `ReviewPic_Cache` después de un envío exitoso únicamente. Solo aparece cuando hay capturas en el cache, y su alcance es esa carpeta: la media arrastrada al diálogo no se ve afectada.
 
 9. **Organización Automática:** Las imágenes se organizan automáticamente por carpetas que siguen el patrón `{proyecto}_{secuencia}_{shot}_{task}_v{version}`, manteniéndose sincronizadas con el flujo de trabajo de revisión.
 
@@ -111,7 +128,10 @@ Cuando se abre el diálogo para introducir notas, el script automáticamente:
 - **`call_flow_connector()`**: Puente que comunica con el conector externo de forma asíncrona
 - **`handle_version_check_result()`**: Maneja confirmaciones de versión del usuario para verificaciones asíncronas con Flow
 - **`find_review_images()`**: Localiza imágenes en `LGA_NKS_Flow/ReviewPic_Cache/`
-- **`delete_single_image()`**: Borra una imagen individual del disco y la remueve de la UI y de la lista de imágenes a subir
+- **`delete_single_image()`**: Borra una imagen individual del disco y la remueve de la UI y de la lista de imágenes a subir. Solo se conecta a los thumbnails de ReviewPic
+- **`add_dropped_images()`** / **`remove_dropped_image()`** / **`get_dropped_images()`**: Manejan la media arrastrada al diálogo. `remove_dropped_image()` solo la saca del mensaje, sin tocar el archivo en disco
+- **`_media_paths_from_mime()`**: Filtra las rutas locales de un drop, quedándose solo con `.png`, `.jpg` y `.jpeg` existentes
+- **`_create_drop_overlay()`**: Arma el cartel "Drop to add media" que tapa el diálogo durante el arrastre
 - **`apply_xyplorer_tag()`**: Aplica el tag correspondiente en xyplorer después de actualizar exitosamente el estado
 
 **En `LGA_NKS_Flow/LGA_NKS_Flow_Push_connector.py`:**
@@ -120,6 +140,40 @@ Cuando se abre el diálogo para introducir notas, el script automáticamente:
 - **`find_highest_version_for_shot()`**: Busca la versión más alta disponible para otras operaciones
 - **`execute_flow_operation()`**: Dispatcher principal para todas las operaciones de red
 - **`attach_images_to_note()`**: Sube imágenes a ShotGrid con números de frame
+- **`attach_files_to_note()`**: Sube a la nota la media arrastrada, con su nombre original y sin la convención de anotaciones
+
+## Media Arrastrada al Diálogo de Notas:
+
+Además de las capturas de ReviewPic, el diálogo acepta imágenes arrastradas desde el explorador
+o desde cualquier aplicación que exponga rutas locales:
+
+1. **Formatos Aceptados:** `.png`, `.jpg` y `.jpeg`. El resto del contenido de un drop (carpetas,
+   otros formatos, URLs remotas) se descarta en `_media_paths_from_mime()`. Si el drop no trae
+   ninguna imagen válida, el diálogo ni siquiera lo acepta.
+
+2. **Indicación Visual:** Mientras se arrastra media válida sobre la ventana, un overlay la tapa
+   con el texto "Drop to add media" en el violeta de la marca (`Color.ACCENT_HOVER` del módulo de
+   estilo compartido) y borde punteado. Se arma en `_create_drop_overlay()` y se muestra y oculta
+   en los handlers de drag.
+
+3. **Thumbnails:** Al soltar, las imágenes se agregan al mismo scroll que las capturas, a
+   continuación de ellas. Si no había ninguna captura, la sección se crea en ese momento. Los
+   thumbnails arrastrados se distinguen por el borde violeta y porque su pie muestra el nombre
+   del archivo en vez del número de frame.
+
+4. **Quitar del Mensaje:** El botón de tachito (×) de un thumbnail arrastrado **no borra el
+   archivo del disco**: solo lo saca del mensaje. Es media del usuario, no una captura del cache.
+   El checkbox de limpieza tampoco la alcanza.
+
+5. **Envío a Flow:** La media arrastrada viaja al conector en el parámetro `extra_images`,
+   separada de `review_images`, y se adjunta a la misma nota mediante `attach_files_to_note()`,
+   que la sube con su **nombre original**. No se le aplica la convención
+   `annot_version_<version_id>.<frame_number>`, que existe para que ShotGrid ubique una anotación
+   en un frame del player: una referencia suelta no lo es.
+
+6. **Resumen y Timeout:** Los conteos del resumen del push y el timeout del subproceso del
+   conector suman las dos listas. Si alguna imagen no llega a la nota, el conector lo devuelve
+   como warning.
 
 ## Lógica de tracks
 

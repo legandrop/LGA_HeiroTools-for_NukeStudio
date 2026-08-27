@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.06 | Lega
+  LGA_NKS_Flow_Push_connector v1.08 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,20 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.08: El branch que crea la nota y manda la Version a `vwd` se decide con
+         is_note_capable() de LGA_NKS_Flow_Status_Config, no con una lista
+         propia. La copia de aca no tenia "revhld": el push abria el dialogo,
+         el usuario escribia la nota y este archivo la descartaba devolviendo
+         success con applied.note en False y sin un solo warning. Es la misma
+         desincronizacion que la v1.05 arreglo para status_translation.
+         "revprd" no estaba en ninguna de las cinco copias.
+  v1.07: execute_full_push acepta extra_images: la media que el usuario
+         arrastra al dialogo de notas. La sube el metodo nuevo
+         attach_files_to_note, que la adjunta con su nombre original en vez
+         de renombrarla con la convencion annot_version_<id>.<frame>, que es
+         para anotaciones de un frame. Las cuatro ramas del attach se
+         unifican en un bloque y ahora avisan por warnings si alguna imagen
+         no llego a la nota.
   v1.06: Task CG (client): los codigos de Version en Flow llevan la DISCIPLINA
          del clip, asi que las busquedas se filtran por el stream extraido del
          filename (version_filter_token) y update_version_status acepta
@@ -100,7 +114,7 @@ except ImportError as e:
 # Flow_Push; tener una copia propia aca ya hizo que el conector empujara codigos
 # distintos a los que el panel creia estar mandando.
 try:
-    from LGA_NKS_Flow_Status_Config import get_status_translation
+    from LGA_NKS_Flow_Status_Config import get_status_translation, is_note_capable
 except ImportError as e:
     debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Flow_Status_Config no disponible")
     raise
@@ -638,6 +652,73 @@ class ShotGridManager:
             debug_print(traceback.format_exc())
             return 0  # Retornar 0 imágenes adjuntadas en caso de error
 
+    def attach_files_to_note(self, note_id, file_paths):
+        """
+        Adjunta archivos a una nota tal cual, con su nombre original.
+
+        Es la media que el usuario arrastro al dialogo de notas: no son
+        anotaciones de un frame, asi que no se renombran con la convencion
+        annot_version_<id>.<frame> que usa attach_images_to_note. Devuelve
+        cuantos archivos se subieron.
+        """
+        if not self.sg:
+            debug_print("ShotGrid no inicializado")
+            return 0
+
+        debug_print(
+            f"=== attach_files_to_note: {len(file_paths)} archivo(s) para la nota {note_id} ==="
+        )
+
+        attached_count = 0
+        failed_files = []
+
+        for idx, file_path in enumerate(file_paths, 1):
+            if not os.path.exists(file_path):
+                debug_print(
+                    f"  ❌ ERROR: El archivo [{idx}] NO EXISTE en disco: {file_path}"
+                )
+                failed_files.append(f"[{idx}] {file_path} (no existe)")
+                continue
+
+            try:
+                debug_print(
+                    f"  Subiendo {os.path.basename(file_path)} a Flow (Note ID: {note_id})..."
+                )
+                uploaded_attachment_id = self.sg.upload(
+                    "Note", note_id, file_path, field_name="attachments"
+                )
+
+                if uploaded_attachment_id:
+                    attached_count += 1
+                    debug_print(
+                        f"  ✅ ÉXITO: Archivo [{idx}] adjuntado (Attachment ID: {uploaded_attachment_id})"
+                    )
+                else:
+                    debug_print(
+                        f"  ❌ ERROR: No se obtuvo ID de attachment para {os.path.basename(file_path)}"
+                    )
+                    failed_files.append(
+                        f"[{idx}] {file_path} (no se obtuvo attachment ID)"
+                    )
+
+            except Exception as upload_error:
+                debug_print(
+                    f"  ❌ ERROR subiendo {os.path.basename(file_path)}: {upload_error}"
+                )
+                failed_files.append(
+                    f"[{idx}] {file_path} (error al subir: {upload_error})"
+                )
+
+        debug_print(
+            f"attach_files_to_note: adjuntados {attached_count} de {len(file_paths)}"
+        )
+        if failed_files:
+            debug_print("attach_files_to_note: Lista de archivos que fallaron:")
+            for failed in failed_files:
+                debug_print(f"  {failed}")
+
+        return attached_count
+
     def extract_frame_number_from_path(self, image_path):
         """
         Extrae el numero de frame de la ruta de una imagen.
@@ -674,6 +755,7 @@ def execute_full_push_operation(
     file_path=None,
     target_version_number=None,
     allow_task_only=False,
+    extra_images=None,
 ):
     """
     Ejecuta todo el proceso de push en una sola operación para mayor eficiencia
@@ -899,7 +981,7 @@ def execute_full_push_operation(
         # clasicas se conserva el comportamiento historico (sin token).
         version_require_token = version_token if version_token != task_name else None
 
-        if sg_status in ["rev_di", "corr", "revleg", "revcha", "revjua", "revjav"]:
+        if is_note_capable(sg_status):
             debug_print(f"Actualizando versión a vwd")
             version_ok, version_error = sg_manager.update_version_status(
                 project_name, shot_code, target_version_label, "vwd",
@@ -926,58 +1008,80 @@ def execute_full_push_operation(
                     shot["id"],
                 )
 
-                # Adjuntar imágenes si existen y se creó la nota
-                if created_note and review_images:
-                    debug_print(
-                        f"=== execute_full_push: Iniciando envío de imágenes ==="
-                    )
-                    debug_print(
-                        f"execute_full_push: Nota creada con ID: {created_note['id']}"
-                    )
-                    debug_print(
-                        f"execute_full_push: Versión ID: {sg_specific_version['id']}"
-                    )
-                    debug_print(
-                        f"execute_full_push: Total de imágenes a adjuntar: {len(review_images)}"
-                    )
-                    debug_print(f"execute_full_push: Lista de imágenes a enviar:")
-                    for idx, img_path in enumerate(review_images, 1):
-                        debug_print(f"  [{idx}] {img_path}")
-                        if not os.path.exists(img_path):
-                            debug_print(
-                                f"  ⚠️  ADVERTENCIA: La imagen [{idx}] NO EXISTE: {img_path}"
+                # Adjuntar imagenes si se creo la nota. Son dos listas: las
+                # capturas de ReviewPic, que suben con la convencion de
+                # anotaciones de Flow, y la media que el usuario arrastro al
+                # dialogo de notas, que sube con su nombre original.
+                pending_images = list(review_images or []) + list(extra_images or [])
+
+                if created_note:
+                    applied["note"] = True
+                    images_attached = 0
+
+                    if pending_images:
+                        debug_print(
+                            f"=== execute_full_push: Iniciando envío de imágenes ==="
+                        )
+                        debug_print(
+                            f"execute_full_push: Nota creada con ID: {created_note['id']}"
+                        )
+                        debug_print(
+                            f"execute_full_push: Versión ID: {sg_specific_version['id']}"
+                        )
+                        debug_print(
+                            f"execute_full_push: Total de imágenes a adjuntar: "
+                            f"{len(pending_images)} ({len(review_images or [])} de ReviewPic, "
+                            f"{len(extra_images or [])} arrastradas)"
+                        )
+                        debug_print(f"execute_full_push: Lista de imágenes a enviar:")
+                        for idx, img_path in enumerate(pending_images, 1):
+                            debug_print(f"  [{idx}] {img_path}")
+                            if not os.path.exists(img_path):
+                                debug_print(
+                                    f"  ⚠️  ADVERTENCIA: La imagen [{idx}] NO EXISTE: {img_path}"
+                                )
+
+                    if review_images:
+                        images_attached += int(
+                            sg_manager.attach_images_to_note(
+                                created_note["id"],
+                                sg_specific_version["id"],
+                                review_images,
+                            )
+                            or 0
+                        )
+
+                    if extra_images:
+                        images_attached += int(
+                            sg_manager.attach_files_to_note(
+                                created_note["id"], extra_images
+                            )
+                            or 0
+                        )
+
+                    if pending_images:
+                        debug_print(
+                            f"execute_full_push: Imágenes adjuntadas: "
+                            f"{images_attached} de {len(pending_images)}"
+                        )
+                        if images_attached < len(pending_images):
+                            warnings.append(
+                                f"Solo se adjuntaron {images_attached} de "
+                                f"{len(pending_images)} imágenes a la nota"
                             )
 
-                    attach_result = sg_manager.attach_images_to_note(
-                        created_note["id"], sg_specific_version["id"], review_images
-                    )
-                    debug_print(
-                        f"execute_full_push: Resultado de attach_images_to_note: {attach_result} imágenes adjuntadas"
-                    )
-                    applied["note"] = True
-                    # Retornar información sobre imágenes adjuntadas en el resultado
                     return {
                         "success": True,
                         "message": "Push completado exitosamente",
-                        "images_attached": attach_result,  # attach_result ahora es el número de imágenes adjuntadas
+                        "images_attached": images_attached,
                         "applied": applied,
                         "warnings": warnings,
                     }
-                elif created_note and not review_images:
+
+                if pending_images:
                     debug_print(
-                        f"execute_full_push: Nota creada pero no hay imágenes para adjuntar"
-                    )
-                    applied["note"] = True
-                    return {
-                        "success": True,
-                        "message": "Push completado exitosamente",
-                        "images_attached": 0,
-                        "applied": applied,
-                        "warnings": warnings,
-                    }
-                elif not created_note and review_images:
-                    debug_print(
-                        f"⚠️  ADVERTENCIA: Hay {len(review_images)} imágenes pero no se creó la nota, no se pueden adjuntar"
+                        f"⚠️  ADVERTENCIA: Hay {len(pending_images)} imágenes pero no se "
+                        f"creó la nota, no se pueden adjuntar"
                     )
                     warnings.append(
                         "No se pudo crear la nota en Flow; imágenes no adjuntadas"
@@ -989,9 +1093,9 @@ def execute_full_push_operation(
                         "applied": applied,
                         "warnings": warnings,
                     }
-                else:
-                    # No se creó la nota y no había imágenes.
-                    warnings.append("No se pudo crear la nota en Flow")
+
+                # No se creó la nota y no había imágenes.
+                warnings.append("No se pudo crear la nota en Flow")
 
         elif sg_status == "rev_su":
             debug_print(f"Actualizando versión a rev")
@@ -1085,6 +1189,8 @@ def execute_flow_operation(operation, **kwargs):
             base_name = kwargs.get("base_name")
             message = kwargs.get("message")
             review_images = kwargs.get("review_images", [])
+            # Media arrastrada al dialogo de notas por el usuario
+            extra_images = kwargs.get("extra_images", [])
             original_file_name = kwargs.get("original_file_name")
             file_path = kwargs.get("file_path")
             target_version_number = kwargs.get("target_version_number")
@@ -1100,6 +1206,7 @@ def execute_flow_operation(operation, **kwargs):
                 file_path=file_path,
                 target_version_number=target_version_number,
                 allow_task_only=allow_task_only,
+                extra_images=extra_images,
             )
 
         else:

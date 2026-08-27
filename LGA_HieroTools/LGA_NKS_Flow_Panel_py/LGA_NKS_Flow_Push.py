@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.07 | Lega
+  LGA_NKS_Flow_Push v4.09 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,19 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.09: Los estados que piden nota salen de NOTE_CAPABLE_CODES
+         (LGA_NKS_Flow_Status_Config) via is_note_capable(). Estaban
+         hardcodeados en cuatro listas identicas dentro de este archivo, dos
+         de ellas en el mismo flujo de Push_Task_Status: una decidia si se
+         abria el InputDialog y la otra con que argumentos se armaba el
+         Worker. Suma "revprd" (Rev Prod), que no estaba en ninguna.
+  v4.08: El dialogo de notas acepta media arrastrada. Al arrastrar png/jpg
+         sobre la ventana aparece el cartel "Drop to add media" y al soltar
+         se suman los thumbs debajo de las capturas de ReviewPic. Esa media
+         viaja al conector por separado (extra_images) y se sube a la nota
+         con su nombre original, no con la convencion de anotaciones. El
+         checkbox de borrado y la x de cada thumb siguen borrando solo las
+         capturas del cache: la media arrastrada nunca se toca en disco.
   v4.07: Soporte de la task CG (contexto client). Los clips del track _cg_
          pasan el filtro aunque el filename lleve una disciplina (layout,
          lighting, ...) en vez de un token de task; los demas tracks conservan
@@ -134,6 +147,7 @@ from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_status_translation,
     get_task_status_dict,
+    is_note_capable,
 )
 
 # Reasignar clases para compatibilidad con código existente
@@ -394,7 +408,9 @@ def call_flow_connector(operation, **kwargs):
             timeout_seconds = 30  # Más tiempo para subir imágenes
         elif operation == "execute_full_push":
             # Calcular timeout basado en número de imágenes a enviar
-            num_images = len(kwargs.get("review_images", []))
+            num_images = len(kwargs.get("review_images", []) or []) + len(
+                kwargs.get("extra_images", []) or []
+            )
             if num_images > 0:
                 # 10 segundos base + 10 segundos por imagen (para copiar, subir, etc.)
                 timeout_seconds = 10 + (num_images * 10)
@@ -444,6 +460,26 @@ def call_flow_connector(operation, **kwargs):
     except Exception as e:
         debug_print(f"Error llamando conector: {e}")
         return {"success": False, "error": str(e)}
+
+
+# Ancho de cada thumbnail del dialogo de notas, en px.
+THUMBNAIL_WIDTH = 150
+
+# Extensiones que el dialogo de notas acepta cuando se le arrastra media.
+DROPPED_MEDIA_EXTENSIONS = (".png", ".jpg", ".jpeg")
+
+# Qt no expone QWIDGETSIZE_MAX en PySide: es el tope de setMaximumWidth y se
+# usa para soltar el ancho fijo antes de recalcularlo.
+QWIDGETSIZE_MAX = 16777215
+
+# Violeta de la marca para el cartel de drop. Sale del modulo de estilo
+# compartido; el literal es el mismo valor, por si el import no esta.
+try:
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color as _UIColor
+
+    DROP_ACCENT_COLOR = _UIColor.ACCENT_HOVER
+except Exception:  # fallback defensivo
+    DROP_ACCENT_COLOR = "#774DCB"
 
 
 def find_review_images(base_name, original_file_name=None):
@@ -825,6 +861,13 @@ class InputDialog(QDialog):
         self.file_path = file_path
         self.review_images = []
         self.delete_images_checkbox = None
+        # Media que el usuario arrastra al dialogo. Va aparte de review_images
+        # porque no son capturas del cache: no se borran del disco y se suben a
+        # Flow con su nombre original.
+        self.dropped_images = []
+        self.thumbnails_scroll_area = None
+        self.thumbnails_layout = None
+        self.drop_overlay = None
         # task_name puede venir explícito o se extrae del base_name.
         # normalize_task_name resuelve aliases del filename ("compo" → "comp")
         # para que la búsqueda en DB use siempre el nombre canonical.
@@ -858,6 +901,12 @@ class InputDialog(QDialog):
         self.text_edit.setFixedHeight(120)  # Ajustar la altura de la caja de texto
         self.layout.addWidget(self.text_edit)
 
+        # El dialogo acepta media arrastrada. Al QPlainTextEdit hay que apagarle
+        # los drops: acepta URLs por su cuenta y pegaria la ruta como texto en
+        # vez de dejar que el evento suba al dialogo.
+        self.setAcceptDrops(True)
+        self.text_edit.setAcceptDrops(False)
+
         # Buscar imagenes de ReviewPic y mostrar thumbnails si existen
         self.review_images = find_review_images(base_name, original_file_name)
         debug_print(f"=== InputDialog: Búsqueda de imágenes completada ===")
@@ -886,6 +935,9 @@ class InputDialog(QDialog):
         # Conectar Ctrl+Enter al metodo accept
         shortcut = QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Return), self)
         shortcut.activated.connect(self.accept)
+
+        # Cartel de drop, siempre por encima del resto del dialogo
+        self._create_drop_overlay()
 
         # Ajustar el tamaño del diálogo para que se ajuste a su contenido (ahora solo ajusta la altura)
         self.adjustSize()
@@ -953,142 +1005,16 @@ class InputDialog(QDialog):
 
     def add_thumbnails_section(self, image_paths):
         """
-        Agrega una seccion con thumbnails de las imagenes encontradas.
+        Agrega la seccion de thumbnails con las capturas de ReviewPic encontradas.
         """
         try:
-            # Label para la seccion de thumbnails
-            """ "
-            thumbnails_label = QLabel("Review Images:")
-            thumbnails_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
-            self.layout.addWidget(thumbnails_label)
-            """
-
-            # Crear scroll area para los thumbnails
-            scroll_area = QScrollArea()
-            scroll_area.setMaximumHeight(
-                220
-            )  # Aumentar altura para incluir numeros de frame
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-
-            # Widget contenedor para los thumbnails
-            thumbnails_widget = QWidget()
-            thumbnails_layout = QHBoxLayout(thumbnails_widget)
-            thumbnails_layout.setSpacing(10)
-
-            # Crear thumbnails con numeros de frame
+            self._ensure_thumbnails_section()
             for image_path in image_paths:
                 if os.path.exists(image_path):
-                    # Crear contenedor vertical para imagen + numero de frame
-                    thumbnail_container = QWidget()
-                    container_layout = QVBoxLayout(thumbnail_container)
-                    container_layout.setSpacing(2)
-                    container_layout.setContentsMargins(0, 0, 0, 0)
-                    # Asegurar que el contenedor tenga un ancho fijo basado en el ancho de la imagen
-                    thumbnail_container.setFixedWidth(150)
+                    self._add_thumbnail_widget(image_path, dropped=False)
 
-                    # Crear label para mostrar la imagen
-                    image_label = QLabel()
-
-                    # Cargar y redimensionar la imagen
-                    pixmap = QPixmap(image_path)
-                    if not pixmap.isNull():
-                        # Redimensionar manteniendo aspecto, ancho maximo 150px
-                        scaled_pixmap = pixmap.scaledToWidth(
-                            150, Qt.SmoothTransformation
-                        )
-                        image_label.setPixmap(scaled_pixmap)
-                        image_label.setToolTip(
-                            os.path.basename(image_path)
-                        )  # Mostrar nombre al hacer hover
-                        image_label.setAlignment(Qt.AlignCenter)
-
-                        # Agregar borde al thumbnail
-                        image_label.setStyleSheet(
-                            "border: 1px solid #ccc; padding: 2px;"
-                        )
-
-                        # Conectar el evento de clic del thumbnail
-                        image_label.mousePressEvent = lambda event, path=image_path: self.open_image_with_default_viewer(
-                            path
-                        )
-
-                        container_layout.addWidget(
-                            image_label, alignment=Qt.AlignCenter
-                        )
-
-                        # Crear layout horizontal para botón de borrar y label de frame
-                        frame_container_layout = QHBoxLayout()
-                        frame_container_layout.setContentsMargins(4, 0, 0, 0)
-                        frame_container_layout.setSpacing(4)
-
-                        # Botón de tachito para borrar imagen
-                        delete_button = QPushButton()
-                        delete_button.setFixedSize(16, 16)
-                        delete_button.setStyleSheet(
-                            """
-                            QPushButton {
-                                background-color: transparent;
-                                border: none;
-                                color: #ff4444;
-                                font-size: 12px;
-                                font-weight: bold;
-                            }
-                            QPushButton:hover {
-                                background-color: #ffcccc;
-                                border-radius: 2px;
-                            }
-                            """
-                        )
-                        delete_button.setText("×")  # Usar símbolo × como tachito
-                        delete_button.setToolTip("Borrar esta imagen")
-
-                        # Conectar el botón para borrar la imagen
-                        delete_button.clicked.connect(
-                            lambda checked=False, path=image_path, container=thumbnail_container: self.delete_single_image(
-                                path, container
-                            )
-                        )
-
-                        frame_container_layout.addWidget(delete_button)
-
-                        # Agregar numero de frame
-                        frame_number = self.extract_frame_number_from_filename(
-                            image_path
-                        )
-                        frame_label = QLabel(f"Frame: {frame_number}")
-                        frame_label.setStyleSheet("color: #9c9c9c; font-size: 11px;")
-                        frame_label.setAlignment(Qt.AlignLeft)
-                        frame_container_layout.addWidget(frame_label)
-                        frame_container_layout.addStretch()  # Empujar contenido a la izquierda
-
-                        # Widget contenedor para el layout horizontal
-                        frame_container_widget = QWidget()
-                        frame_container_widget.setLayout(frame_container_layout)
-                        # Asegurar que el widget no se expanda más allá del ancho de la imagen
-                        frame_container_widget.setMaximumWidth(150)
-                        container_layout.addWidget(frame_container_widget)
-
-                        thumbnails_layout.addWidget(thumbnail_container)
-                        debug_print(
-                            f"Thumbnail agregado: {os.path.basename(image_path)} - Frame: {frame_number}"
-                        )
-
-            # Agregar stretch al final para alinear thumbnails a la izquierda
-            thumbnails_layout.addStretch()
-
-            # Configurar el scroll area
-            scroll_area.setWidget(thumbnails_widget)
-            self.layout.addWidget(scroll_area)
-
-            # Agregar checkbox para borrar imagenes
-            self.delete_images_checkbox = QCheckBox(
-                "Delete all saved review images from disk"
-            )
-            self.delete_images_checkbox.setChecked(True)  # Tildado por defecto
-            self.delete_images_checkbox.setStyleSheet("margin-top: 5px;")
-            self.layout.addWidget(self.delete_images_checkbox)
+            # El checkbox de borrado solo aplica al cache de ReviewPic
+            self._ensure_delete_checkbox()
 
             debug_print(
                 f"Seccion de thumbnails agregada con {len(image_paths)} imagenes"
@@ -1096,6 +1022,358 @@ class InputDialog(QDialog):
 
         except Exception as e:
             debug_print(f"Error agregando seccion de thumbnails: {e}")
+
+    def _insert_above_ok_button(self, widget):
+        """
+        Inserta un widget arriba del boton OK. Cuando el dialogo se arma el boton
+        todavia no existe y el widget va al final; cuando la seccion se crea por
+        un drop, el boton ya esta y hay que meterse antes.
+        """
+        ok_button = getattr(self, "ok_button", None)
+        index = self.layout.indexOf(ok_button) if ok_button is not None else -1
+        if index >= 0:
+            self.layout.insertWidget(index, widget)
+        else:
+            self.layout.addWidget(widget)
+
+    def _ensure_thumbnails_section(self):
+        """
+        Crea el scroll de thumbnails si todavia no existe. Lo puede pedir tanto el
+        arranque del dialogo (capturas de ReviewPic) como el primer drop, que
+        llega cuando no habia ninguna imagen.
+        """
+        if self.thumbnails_layout is not None:
+            return
+
+        scroll_area = QScrollArea()
+        scroll_area.setMaximumHeight(220)  # alto para imagen + pie
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        thumbnails_widget = QWidget()
+        thumbnails_layout = QHBoxLayout(thumbnails_widget)
+        thumbnails_layout.setSpacing(10)
+        # Stretch final: los thumbnails se insertan siempre antes, para que
+        # queden alineados a la izquierda sin importar cuando se agregaron.
+        thumbnails_layout.addStretch()
+
+        scroll_area.setWidget(thumbnails_widget)
+        self.thumbnails_scroll_area = scroll_area
+        self.thumbnails_layout = thumbnails_layout
+        self._insert_above_ok_button(scroll_area)
+
+    def _ensure_delete_checkbox(self):
+        """
+        Checkbox de borrado de las capturas de ReviewPic. Solo se ofrece cuando
+        hay capturas en el cache: la media arrastrada nunca se borra del disco.
+        """
+        if self.delete_images_checkbox is not None:
+            return
+
+        self.delete_images_checkbox = QCheckBox(
+            "Delete all saved review images from disk"
+        )
+        self.delete_images_checkbox.setChecked(True)  # Tildado por defecto
+        self.delete_images_checkbox.setStyleSheet("margin-top: 5px;")
+        self._insert_above_ok_button(self.delete_images_checkbox)
+
+    def _add_thumbnail_widget(self, image_path, dropped=False):
+        """
+        Agrega un thumbnail al scroll y devuelve su contenedor.
+
+        dropped=False: captura de ReviewPic. El pie muestra el numero de frame y
+                       la x borra el archivo del disco.
+        dropped=True:  media arrastrada por el usuario. El pie muestra el nombre
+                       del archivo y la x solo la saca del mensaje.
+        """
+        try:
+            pixmap = QPixmap(image_path)
+            if pixmap.isNull():
+                debug_print(f"No se pudo cargar la imagen: {image_path}")
+                return None
+
+            # Contenedor vertical: imagen arriba, pie abajo
+            thumbnail_container = QWidget()
+            container_layout = QVBoxLayout(thumbnail_container)
+            container_layout.setSpacing(2)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            thumbnail_container.setFixedWidth(THUMBNAIL_WIDTH)
+
+            image_label = QLabel()
+            scaled_pixmap = pixmap.scaledToWidth(
+                THUMBNAIL_WIDTH, Qt.SmoothTransformation
+            )
+            image_label.setPixmap(scaled_pixmap)
+            image_label.setToolTip(os.path.basename(image_path))
+            image_label.setAlignment(Qt.AlignCenter)
+            if dropped:
+                image_label.setStyleSheet(
+                    f"border: 1px solid {DROP_ACCENT_COLOR}; padding: 2px;"
+                )
+            else:
+                image_label.setStyleSheet("border: 1px solid #ccc; padding: 2px;")
+
+            # Clic en el thumbnail: abrir con el visor del sistema
+            image_label.mousePressEvent = (
+                lambda event, path=image_path: self.open_image_with_default_viewer(path)
+            )
+            container_layout.addWidget(image_label, alignment=Qt.AlignCenter)
+
+            # Pie: boton de quitar + descripcion
+            footer_layout = QHBoxLayout()
+            footer_layout.setContentsMargins(4, 0, 0, 0)
+            footer_layout.setSpacing(4)
+
+            delete_button = QPushButton()
+            delete_button.setFixedSize(16, 16)
+            delete_button.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: transparent;
+                    border: none;
+                    color: #ff4444;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #ffcccc;
+                    border-radius: 2px;
+                }
+                """
+            )
+            delete_button.setText("×")  # simbolo de tachito
+
+            if dropped:
+                delete_button.setToolTip(
+                    "Quitar esta imagen del mensaje (no la borra del disco)"
+                )
+                delete_button.clicked.connect(
+                    lambda checked=False, path=image_path, container=thumbnail_container: self.remove_dropped_image(
+                        path, container
+                    )
+                )
+            else:
+                delete_button.setToolTip("Borrar esta imagen")
+                delete_button.clicked.connect(
+                    lambda checked=False, path=image_path, container=thumbnail_container: self.delete_single_image(
+                        path, container
+                    )
+                )
+
+            footer_layout.addWidget(delete_button)
+
+            info_label = QLabel()
+            if dropped:
+                # La media arrastrada no tiene numero de frame: se muestra el
+                # nombre del archivo, elidido al ancho del thumbnail.
+                metrics = QtGui.QFontMetrics(info_label.font())
+                info_label.setText(
+                    metrics.elidedText(
+                        os.path.basename(image_path),
+                        Qt.ElideMiddle,
+                        THUMBNAIL_WIDTH - 30,
+                    )
+                )
+                info_label.setToolTip(image_path)
+            else:
+                frame_number = self.extract_frame_number_from_filename(image_path)
+                info_label.setText(f"Frame: {frame_number}")
+            info_label.setStyleSheet("color: #9c9c9c; font-size: 11px;")
+            info_label.setAlignment(Qt.AlignLeft)
+            footer_layout.addWidget(info_label)
+            footer_layout.addStretch()  # Empujar contenido a la izquierda
+
+            footer_widget = QWidget()
+            footer_widget.setLayout(footer_layout)
+            # Que el pie no ensanche la columna mas alla de la imagen
+            footer_widget.setMaximumWidth(THUMBNAIL_WIDTH)
+            container_layout.addWidget(footer_widget)
+
+            # Insertar antes del stretch final del scroll
+            self.thumbnails_layout.insertWidget(
+                self.thumbnails_layout.count() - 1, thumbnail_container
+            )
+            debug_print(
+                f"Thumbnail agregado: {os.path.basename(image_path)} (dropped={dropped})"
+            )
+            return thumbnail_container
+
+        except Exception as e:
+            debug_print(f"Error agregando thumbnail de {image_path}: {e}")
+            return None
+
+    # ------------------------------------------------------------------
+    # Media arrastrada al dialogo
+    # ------------------------------------------------------------------
+    def _create_drop_overlay(self):
+        """
+        Cartel "Drop to add media" que tapa el dialogo mientras se arrastra media
+        encima. Es un hijo del dialogo, asi que se reposiciona en resizeEvent.
+        """
+        try:
+            overlay = QWidget(self)
+            overlay.setObjectName("DropOverlay")
+            # Sin WA_StyledBackground un QWidget pelado ignora el fondo y el
+            # borde que le pide la hoja de estilo, y el cartel saldria vacio.
+            overlay.setAttribute(Qt.WA_StyledBackground, True)
+            overlay.setStyleSheet(
+                f"""
+                QWidget#DropOverlay {{
+                    background-color: rgba(28, 24, 40, 235);
+                    border: 2px dashed {DROP_ACCENT_COLOR};
+                    border-radius: 8px;
+                }}
+                QLabel#DropOverlayLabel {{
+                    color: {DROP_ACCENT_COLOR};
+                    font-size: 22px;
+                    font-weight: bold;
+                    background: transparent;
+                    border: none;
+                }}
+                """
+            )
+            overlay_layout = QVBoxLayout(overlay)
+            overlay_label = QLabel("Drop to add media")
+            overlay_label.setObjectName("DropOverlayLabel")
+            overlay_label.setAlignment(Qt.AlignCenter)
+            overlay_layout.addWidget(overlay_label)
+
+            overlay.setGeometry(self.rect())
+            overlay.hide()
+            self.drop_overlay = overlay
+
+        except Exception as e:
+            debug_print(f"Error creando el overlay de drop: {e}")
+            self.drop_overlay = None
+
+    def resizeEvent(self, event):
+        super(InputDialog, self).resizeEvent(event)
+        if self.drop_overlay is not None:
+            self.drop_overlay.setGeometry(self.rect())
+
+    def _set_drop_overlay_visible(self, visible):
+        """Muestra u oculta el cartel de drop."""
+        if self.drop_overlay is None:
+            return
+        if visible:
+            self.drop_overlay.setGeometry(self.rect())
+            self.drop_overlay.raise_()
+            self.drop_overlay.show()
+        else:
+            self.drop_overlay.hide()
+
+    @staticmethod
+    def _media_paths_from_mime(mime_data):
+        """
+        Rutas locales de png/jpg dentro de un drop. Todo lo demas (carpetas,
+        otros formatos, urls remotas) se ignora.
+        """
+        paths = []
+        if mime_data is None or not mime_data.hasUrls():
+            return paths
+
+        for url in mime_data.urls():
+            if not url.isLocalFile():
+                continue
+            local_path = url.toLocalFile()
+            if os.path.splitext(local_path)[1].lower() not in DROPPED_MEDIA_EXTENSIONS:
+                continue
+            if not os.path.isfile(local_path):
+                continue
+            paths.append(local_path)
+
+        return paths
+
+    def dragEnterEvent(self, event):
+        if self._media_paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+            self._set_drop_overlay_visible(True)
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._media_paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._set_drop_overlay_visible(False)
+        event.accept()
+
+    def dropEvent(self, event):
+        self._set_drop_overlay_visible(False)
+        paths = self._media_paths_from_mime(event.mimeData())
+        if not paths:
+            debug_print("Drop ignorado: no hay png/jpg validos")
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.add_dropped_images(paths)
+
+    def add_dropped_images(self, image_paths):
+        """
+        Suma media arrastrada al dialogo, sin repetir la que ya esta cargada.
+        """
+        known = set()
+        for path in list(self.review_images) + list(self.dropped_images):
+            known.add(os.path.normcase(os.path.abspath(path)))
+
+        added = []
+        for path in image_paths:
+            key = os.path.normcase(os.path.abspath(path))
+            if key in known:
+                debug_print(f"Media arrastrada repetida, se ignora: {path}")
+                continue
+            known.add(key)
+            self.dropped_images.append(path)
+            added.append(path)
+
+        if not added:
+            return
+
+        self._ensure_thumbnails_section()
+        for path in added:
+            self._add_thumbnail_widget(path, dropped=True)
+        self._refresh_window_size()
+
+        debug_print(
+            f"Media arrastrada agregada: {len(added)} (total {len(self.dropped_images)})"
+        )
+
+    def remove_dropped_image(self, image_path, container_widget):
+        """
+        Saca del mensaje una imagen arrastrada. Nunca toca el archivo en disco:
+        es media del usuario, no una captura del cache de ReviewPic.
+        """
+        try:
+            if image_path in self.dropped_images:
+                self.dropped_images.remove(image_path)
+
+            container_widget.setParent(None)
+            container_widget.deleteLater()
+            self._refresh_window_size()
+
+            debug_print(f"Media arrastrada quitada del mensaje: {image_path}")
+
+        except Exception as e:
+            debug_print(f"Error quitando media arrastrada: {e}")
+
+    def _refresh_window_size(self):
+        """
+        Recalcula ancho y alto despues de sumar o sacar thumbnails. El ancho esta
+        fijado para que adjustSize solo mueva la altura, asi que primero hay que
+        soltarlo.
+        """
+        try:
+            self.setMinimumWidth(0)
+            self.setMaximumWidth(QWIDGETSIZE_MAX)
+            self.adjust_window_size()
+            self.setFixedWidth(self.width())
+            self.adjustSize()
+        except Exception as e:
+            debug_print(f"Error refrescando el tamano de la ventana: {e}")
 
     def extract_frame_number_from_filename(self, filename):
         """
@@ -1130,15 +1408,16 @@ class InputDialog(QDialog):
         Minimo: ancho actual, Maximo: 1500px
         """
         try:
-            if not self.review_images:
+            # Cuenta las capturas de ReviewPic y la media arrastrada: las dos
+            # ocupan una columna del mismo ancho en el scroll.
+            num_images = len(self.review_images) + len(self.dropped_images)
+            if not num_images:
                 return
 
             # Calcular ancho necesario basado en thumbnails
-            thumbnail_width = 150
+            thumbnail_width = THUMBNAIL_WIDTH
             thumbnail_spacing = 10
             margin = 40  # Margen total (izquierda + derecha)
-
-            num_images = len(self.review_images)
             required_width = (
                 (num_images * thumbnail_width)
                 + ((num_images - 1) * thumbnail_spacing)
@@ -1228,9 +1507,16 @@ class InputDialog(QDialog):
 
     def get_review_images(self):
         """
-        Retorna la lista de imagenes de review encontradas.
+        Retorna la lista de capturas de ReviewPic encontradas en el cache.
         """
         return self.review_images
+
+    def get_dropped_images(self):
+        """
+        Retorna la media que el usuario arrastro al dialogo. Va separada de las
+        capturas: se sube a Flow con su nombre original y no se borra del disco.
+        """
+        return self.dropped_images
 
     def open_image_with_default_viewer(self, image_path):
         """
@@ -1454,12 +1740,16 @@ class Worker(QRunnable):
         file_path=None,
         target_version_number=None,
         allow_task_only=False,
+        extra_images=None,
     ):
         super(Worker, self).__init__()
         self.button_name = button_name
         self.base_name = base_name
         self.message = message
         self.review_images = review_images or []
+        # Media arrastrada al dialogo de notas: se adjunta a la misma nota que
+        # las capturas, pero con su nombre original.
+        self.extra_images = extra_images or []
         self.should_delete_images = should_delete_images
         self.original_file_name = original_file_name
         self.file_path = file_path
@@ -1541,11 +1831,16 @@ class Worker(QRunnable):
             # Usar la operación optimizada que hace todo en una sola llamada
             debug_print(f"=== Worker: Preparando envío de imágenes ===")
             debug_print(
-                f"Worker: Total de imágenes a enviar: {len(self.review_images)}"
+                f"Worker: Total de imágenes a enviar: "
+                f"{len(self.review_images) + len(self.extra_images)} "
+                f"({len(self.review_images)} de ReviewPic, "
+                f"{len(self.extra_images)} arrastradas)"
             )
-            if self.review_images:
+            if self.review_images or self.extra_images:
                 debug_print(f"Worker: Lista de imágenes que se enviarán a Flow:")
-                for idx, img_path in enumerate(self.review_images, 1):
+                for idx, img_path in enumerate(
+                    list(self.review_images) + list(self.extra_images), 1
+                ):
                     debug_print(f"  [{idx}] {img_path}")
                     if not os.path.exists(img_path):
                         debug_print(
@@ -1560,6 +1855,7 @@ class Worker(QRunnable):
                 base_name=self.base_name,
                 message=self.message,
                 review_images=self.review_images,
+                extra_images=self.extra_images,
                 original_file_name=getattr(self, "original_file_name", None),
                 file_path=getattr(self, "file_path", None),
                 target_version_number=getattr(self, "target_version_number", None),
@@ -1567,7 +1863,7 @@ class Worker(QRunnable):
             )
 
             # Capturar información para el resumen
-            images_total = len(self.review_images)
+            images_total = len(self.review_images) + len(self.extra_images)
             images_attached = 0
             error_message = None
 
@@ -1611,7 +1907,7 @@ class Worker(QRunnable):
                 f"Excepcion: {str(e)}"
             )
             # Generar resumen incluso en caso de excepción
-            images_total = len(self.review_images)
+            images_total = len(self.review_images) + len(self.extra_images)
             self.generate_resumen(success, images_total, 0, f"Excepción: {str(e)}")
         finally:
             # Cerrar la conexión a la base de datos
@@ -1652,6 +1948,7 @@ class Worker(QRunnable):
             self.file_path,
             target_version_number=self.target_version_number,
             allow_task_only=self.allow_task_only,
+            extra_images=self.extra_images,
         )
 
         # Conectar las mismas señales
@@ -2358,7 +2655,7 @@ def Push_Task_Status(
     # PRIMERO: Verificar versiones del timeline ANTES de abrir el diálogo de notas
     sg_status = status_translation.get(button_name, None)
     if (
-        sg_status in ["rev_di", "corr", "revleg", "revhld", "revcha", "revjua", "revjav"]
+        is_note_capable(sg_status)
         and target_version_number is None
     ):
         debug_print("=== Verificando versiones del timeline antes del push ===")
@@ -2456,8 +2753,9 @@ def Push_Task_Status(
     # SEGUNDO: Solicitar el mensaje al usuario para ciertos estados
     message = None
     review_images = []
+    extra_images = []
     should_delete_images = False
-    if sg_status in ["rev_di", "corr", "revleg", "revhld", "revcha", "revjua", "revjav"]:
+    if is_note_capable(sg_status):
         app = QApplication.instance()
         if app is None:
             app = QApplication([])
@@ -2483,6 +2781,7 @@ def Push_Task_Status(
             debug_resumen_print("")
             images_found = (
                 len(input_dialog.get_review_images())
+                + len(input_dialog.get_dropped_images())
                 if hasattr(input_dialog, "get_review_images")
                 else 0
             )
@@ -2496,6 +2795,7 @@ def Push_Task_Status(
 
         # Obtener información adicional del diálogo
         review_images = input_dialog.get_review_images()
+        extra_images = input_dialog.get_dropped_images()
         should_delete_images = bool(input_dialog.should_delete_images())
         print_debug_messages()  # Imprimir logs después de obtener la información del diálogo
 
@@ -2503,7 +2803,7 @@ def Push_Task_Status(
     # Esto evita congelar la UI mientras se consulta Flow
 
     # Una vez que el usuario ha confirmado (o no hay problema de versiones), proceder con las actualizaciones
-    if sg_status in ["rev_di", "corr", "revleg", "revhld", "revcha", "revjua", "revjav"]:
+    if is_note_capable(sg_status):
         worker = Worker(
             button_name,
             base_name,
@@ -2513,6 +2813,7 @@ def Push_Task_Status(
             original_file_name,
             file_path=file_path,
             target_version_number=target_version_number,
+            extra_images=extra_images,
         )
         # Conectar señales
         worker.signals.result_ready.connect(handle_results)
@@ -2779,16 +3080,7 @@ def push_from_selected_clips(
 
     # Determinar si el estado requiere comentario.
     sg_status = status_translation.get(button_name, None)
-    note_capable_statuses = [
-        "rev_di",
-        "corr",
-        "revleg",
-        "revhld",
-        "revcha",
-        "revjua",
-        "revjav",
-    ]
-    needs_message = sg_status in note_capable_statuses
+    needs_message = is_note_capable(sg_status)
 
     def create_clip_callback(current_clip, current_base_name, current_exr_name):
         """Crea un callback que ejecuta per_clip_callback si existe."""

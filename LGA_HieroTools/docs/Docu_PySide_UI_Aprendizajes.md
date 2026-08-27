@@ -317,6 +317,63 @@ proyectos estén abiertos ni en qué orden.
 
 ---
 
+## Drag & drop de archivos en un dialogo
+
+### Problema — el drop nunca llega al dialogo, o el cartel de drop sale invisible
+
+Al agregar `setAcceptDrops(True)` a un `QDialog` que ya tiene un campo de texto,
+arrastrarle un archivo encima no dispara `dropEvent`: el archivo se pega como
+ruta dentro del texto. Y si el cartel "soltar aca" se arma como un `QWidget`
+hijo con stylesheet, aparece transparente, sin fondo ni borde punteado.
+
+#### Por que falla
+
+1. `QPlainTextEdit` y `QLineEdit` aceptan drops por su cuenta. Como estan
+   arriba del dialogo en el hit test, se quedan con el evento y lo interpretan
+   como texto. Qt solo propaga el drag al ancestro cuando el widget de abajo
+   **no** acepta drops.
+2. Un `QWidget` pelado no dibuja el `background-color` ni el `border` que le
+   pide la hoja de estilo. Los widgets que si lo hacen (`QFrame`, `QLabel`,
+   `QPushButton`) tienen su propio dibujado; el `QWidget` base necesita que se
+   le prenda el atributo a mano.
+
+#### Solucion
+
+```python
+# 1) El dialogo acepta drops y al campo de texto se los apagamos
+self.setAcceptDrops(True)
+self.text_edit.setAcceptDrops(False)
+
+# 2) El overlay necesita WA_StyledBackground para pintar fondo y borde
+overlay = QtWidgets.QWidget(self)
+overlay.setObjectName("DropOverlay")
+overlay.setAttribute(Qt.WA_StyledBackground, True)
+overlay.setStyleSheet(
+    "QWidget#DropOverlay { background-color: rgba(28, 24, 40, 235);"
+    " border: 2px dashed #774DCB; border-radius: 8px; }"
+)
+overlay.hide()
+```
+
+#### Notas
+
+- El overlay es hijo del dialogo, asi que hay que reposicionarlo en
+  `resizeEvent` con `setGeometry(self.rect())` y llamarle `raise_()` antes de
+  `show()`, o queda tapado por los widgets que se agregaron despues.
+- Validar las rutas en `dragEnterEvent` **y** en `dragMoveEvent`: si solo se
+  acepta en el enter, Qt cancela el drop igual.
+- `QDragLeaveEvent` no tiene `mimeData()`: en `dragLeaveEvent` solo se puede
+  ocultar el cartel.
+- Las rutas salen de `event.mimeData().urls()`, filtrando por
+  `url.isLocalFile()` — un drag desde un navegador trae URLs remotas.
+
+Ejemplo aplicado: `InputDialog` en
+[LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py), el
+dialogo de notas del Push, que acepta png/jpg arrastrados y los adjunta a la
+nota de Flow.
+
+---
+
 ## Referencias
 
 - [LGA_import_shots.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots.py) — clase
@@ -325,3 +382,6 @@ proyectos estén abiertos ni en qué orden.
   de estilos de paneles (colores, fuentes, bordes).
 - [GUI_Windows_Reference.md](GUI_Windows_Reference.md) — referencias de
   ventanas y widgets utilizados en el proyecto.
+- [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py) — clase
+  `InputDialog`, metodos `_create_drop_overlay`, `_media_paths_from_mime`,
+  `dropEvent`, `add_dropped_images`.
