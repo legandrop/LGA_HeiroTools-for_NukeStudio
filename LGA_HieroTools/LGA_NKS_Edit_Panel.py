@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.02 | Lega
+  LGA_EditToolsPanel v3.03 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.03: Nuevo boton Apply AMF, que llama a LGA_NKS_ApplyAMF.py
   v3.02: Movido boton Self ReplaceClip desde el Review Panel, debajo de Reconnect Media.
   v3.01: Nuevo boton de import shot
   v3.00: Reconnect colapsado en un solo botón con submenu flotante (T>N, N>T, Win>Mac)
@@ -309,6 +310,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Default | Clip", self.default_clip, "#434c41", None, "Cambia el color transform a default en los clips seleccionados"),
             ("Compositing Log | Clip", self.set_compositing_log, "#434c41", None, "Cambia el color transform a compositing_log en los clips seleccionados"),
             ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Detecta y corrige clips con colorspace rec709 o gamma2.2"),
+            ("Apply AMF", self.apply_amf, "#434c41", None, "Crea los soft effects de color en los clips seleccionados siguiendo el .amf del shot (.cdl y .clf de _input/Look_Files)"),
             ("Import shot", self.import_shot, "#2a4d3a", None, "Importa shots al proyecto"),
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
             ("Create v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar una secuencia negra v000 del shot activo"),
@@ -655,6 +657,24 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                     debug_print_b(">>> Error al ejecutar Fix Colorspaces script")
         except Exception as e:
             debug_print_b(f"Error durante la ejecución de Fix Colorspaces: {e}")
+            import traceback
+
+            debug_print_b(traceback.format_exc())
+
+    ###### Apply AMF
+    def apply_amf(self):
+        """Ejecuta LGA_NKS_ApplyAMF.py para crear los soft effects de color en los clips seleccionados."""
+        debug_print_b("\n>>> Ejecutando Apply AMF script...")
+
+        try:
+            # El undo lo maneja el propio script, para no anidar bloques
+            result = self.execute_external_script("LGA_NKS_ApplyAMF.py")
+            if result:
+                debug_print_b(">>> Apply AMF script completado")
+            else:
+                debug_print_b(">>> Error al ejecutar Apply AMF script")
+        except Exception as e:
+            debug_print_b(f"Error durante la ejecución de Apply AMF: {e}")
             import traceback
 
             debug_print_b(traceback.format_exc())
