@@ -353,10 +353,18 @@ overlay.setStyleSheet(
     " border: 2px dashed #774DCB; border-radius: 8px; }"
 )
 overlay.hide()
+# El cartel queda abajo del cursor durante el arrastre
+overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 ```
 
 #### Notas
 
+- Apagarle los drops al campo de texto tiene un costo: ese campo deja de
+  aceptar tambien el drop de texto plano o de una seleccion. Es el precio de
+  que el archivo llegue al dialogo, y conviene decidirlo a proposito.
+- `QPlainTextEdit` es un `QAbstractScrollArea`: quien recibe el drop es su
+  `viewport()`. Qt propaga el `AcceptDropsChange` al viewport, pero apagarlo en
+  los dos (`widget` y `widget.viewport()`) sale gratis y no depende del build.
 - El overlay es hijo del dialogo, asi que hay que reposicionarlo en
   `resizeEvent` con `setGeometry(self.rect())` y llamarle `raise_()` antes de
   `show()`, o queda tapado por los widgets que se agregaron despues.

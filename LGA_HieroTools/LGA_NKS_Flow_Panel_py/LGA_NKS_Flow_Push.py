@@ -25,6 +25,8 @@ ____________________________________________________________________
          con su nombre original, no con la convencion de anotaciones. El
          checkbox de borrado y la x de cada thumb siguen borrando solo las
          capturas del cache: la media arrastrada nunca se toca en disco.
+         La nota se crea aunque el mensaje quede vacio si hay imagenes que
+         adjuntar, y un attach parcial ahora se avisa por ventana.
   v4.07: Soporte de la task CG (contexto client). Los clips del track _cg_
          pasan el filtro aunque el filename lleve una disciplina (layout,
          lighting, ...) en vez de un token de task; los demas tracks conservan
@@ -141,7 +143,14 @@ else:
 # (dentro de push_from_selected_clips) para evitar problemas de inicialización Qt.
 
 # Importar compatibilidad Qt para Hiero Panels
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, QShortcut
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtWidgets,
+    QtGui,
+    QtCore,
+    Qt,
+    QShortcut,
+    is_widget_alive,
+)
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import validate_push_preflight
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
@@ -408,14 +417,27 @@ def call_flow_connector(operation, **kwargs):
             timeout_seconds = 30  # Más tiempo para subir imágenes
         elif operation == "execute_full_push":
             # Calcular timeout basado en número de imágenes a enviar
-            num_images = len(kwargs.get("review_images", []) or []) + len(
-                kwargs.get("extra_images", []) or []
-            )
+            review_count = len(kwargs.get("review_images", []) or [])
+            extra_paths = kwargs.get("extra_images", []) or []
+            num_images = review_count + len(extra_paths)
             if num_images > 0:
-                # 10 segundos base + 10 segundos por imagen (para copiar, subir, etc.)
-                timeout_seconds = 10 + (num_images * 10)
+                # 10 segundos base + 10 segundos por imagen (para copiar, subir, etc.).
+                # Las capturas de ReviewPic son jpg chicos, pero la media arrastrada
+                # puede ser un png full-res de varios MB: ademas del costo por
+                # archivo se presupuestan 10s por cada 5 MB arrastrados. Si el
+                # timeout corta a mitad del upload, Flow queda a medio escribir y
+                # el panel no puede saber que se aplico.
+                extra_bytes = 0
+                for extra_path in extra_paths:
+                    try:
+                        extra_bytes += os.path.getsize(extra_path)
+                    except OSError:
+                        pass
+                size_budget = int(extra_bytes / (5 * 1024 * 1024)) * 10
+                timeout_seconds = 10 + (num_images * 10) + size_budget
                 debug_print(
-                    f"Timeout ajustado para execute_full_push: {timeout_seconds}s ({num_images} imágenes)"
+                    f"Timeout ajustado para execute_full_push: {timeout_seconds}s "
+                    f"({num_images} imágenes, {extra_bytes / (1024 * 1024):.1f} MB arrastrados)"
                 )
             else:
                 timeout_seconds = 10  # Sin imágenes, timeout normal
@@ -465,6 +487,25 @@ def call_flow_connector(operation, **kwargs):
 # Ancho de cada thumbnail del dialogo de notas, en px.
 THUMBNAIL_WIDTH = 150
 
+
+def get_review_pic_cache_dir():
+    """Carpeta donde ReviewPic deja las capturas que el push adjunta."""
+    return os.path.join(os.path.dirname(__file__), "ReviewPic_Cache")
+
+
+def is_inside_review_cache(path):
+    """
+    True si la ruta cuelga del cache de ReviewPic. Esa carpeta la borra entera
+    el checkbox de limpieza, asi que lo que vive adentro no puede tratarse como
+    media arrastrada: se estaria prometiendo que no se toca el disco.
+    """
+    try:
+        cache_dir = os.path.normcase(os.path.abspath(get_review_pic_cache_dir()))
+        target = os.path.normcase(os.path.abspath(path))
+        return target == cache_dir or target.startswith(cache_dir + os.sep)
+    except Exception:
+        return False
+
 # Extensiones que el dialogo de notas acepta cuando se le arrastra media.
 DROPPED_MEDIA_EXTENSIONS = (".png", ".jpg", ".jpeg")
 
@@ -492,9 +533,7 @@ def find_review_images(base_name, original_file_name=None):
         original_file_name: Nombre original del archivo con versión (opcional, ej: "PROJF_080_010_comp_v007_%04d.exr")
     """
     try:
-        # Obtener la ruta del script actual
-        script_dir = os.path.dirname(__file__)
-        cache_dir = os.path.join(script_dir, "ReviewPic_Cache")
+        cache_dir = get_review_pic_cache_dir()
 
         # Si tenemos el nombre original, extraer la versión de ahí
         version_number_str = None
@@ -868,6 +907,10 @@ class InputDialog(QDialog):
         self.thumbnails_scroll_area = None
         self.thumbnails_layout = None
         self.drop_overlay = None
+        # El mimeData no cambia durante un arrastre: se valida una vez en
+        # dragEnterEvent y dragMoveEvent solo consulta este flag, para no hacer
+        # un stat a disco por cada movimiento del mouse.
+        self._drag_has_media = False
         # task_name puede venir explícito o se extrae del base_name.
         # normalize_task_name resuelve aliases del filename ("compo" → "comp")
         # para que la búsqueda en DB use siempre el nombre canonical.
@@ -906,6 +949,10 @@ class InputDialog(QDialog):
         # vez de dejar que el evento suba al dialogo.
         self.setAcceptDrops(True)
         self.text_edit.setAcceptDrops(False)
+        # QPlainTextEdit es un QAbstractScrollArea: quien recibe el drop es su
+        # viewport, asi que se lo apagamos tambien y no dependemos de que Qt
+        # propague el AcceptDropsChange al hijo.
+        self.text_edit.viewport().setAcceptDrops(False)
 
         # Buscar imagenes de ReviewPic y mostrar thumbnails si existen
         self.review_images = find_review_images(base_name, original_file_name)
@@ -1025,14 +1072,25 @@ class InputDialog(QDialog):
 
     def _insert_above_ok_button(self, widget):
         """
-        Inserta un widget arriba del boton OK. Cuando el dialogo se arma el boton
-        todavia no existe y el widget va al final; cuando la seccion se crea por
-        un drop, el boton ya esta y hay que meterse antes.
+        Inserta un widget arriba del pie del dialogo: el checkbox de limpieza y
+        el boton OK. Cuando el dialogo se arma no existe ninguno de los dos y el
+        widget va al final. Mirar solo el boton no alcanza: si el usuario borra
+        todas las capturas, el scroll se saca pero el checkbox queda, y el
+        scroll que recrea el primer drop entraria DEBAJO de ese checkbox.
         """
-        ok_button = getattr(self, "ok_button", None)
-        index = self.layout.indexOf(ok_button) if ok_button is not None else -1
-        if index >= 0:
-            self.layout.insertWidget(index, widget)
+        indices = []
+        for reference in (
+            getattr(self, "delete_images_checkbox", None),
+            getattr(self, "ok_button", None),
+        ):
+            if reference is None:
+                continue
+            index = self.layout.indexOf(reference)
+            if index >= 0:
+                indices.append(index)
+
+        if indices:
+            self.layout.insertWidget(min(indices), widget)
         else:
             self.layout.addWidget(widget)
 
@@ -1164,10 +1222,16 @@ class InputDialog(QDialog):
             footer_layout.addWidget(delete_button)
 
             info_label = QLabel()
+            # El pie va a 11px por hoja de estilo, pero el QSS no cambia el
+            # QFont del widget: sin este font explicito el elide se calcularia
+            # con la fuente por defecto y cortaria los nombres de mas.
+            footer_font = info_label.font()
+            footer_font.setPixelSize(11)
+            info_label.setFont(footer_font)
             if dropped:
                 # La media arrastrada no tiene numero de frame: se muestra el
                 # nombre del archivo, elidido al ancho del thumbnail.
-                metrics = QtGui.QFontMetrics(info_label.font())
+                metrics = QtGui.QFontMetrics(footer_font)
                 info_label.setText(
                     metrics.elidedText(
                         os.path.basename(image_path),
@@ -1217,6 +1281,9 @@ class InputDialog(QDialog):
             # Sin WA_StyledBackground un QWidget pelado ignora el fondo y el
             # borde que le pide la hoja de estilo, y el cartel saldria vacio.
             overlay.setAttribute(Qt.WA_StyledBackground, True)
+            # El cartel queda justo abajo del cursor mientras se arrastra: si
+            # participara del hit test podria quedarse con el drop.
+            overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             overlay.setStyleSheet(
                 f"""
                 QWidget#DropOverlay {{
@@ -1286,23 +1353,26 @@ class InputDialog(QDialog):
         return paths
 
     def dragEnterEvent(self, event):
-        if self._media_paths_from_mime(event.mimeData()):
+        self._drag_has_media = bool(self._media_paths_from_mime(event.mimeData()))
+        if self._drag_has_media:
             event.acceptProposedAction()
             self._set_drop_overlay_visible(True)
         else:
             event.ignore()
 
     def dragMoveEvent(self, event):
-        if self._media_paths_from_mime(event.mimeData()):
+        if self._drag_has_media:
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragLeaveEvent(self, event):
+        self._drag_has_media = False
         self._set_drop_overlay_visible(False)
         event.accept()
 
     def dropEvent(self, event):
+        self._drag_has_media = False
         self._set_drop_overlay_visible(False)
         paths = self._media_paths_from_mime(event.mimeData())
         if not paths:
@@ -1315,31 +1385,84 @@ class InputDialog(QDialog):
     def add_dropped_images(self, image_paths):
         """
         Suma media arrastrada al dialogo, sin repetir la que ya esta cargada.
+
+        Descarta dos casos y avisa por los dos: lo que ya vive en el cache de
+        ReviewPic, porque el checkbox de limpieza borra esa carpeta entera y a
+        la media arrastrada se le prometio que no se toca; y lo que Qt no puede
+        decodificar, porque sin thumbnail no hay boton para sacarla del mensaje
+        y se subiria a Flow a ciegas.
         """
         known = set()
         for path in list(self.review_images) + list(self.dropped_images):
             known.add(os.path.normcase(os.path.abspath(path)))
 
-        added = []
+        candidates = []
+        from_cache = []
         for path in image_paths:
             key = os.path.normcase(os.path.abspath(path))
             if key in known:
                 debug_print(f"Media arrastrada repetida, se ignora: {path}")
                 continue
             known.add(key)
-            self.dropped_images.append(path)
-            added.append(path)
+            if is_inside_review_cache(path):
+                from_cache.append(path)
+                continue
+            candidates.append(path)
 
-        if not added:
+        added = []
+        unreadable = []
+        if candidates:
+            self._ensure_thumbnails_section()
+            for path in candidates:
+                if self._add_thumbnail_widget(path, dropped=True) is None:
+                    unreadable.append(path)
+                    continue
+                self.dropped_images.append(path)
+                added.append(path)
+            self._refresh_window_size()
+            debug_print(
+                f"Media arrastrada agregada: {len(added)} "
+                f"(total {len(self.dropped_images)})"
+            )
+
+        self._warn_about_rejected_media(from_cache, unreadable)
+
+    def _warn_about_rejected_media(self, from_cache, unreadable):
+        """
+        Avisa por la media que no entro al mensaje. Sin esto el usuario ve que
+        no aparecio el thumbnail y no tiene forma de saber por que.
+        """
+        if not from_cache and not unreadable:
             return
 
-        self._ensure_thumbnails_section()
-        for path in added:
-            self._add_thumbnail_widget(path, dropped=True)
-        self._refresh_window_size()
+        lines = []
+        if from_cache:
+            lines.append(
+                "Estas imágenes ya están en el cache de ReviewPic. Se manejan "
+                "con el checkbox de borrado, no como media adjunta:"
+            )
+            lines.extend(f"  - {os.path.basename(path)}" for path in from_cache)
+        if unreadable:
+            if lines:
+                lines.append("")
+            lines.append("Estos archivos no se pudieron leer como imagen:")
+            lines.extend(f"  - {os.path.basename(path)}" for path in unreadable)
 
-        debug_print(
-            f"Media arrastrada agregada: {len(added)} (total {len(self.dropped_images)})"
+        message = "\n".join(lines)
+        debug_print(f"Media arrastrada descartada:\n{message}")
+        # El aviso se difiere: abrir un modal adentro del dropEvent deja el
+        # loop de drag de Qt abierto y en Windows puede colgar el arrastre.
+        # singleShot con un callable pelado no tiene objeto de contexto, asi
+        # que Qt no puede autodesconectarlo: hoy no dangla solo porque el lambda
+        # sostiene al dialogo. Si alguien le diera un parent o WA_DeleteOnClose,
+        # el objeto C++ moriria primero y el slot reventaria.
+        QtCore.QTimer.singleShot(
+            0,
+            lambda: (
+                QMessageBox.information(self, "Media no agregada", message)
+                if is_widget_alive(self)
+                else None
+            ),
         )
 
     def remove_dropped_image(self, image_path, container_widget):
@@ -1360,17 +1483,36 @@ class InputDialog(QDialog):
         except Exception as e:
             debug_print(f"Error quitando media arrastrada: {e}")
 
+    def _remove_thumbnails_section(self):
+        """
+        Saca el scroll cuando no queda ninguna imagen. Si no, deja un hueco
+        vacio del alto del scroll abajo de la caja de texto.
+        """
+        if self.thumbnails_scroll_area is None:
+            return
+
+        self.layout.removeWidget(self.thumbnails_scroll_area)
+        self.thumbnails_scroll_area.setParent(None)
+        self.thumbnails_scroll_area.deleteLater()
+        self.thumbnails_scroll_area = None
+        self.thumbnails_layout = None
+
     def _refresh_window_size(self):
         """
         Recalcula ancho y alto despues de sumar o sacar thumbnails. El ancho esta
         fijado para que adjustSize solo mueva la altura, asi que primero hay que
-        soltarlo.
+        soltarlo; si ya no queda ninguna imagen se lo deja suelto para que la
+        ventana pueda volver a su tamano natural.
         """
         try:
+            if not self.review_images and not self.dropped_images:
+                self._remove_thumbnails_section()
+
             self.setMinimumWidth(0)
             self.setMaximumWidth(QWIDGETSIZE_MAX)
-            self.adjust_window_size()
-            self.setFixedWidth(self.width())
+            if self.thumbnails_layout is not None:
+                self.adjust_window_size()
+                self.setFixedWidth(self.width())
             self.adjustSize()
         except Exception as e:
             debug_print(f"Error refrescando el tamano de la ventana: {e}")
@@ -1478,7 +1620,7 @@ class InputDialog(QDialog):
                 container_widget.deleteLater()
 
                 # Actualizar tamaño de ventana si es necesario
-                self.adjust_window_size()
+                self._refresh_window_size()
 
                 debug_print(f"Thumbnail removido de la UI")
             else:
@@ -1540,8 +1682,7 @@ def delete_review_pic_cache():
     Borra completamente la carpeta ReviewPic_Cache y todo su contenido.
     """
     try:
-        script_dir = os.path.dirname(__file__)
-        cache_dir = os.path.join(script_dir, "ReviewPic_Cache")
+        cache_dir = get_review_pic_cache_dir()
 
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
@@ -1687,6 +1828,9 @@ class WorkerSignals(QObject):
     result_ready = Signal(str, int, int)
     task_finished = Signal(bool)  # Ahora incluye el estado de exito
     error = Signal(str)
+    # Push que termino bien pero dejo algo sin escribir en Flow (por ejemplo
+    # imagenes que no llegaron a la nota). Sin esto solo quedaba en el log.
+    warning = Signal(str)
     task_only_confirmation = Signal(dict)
     debug_output = Signal()  # Nueva señal para imprimir logs
     version_check_result = Signal(
@@ -1758,6 +1902,7 @@ class Worker(QRunnable):
         self.task_only_mode = False
         self.task_only_prompt_context = None
         self.last_error_message = None
+        self.pending_warnings = []
         self.signals = WorkerSignals()
 
     def _push_context_lines(self):
@@ -1879,7 +2024,8 @@ class Worker(QRunnable):
                 self.task_only_mode = bool(result.get("task_only"))
 
                 # Warnings de Flow: partes del push que no se escribieron.
-                for warning in result.get("warnings") or []:
+                self.pending_warnings = list(result.get("warnings") or [])
+                for warning in self.pending_warnings:
                     debug_print(f"Worker: Advertencia de Flow: {warning}")
 
                 # Si fue exitoso, actualizar también la base de datos local.
@@ -1929,6 +2075,8 @@ class Worker(QRunnable):
                 self.signals.task_only_confirmation.emit(self.task_only_prompt_context)
             elif not success and self.last_error_message:
                 self.signals.error.emit(self.last_error_message)
+            elif success and self.pending_warnings:
+                self.signals.warning.emit("\n".join(self.pending_warnings))
             self.signals.task_finished.emit(success)
             self.signals.debug_output.emit()  # Emitir señal al finalizar
             self.signals.resumen_output.emit()  # Emitir señal para imprimir resumen
@@ -1960,6 +2108,7 @@ class Worker(QRunnable):
             self.signals.version_check_result
         )
         new_worker.signals.error.connect(self.signals.error)
+        new_worker.signals.warning.connect(self.signals.warning)
         new_worker.signals.task_only_confirmation.connect(
             self.signals.task_only_confirmation
         )
@@ -1991,6 +2140,7 @@ class Worker(QRunnable):
             self.signals.version_check_result
         )
         new_worker.signals.error.connect(self.signals.error)
+        new_worker.signals.warning.connect(self.signals.warning)
         new_worker.signals.task_only_confirmation.connect(
             self.signals.task_only_confirmation
         )
@@ -2558,6 +2708,18 @@ def handle_results(info, sg_version_number, version_number):
         msg_manager.show_warning_message(info)
 
 
+def show_push_warning_message(warning_text):
+    """
+    Avisos de un push que Flow acepto a medias. No es un error -el estado se
+    aplico- pero el usuario tiene que enterarse de lo que no se escribio.
+    """
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Warning)
+    msg.setWindowTitle("Flow Push - Advertencia")
+    msg.setText(warning_text)
+    msg.exec_()
+
+
 def show_push_error_message(error_text):
     debug_print(f"Mostrando error de Push al usuario: {error_text}")
     QMessageBox.critical(
@@ -2779,11 +2941,8 @@ def Push_Task_Status(
                 "Todo permanece como estaba antes de ejecutar el script."
             )
             debug_resumen_print("")
-            images_found = (
-                len(input_dialog.get_review_images())
-                + len(input_dialog.get_dropped_images())
-                if hasattr(input_dialog, "get_review_images")
-                else 0
+            images_found = len(input_dialog.get_review_images()) + len(
+                input_dialog.get_dropped_images()
             )
             debug_resumen_print("IMÁGENES:")
             debug_resumen_print(f"   Total encontradas: {images_found}")
@@ -2818,6 +2977,7 @@ def Push_Task_Status(
         # Conectar señales
         worker.signals.result_ready.connect(handle_results)
         worker.signals.error.connect(show_push_error_message)
+        worker.signals.warning.connect(show_push_warning_message)
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         worker.signals.resumen_output.connect(lambda: print_resumen())
         worker.signals.version_check_result.connect(
@@ -2842,6 +3002,7 @@ def Push_Task_Status(
         )
         worker.signals.result_ready.connect(handle_results)
         worker.signals.error.connect(show_push_error_message)
+        worker.signals.warning.connect(show_push_warning_message)
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         worker.signals.resumen_output.connect(lambda: print_resumen())
         worker.signals.version_check_result.connect(
@@ -3282,6 +3443,7 @@ def push_from_selected_clips(
                     )
                     worker.signals.result_ready.connect(handle_results)
                     worker.signals.error.connect(show_push_error_message)
+                    worker.signals.warning.connect(show_push_warning_message)
                     worker.signals.debug_output.connect(lambda: print_debug_messages())
                     worker.signals.resumen_output.connect(lambda: print_resumen())
                     worker.signals.task_only_confirmation.connect(

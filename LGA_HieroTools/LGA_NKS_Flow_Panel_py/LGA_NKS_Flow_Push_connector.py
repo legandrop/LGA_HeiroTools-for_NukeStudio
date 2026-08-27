@@ -24,7 +24,8 @@ ____________________________________________________________________
          de renombrarla con la convencion annot_version_<id>.<frame>, que es
          para anotaciones de un frame. Las cuatro ramas del attach se
          unifican en un bloque y ahora avisan por warnings si alguna imagen
-         no llego a la nota.
+         no llego a la nota. La nota se crea tambien cuando el mensaje esta
+         vacio pero hay imagenes que adjuntar.
   v1.06: Task CG (client): los codigos de Version en Flow llevan la DISCIPLINA
          del clip, asi que las busquedas se filtran por el stream extraido del
          filename (version_filter_token) y update_version_status acepta
@@ -78,8 +79,14 @@ else:
 import shotgun_api3
 
 
-# Variable global para activar o desactivar los prints
-DEBUG = False
+# Los logs del conector van SIEMPRE prendidos. Este proceso corre aparte, en el
+# python de PipeSync, y es el unico que ve lo que Flow contesta de verdad: los
+# IDs de Note y Version, y el resultado de cada upload. Con esto apagado, un
+# push que perdia la nota se veia desde Hiero como un exito sin un solo warning
+# y no habia forma de saber a que entidad se habia linkeado nada.
+# debug_print escribe a stderr, y Flow_Push lo recoge y lo vuelca al .log
+# prefijado con [Conector] (ver call_flow_connector).
+DEBUG = True
 
 
 def debug_print(message):
@@ -993,8 +1000,11 @@ def execute_full_push_operation(
             else:
                 warnings.append(version_error)
 
-            # Agregar comentario si hay mensaje - usar la versión específica, no la más alta
-            if message and sg_specific_version:
+            # Nota en la version especifica, no en la mas alta. Alcanza con que
+            # haya mensaje O imagenes: arrastrar una referencia y apretar OK sin
+            # escribir nada es un flujo normal, y si se pidiera mensaje la media
+            # se perdia sin que el push diera un solo error.
+            if (message or review_images or extra_images) and sg_specific_version:
                 debug_print(
                     f"Agregando comentario a versión específica {sg_specific_version['id']} "
                     f"(v{requested_version_number:02d})"
@@ -1002,7 +1012,7 @@ def execute_full_push_operation(
                 created_note = sg_manager.add_comment_to_version(
                     sg_specific_version["id"],
                     project["id"],
-                    message,
+                    message or "",
                     user_id,
                     task_assignee_ids,
                     shot["id"],

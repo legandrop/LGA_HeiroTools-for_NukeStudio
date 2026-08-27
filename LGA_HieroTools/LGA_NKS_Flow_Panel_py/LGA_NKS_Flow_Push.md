@@ -171,9 +171,21 @@ o desde cualquier aplicación que exponga rutas locales:
    `annot_version_<version_id>.<frame_number>`, que existe para que ShotGrid ubique una anotación
    en un frame del player: una referencia suelta no lo es.
 
-6. **Resumen y Timeout:** Los conteos del resumen del push y el timeout del subproceso del
-   conector suman las dos listas. Si alguna imagen no llega a la nota, el conector lo devuelve
-   como warning.
+6. **Nota Sin Texto:** Si hay imágenes para adjuntar, la nota se crea aunque el mensaje quede
+   vacío. Arrastrar una referencia y aceptar sin escribir es un flujo normal, y exigir texto
+   hacía que la media se perdiera sin ningún error visible.
+
+7. **Descartes con Aviso:** Dos casos no entran al mensaje y se avisan por ventana: los archivos
+   que Qt no puede decodificar (sin thumbnail no habría botón para sacarlos) y los que ya viven
+   dentro de `ReviewPic_Cache` (esa carpeta la borra entera el checkbox de limpieza, así que no
+   se les puede prometer que no se tocan). Lo resuelven `is_inside_review_cache()` y el valor de
+   retorno de `_add_thumbnail_widget()`.
+
+8. **Resumen y Timeout:** Los conteos del resumen del push suman las dos listas. El timeout del
+   subproceso del conector agrega, además del costo por archivo, un presupuesto por peso para la
+   media arrastrada (10s por cada 5 MB), porque un PNG full-res no tarda lo mismo que un JPG de
+   captura. Si alguna imagen no llega a la nota, el conector lo devuelve como warning y el panel
+   lo muestra en una ventana de advertencia.
 
 ## Lógica de tracks
 
