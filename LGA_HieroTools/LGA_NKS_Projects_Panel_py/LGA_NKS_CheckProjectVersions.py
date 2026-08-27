@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CheckProjectVersions v1.83 | Lega
+  LGA_NKS_CheckProjectVersions v1.84 | Lega
 
   Chequea versiones de todos los proyectos abiertos en Hiero
 
+  v1.84: buscar_ventana_existente deja de barrer QApplication.allWidgets() a pelo:
+         esa lista trae wrappers de widgets ya destruidos del lado C++ y leerles
+         el objectName lee memoria liberada
   v1.83: encontrar_version_mas_alta solo mira archivos del MISMO proyecto: el glob por
          prefijo tomaba PROJB_BREAKDOWN_v05 como version nueva de PROJB_v001
   v1.82: Conectado al logger compartido del Projects Panel y removidos prints directos en flujos de UI
@@ -17,7 +20,13 @@ import hiero.ui
 import re
 import os
 import datetime
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtWidgets,
+    QtGui,
+    QtCore,
+    iter_live_widgets,
+    safe_widget_call,
+)
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -644,11 +653,13 @@ def buscar_ventana_existente(nombre_objeto):
     Busca si ya existe una ventana con el nombre de objeto especificado
     Devuelve la ventana si existe y está visible, None en caso contrario
     """
-    for widget in QtWidgets.QApplication.instance().allWidgets():
+    # iter_live_widgets saltea los wrappers de widgets que Qt ya destruyo del
+    # lado C++: leerles el objectName lee memoria liberada.
+    for widget in iter_live_widgets():
         if (
-            widget.objectName() == nombre_objeto
-            and isinstance(widget, QtWidgets.QMainWindow)
-            and widget.isVisible()
+            isinstance(widget, QtWidgets.QMainWindow)
+            and safe_widget_call(widget, "objectName") == nombre_objeto
+            and safe_widget_call(widget, "isVisible", False)
         ):
             return widget
     return None

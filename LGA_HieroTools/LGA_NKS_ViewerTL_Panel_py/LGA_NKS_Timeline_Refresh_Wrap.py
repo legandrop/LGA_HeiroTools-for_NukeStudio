@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Timeline_Refresh_Wrap v1.42 | Lega
+  LGA_NKS_Timeline_Refresh_Wrap v1.43 | Lega
 
   Wrapper que ejecuta una secuencia de scripts para refrescar el timeline manteniendo el nivel de zoom original:
 
@@ -14,6 +14,10 @@ ____________________________________________________________________
   7. Scrollea al track superior
   8. Restaura el estado original (dos intentos) usando los valores exactos del slider y scrollbar
 
+  v1.43: Se deja de barrer QApplication.allWidgets() a pelo. Esa lista trae wrappers
+         de widgets que Qt ya destruyo del lado C++, y leerles el metaObject() lee
+         memoria liberada. Ahora se itera con iter_live_widgets() y se revalida con
+         is_widget_alive() antes de cada deleteLater().
   v1.42: Sistema A de logging — solo archivo, sin consola. Wirea set_debug_handler en
          PreCleanup y ScrollToTopTrack para que usen el mismo logger.
   v1.41: Agregado pre-cleanup del timeline antes del refresh.
@@ -29,7 +33,12 @@ import importlib.util
 import logging
 import queue
 from logging.handlers import QueueHandler, QueueListener
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtWidgets,
+    QtCore,
+    is_widget_alive,
+    iter_live_widgets,
+)
 import time
 
 DEBUG = True
@@ -338,7 +347,9 @@ def find_and_close_old_viewers_and_timelines_safe(old_viewer_object_name=None, o
             debug_print("No se pudo obtener la instancia de QApplication")
             return False
 
-        all_widgets = app.allWidgets()
+        # iter_live_widgets saltea los wrappers de widgets que Qt ya destruyo
+        # del lado C++: leerles el metaObject lee memoria liberada.
+        all_widgets = list(iter_live_widgets())
         old_viewers_found = 0
         old_timelines_found = 0
         old_viewers_closed = 0
@@ -408,6 +419,9 @@ def find_and_close_old_viewers_and_timelines_safe(old_viewer_object_name=None, o
         for item in widgets_to_close:
             try:
                 widget = item['widget']
+                # Entre las dos pasadas Qt pudo destruir el widget marcado.
+                if not is_widget_alive(widget):
+                    continue
                 obj_name = item['object_name']
                 widget_type = item['type']
                 display_name = item['window_title'] or obj_name
@@ -613,7 +627,8 @@ def main():
 
             # Buscar viewers con metaObject().className()
             viewers = []
-            for widget in app.allWidgets():
+            # iter_live_widgets saltea los wrappers de widgets ya destruidos.
+            for widget in iter_live_widgets():
                 try:
                     class_name = widget.metaObject().className() if hasattr(widget, 'metaObject') else ""
                     if "Foundry::Storm::UI::Viewer" in class_name:
@@ -667,7 +682,8 @@ def main():
 
             # Recopilar timelines
             timelines = []
-            for widget in app.allWidgets():
+            # iter_live_widgets saltea los wrappers de widgets ya destruidos.
+            for widget in iter_live_widgets():
                 try:
                     class_name = widget.metaObject().className() if hasattr(widget, 'metaObject') else ""
                     if "TimelineEditor" in class_name:

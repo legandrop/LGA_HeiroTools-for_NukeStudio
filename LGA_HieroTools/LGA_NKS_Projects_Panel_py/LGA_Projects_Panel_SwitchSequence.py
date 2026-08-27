@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.31 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.32 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -18,6 +18,8 @@ ____________________________________________________________________
 
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
+
+  v2.32: Se deja de barrer QApplication.allWidgets() a pelo. Esa lista trae wrappers de widgets que Qt ya destruyo del lado C++, y leerles el metaObject() o el objectName() lee memoria liberada: eso tumbaba a Nuke Studio con heap corruption o con un access violation adentro de QWidget::~QWidget en el garbage collect siguiente. Ahora se itera con iter_live_widgets() y se revalida con is_widget_alive() antes de cada deleteLater().
 
   v2.31: Fix del switch lento: ahora cierra el viewer + timeline viejos ANTES de abrir la secuencia nueva (flag CLOSE_BEFORE_OPEN). Abriendo primero, la destruccion competia con los hilos de IO de la media recien abierta y esperaba entre 3.5s y 13.7s. Cerrando primero, 0.46s. Se captura y restaura el playhead a mano, porque openInTimeline lo preservaba leyendolo del viewer previo.
 
@@ -81,7 +83,14 @@ SWITCH_CLEANUP_WAIT_INTERVAL = 0.10
 SWITCH_CLEANUP_LOG_INTERVAL = 0.50
 
 # Qt import (según entorno)
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
+    QtWidgets,
+    QtGui,
+    QtCore,
+    Qt,
+    is_widget_alive,
+    iter_live_widgets,
+)
 
 
 def _process_events(label=None, send_deferred_delete=False):
@@ -145,7 +154,9 @@ def _snapshot_switch_widgets():
         if not app:
             return snapshot
 
-        for widget in app.allWidgets():
+        # iter_live_widgets saltea los wrappers de widgets que Qt ya
+        # destruyo del lado C++: tocarlos lee memoria liberada.
+        for widget in iter_live_widgets():
             try:
                 class_name = (
                     widget.metaObject().className()
@@ -465,7 +476,9 @@ def _close_old_viewer_and_timeline_safe(old_viewer_object_name, old_timeline_obj
 
         widgets_to_close = []
 
-        for widget in app.allWidgets():
+        # iter_live_widgets saltea los wrappers de widgets que Qt ya
+        # destruyo del lado C++: tocarlos lee memoria liberada.
+        for widget in iter_live_widgets():
             try:
                 obj_name = widget.objectName() if hasattr(widget, "objectName") else ""
                 if not obj_name:
@@ -496,6 +509,8 @@ def _close_old_viewer_and_timeline_safe(old_viewer_object_name, old_timeline_obj
 
         # Cierre simultáneo para mantener equilibrio
         for widget_type, widget in widgets_to_close:
+            if not is_widget_alive(widget):
+                continue
             try:
                 obj_name = widget.objectName() if hasattr(widget, "objectName") else ""
                 widget.deleteLater()
@@ -547,7 +562,9 @@ def _close_all_other_viewers_and_timelines_safe(
 
         widgets_to_close = []
 
-        for widget in app.allWidgets():
+        # iter_live_widgets saltea los wrappers de widgets que Qt ya
+        # destruyo del lado C++: tocarlos lee memoria liberada.
+        for widget in iter_live_widgets():
             try:
                 obj_name = widget.objectName() if hasattr(widget, "objectName") else ""
                 if not obj_name:
@@ -573,6 +590,8 @@ def _close_all_other_viewers_and_timelines_safe(
                 continue
 
         for widget_type, widget in widgets_to_close:
+            if not is_widget_alive(widget):
+                continue
             try:
                 obj_name = widget.objectName() if hasattr(widget, "objectName") else ""
                 widget.deleteLater()
@@ -599,8 +618,9 @@ def _collect_viewers():
     try:
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
 
-        all_widgets = QtWidgets.QApplication.instance().allWidgets()
-        for widget in all_widgets:
+        # iter_live_widgets saltea los wrappers de widgets que Qt ya
+        # destruyo del lado C++: tocarlos lee memoria liberada.
+        for widget in iter_live_widgets():
             try:
                 class_name = (
                     widget.metaObject().className()
@@ -647,8 +667,9 @@ def _collect_timelines():
     try:
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
 
-        all_widgets = QtWidgets.QApplication.instance().allWidgets()
-        for widget in all_widgets:
+        # iter_live_widgets saltea los wrappers de widgets que Qt ya
+        # destruyo del lado C++: tocarlos lee memoria liberada.
+        for widget in iter_live_widgets():
             try:
                 class_name = (
                     widget.metaObject().className()
