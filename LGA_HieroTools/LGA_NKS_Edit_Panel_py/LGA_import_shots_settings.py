@@ -1,11 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_settings v1.02 | Lega
+  LGA_import_shots_settings v1.03 | Lega
 
   Persistencia de configuracion y presets para LGA_import_shots.
   INI: %APPDATA%\\LGA\\HieroTools\\ImportShots.ini
 
+  v1.03: El dialogo "Guardar preset" migra al modulo de estilo
+         LGA_UI_Style_HieroTools: Style.FORM + BTN_PRIMARY/BTN_SECONDARY
+         y tokens en vez del QSS propio. El ambar #d9a441 del titulo se
+         deja: es la identidad de esta familia de dialogos y no tiene
+         token equivalente.
   v1.02: Guarda la ultima carpeta de shot elegida para usarla como ruta
          inicial del file browser en futuras sesiones.
   v1.01: Agrega settings persistentes de UI para mostrar/ocultar tabs
@@ -224,38 +229,24 @@ def preset_to_tuple(p):
 def show_save_preset_dialog(w, h, parent=None):
     """Abre un diálogo para nombrar un preset de resolución.
 
-    Estilo idéntico al de show_overwrite_warning (fondo #2B2B2B, FramelessWindowHint).
+    Estilo idéntico al de show_overwrite_warning (Style.FORM, FramelessWindowHint).
 
     Returns:
         str — nombre introducido por el usuario.
         None — el usuario canceló.
     """
     from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
-
-    _BTN_SECONDARY = (
-        "QPushButton { background-color:#3a3a3a; border:1px solid #555555;"
-        " color:#CCCCCC; padding:7px 18px; border-radius:3px; }"
-        "QPushButton:hover { background-color:#4a4a4a; }"
-    )
-    _BTN_PRIMARY_DIS = (
-        "QPushButton { background-color:#443a91; border:1px solid #5a4faa;"
-        " color:#CCCCCC; padding:7px 18px; border-radius:3px; font-weight:bold; }"
-        "QPushButton:hover { background-color:#774dcb; }"
-        "QPushButton:disabled { background-color:#2a2a4a; color:#666; border-color:#444; }"
-    )
-    _LINE_STYLE = (
-        "QLineEdit { background-color:#272727; border:1px solid #555555;"
-        " color:#cccccc; padding:5px 8px; border-radius:3px; }"
-        "QLineEdit:focus { border:1px solid #666666; }"
-    )
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
     dlg = QtWidgets.QDialog(parent)
     dlg.setWindowTitle("Guardar preset")
     dlg.setMinimumWidth(380)
     dlg.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+    # Style.FORM cubre fondo, labels, QLineEdit y el separador. El borde va
+    # aparte porque la ventana es frameless: sin el, el dialogo se funde con
+    # el fondo del host.
     dlg.setStyleSheet(
-        "QDialog { background-color:#2B2B2B; border:1px solid #555555; }"
-        "QLabel  { color:#a7a7a7; }"
+        Style.FORM + "QDialog { border: 1px solid %s; }" % Color.BORDER_HOVER
     )
     dlg.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
 
@@ -266,28 +257,33 @@ def show_save_preset_dialog(w, h, parent=None):
     # Encabezado
     header_row = QtWidgets.QHBoxLayout()
     title_lbl = QtWidgets.QLabel("Guardar preset de resolución")
+    # El ambar #d9a441 se DEJA: es el color de identidad de esta familia de
+    # dialogos (mismo que show_overwrite_warning) y no un estado del pack.
     title_lbl.setStyleSheet("color:#d9a441; font-size:13px; font-weight:bold;")
     header_row.addWidget(title_lbl)
     header_row.addStretch()
     layout.addLayout(header_row)
 
+    # El separador lo pinta la regla de QFrame HLine de Style.FORM.
     sep = QtWidgets.QFrame()
     sep.setFrameShape(QtWidgets.QFrame.HLine)
-    sep.setStyleSheet("background:#444444;")
     sep.setFixedHeight(1)
     layout.addWidget(sep)
 
     res_lbl = QtWidgets.QLabel("%d × %d" % (w, h))
-    res_lbl.setStyleSheet("color:#cccccc; font-size:12px; font-weight:bold; margin-top:4px;")
+    # La resolucion es lo que decide la respuesta: va destacada.
+    res_lbl.setStyleSheet(
+        "color:%s; font-size:12px; font-weight:bold; margin-top:4px;"
+        % Color.TEXT_STRONG
+    )
     layout.addWidget(res_lbl)
 
     name_prompt = QtWidgets.QLabel("Nombre del preset:")
-    name_prompt.setStyleSheet("color:#a7a7a7; font-size:11px;")
+    name_prompt.setStyleSheet("font-size:11px;")
     layout.addWidget(name_prompt)
 
     line = QtWidgets.QLineEdit()
     line.setPlaceholderText("Ej: DI 2K")
-    line.setStyleSheet(_LINE_STYLE)
     layout.addWidget(line)
 
     layout.addSpacing(8)
@@ -296,8 +292,8 @@ def show_save_preset_dialog(w, h, parent=None):
     btn_row.addStretch()
     btn_cancel = QtWidgets.QPushButton("Cancelar")
     btn_save   = QtWidgets.QPushButton("Guardar")
-    btn_cancel.setStyleSheet(_BTN_SECONDARY)
-    btn_save.setStyleSheet(_BTN_PRIMARY_DIS)
+    btn_cancel.setStyleSheet(Style.BTN_SECONDARY)
+    btn_save.setStyleSheet(Style.BTN_PRIMARY)
     btn_save.setEnabled(False)
     btn_row.addWidget(btn_cancel)
     btn_row.addSpacing(8)

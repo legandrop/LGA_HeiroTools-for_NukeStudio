@@ -1,11 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_MatchVerToEXR v0.82 | Lega
+  LGA_NKS_MatchVerToEXR v0.83 | Lega
 
   Busca la version actual de los clips del track _comp_ (TRACK_comp_EXR) e
   intenta subir la versión de los clips correspondientes del track _compRev_ (TRACK_comp_REV) a la misma versión.
 
+  v0.83: La ventana de resultados migra al modulo de estilo
+         LGA_UI_Style_HieroTools: fondo Style.WINDOW y marco/header/
+         scrollbars de la tabla con tokens. Los colores de CELDA por
+         estado son data y no se tocan; por eso NO se aplica Style.TABLE
+         y se conserva la regla item:selected transparente que deja
+         pintar al ColorMixDelegate.
   v0.82: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
   v0.81: Expande el filtro de clips EXR para incluir aliases de task name
          (compo → comp) evitando descartar clips con _Compo_ en el filename
@@ -26,6 +32,7 @@ from pathlib import Path
 import hiero.core
 import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color as UIColor
 import sys
 
 # Variable global para activar o desactivar los prints
@@ -147,6 +154,8 @@ class VersionMatcherGUI(QtWidgets.QWidget):
         self.setWindowTitle(
             f"{TRACK_comp_EXR} to {TRACK_comp_REV} Version Matcher - Results"
         )
+        # Fondo de la ventana con el estilo del pack
+        self.setStyleSheet(Style.WINDOW)
         layout = QtWidgets.QVBoxLayout(self)
 
         self.table = QtWidgets.QTableWidget(0, 4, self)
@@ -160,13 +169,31 @@ class VersionMatcherGUI(QtWidgets.QWidget):
         self.table.setSelectionMode(QtWidgets.QTableWidget.SingleSelection)
         self.table.verticalHeader().setVisible(False)
         self.table.setFocusPolicy(QtCore.Qt.NoFocus)
+        # NO se aplica Style.TABLE: los fondos de las celdas son DATA (colores
+        # de estado del match de versiones) y los pinta el ColorMixDelegate;
+        # una regla item:selected con fondo del tema los pisaria justo al
+        # seleccionar. Se estila solo el marco, la cabecera y las scrollbars
+        # con tokens, y se conserva la seleccion transparente (misma tecnica
+        # que la GUI_Table del Flow Pull).
         self.table.setStyleSheet(
-            """
-            QTableView::item:selected {
-                color: black;
-                background-color: transparent;
+            "QTableWidget { background-color: %(surface)s;"
+            " border: 1px solid %(border)s;"
+            " gridline-color: %(border)s;"
+            " color: %(text)s; }"
+            " QHeaderView::section { background-color: %(header_bg)s;"
+            " color: %(header_fg)s; padding: 4px 8px; border: 0px;"
+            " border-bottom: 1px solid %(border_strong)s; font-weight: bold; }"
+            " QTableView::item:selected { color: black;"
+            " background-color: transparent; }"
+            % {
+                "surface": UIColor.SURFACE,
+                "border": UIColor.BORDER,
+                "border_strong": UIColor.BORDER_STRONG,
+                "text": UIColor.TEXT,
+                "header_bg": UIColor.SURFACE_HEADER,
+                "header_fg": UIColor.TEXT_HEADER,
             }
-        """
+            + Style.SCROLLBAR
         )
 
         # COPIADO DEL PULL - Asignar delegado personalizado
@@ -196,13 +223,16 @@ class VersionMatcherGUI(QtWidgets.QWidget):
         exr_item.setTextAlignment(QtCore.Qt.AlignCenter)
         rev_item.setTextAlignment(QtCore.Qt.AlignCenter)
 
-        # Colorear segun el estado
+        # Colorear segun el estado. Son colores de DATA (resultado del match)
+        # y no de estilo: se dejan como hex, salvo el verde de Already
+        # Matched, que coincide EXACTO con el token OK_BG del modulo de
+        # estilo.
         if status == "Updated":
             status_color = "#7d4cff"  # Morado
         elif status == "Version Not Available":
             status_color = "#933100"  # Rojo oscuro
         elif status == "Already Matched":
-            status_color = "#244c19"  # Verde oscuro
+            status_color = UIColor.OK_BG  # Verde oscuro (#244C19)
         else:
             status_color = "#8a8a8a"  # Gris por defecto
 

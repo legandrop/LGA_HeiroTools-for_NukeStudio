@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.00 | Lega
+  LGA_import_shots_transcode v1.01 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -9,6 +9,11 @@ ____________________________________________________________________
   build_manifest_for_sequence. El worker procesa las secuencias
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
+
+  v1.01: El dialogo de sobreescritura migra al modulo de estilo
+         LGA_UI_Style_HieroTools: Style.FORM + BTN_PRIMARY/BTN_SECONDARY
+         y tokens. El ambar del icono y el titulo pasa a
+         Color.WARNING_TEXT (rol de advertencia).
 
 ____________________________________________________________________
 """
@@ -303,24 +308,17 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
         True  → el usuario confirma sobreescribir
         False → el usuario cancela esta secuencia
     """
-    _BTN_SECONDARY = (
-        "QPushButton { background-color:#3a3a3a; border:1px solid #555555;"
-        " color:#CCCCCC; padding:7px 18px; border-radius:3px; }"
-        "QPushButton:hover { background-color:#4a4a4a; }"
-    )
-    _BTN_PRIMARY = (
-        "QPushButton { background-color:#443a91; border:1px solid #5a4faa;"
-        " color:#CCCCCC; padding:7px 18px; border-radius:3px; font-weight:bold; }"
-        "QPushButton:hover { background-color:#774dcb; }"
-    )
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
     dlg = QtWidgets.QDialog(parent)
     dlg.setWindowTitle("Archivos existentes")
     dlg.setMinimumWidth(440)
     dlg.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+    # Style.FORM cubre fondo, labels y el separador. El borde va aparte
+    # porque la ventana es frameless: sin el, el dialogo se funde con el
+    # fondo del host.
     dlg.setStyleSheet(
-        "QDialog { background-color:#2B2B2B; border:1px solid #555555; }"
-        "QLabel  { color:#a7a7a7; }"
+        Style.FORM + "QDialog { border: 1px solid %s; }" % Color.BORDER_HOVER
     )
 
     layout = QtWidgets.QVBoxLayout(dlg)
@@ -329,33 +327,39 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
 
     header_row = QtWidgets.QHBoxLayout()
     icon_lbl  = QtWidgets.QLabel("⚠")
-    icon_lbl.setStyleSheet("color:#d9a441; font-size:20px;")
+    # Icono y titulo en el amarillo de advertencia del pack: este cartel SI
+    # es una advertencia (se van a pisar archivos).
+    icon_lbl.setStyleSheet("color:%s; font-size:20px;" % Color.WARNING_TEXT)
     title_lbl = QtWidgets.QLabel("Archivos existentes")
-    title_lbl.setStyleSheet("color:#d9a441; font-size:13px; font-weight:bold;")
+    title_lbl.setStyleSheet(
+        "color:%s; font-size:13px; font-weight:bold;" % Color.WARNING_TEXT
+    )
     header_row.addWidget(icon_lbl)
     header_row.addSpacing(8)
     header_row.addWidget(title_lbl)
     header_row.addStretch()
     layout.addLayout(header_row)
 
+    # El separador lo pinta la regla de QFrame HLine de Style.FORM.
     sep = QtWidgets.QFrame()
     sep.setFrameShape(QtWidgets.QFrame.HLine)
-    sep.setStyleSheet("background:#444444;")
     sep.setFixedHeight(1)
     layout.addWidget(sep)
 
     name_lbl = QtWidgets.QLabel(seq_name)
+    # El nombre de la secuencia es lo que decide la respuesta: va destacado.
     name_lbl.setStyleSheet(
-        "color:#cccccc; font-size:12px; font-weight:bold; margin-top:4px;"
+        "color:%s; font-size:12px; font-weight:bold; margin-top:4px;"
+        % Color.TEXT_STRONG
     )
     layout.addWidget(name_lbl)
 
     desc_lbl = QtWidgets.QLabel(conflict_desc)
-    desc_lbl.setStyleSheet("color:#999999; font-size:11px;")
+    desc_lbl.setStyleSheet("color:%s; font-size:11px;" % Color.TEXT_DIM)
     layout.addWidget(desc_lbl)
 
     q_lbl = QtWidgets.QLabel("¿Desea sobreescribir los archivos existentes?")
-    q_lbl.setStyleSheet("color:#a7a7a7; font-size:11px; margin-top:4px;")
+    q_lbl.setStyleSheet("font-size:11px; margin-top:4px;")
     layout.addWidget(q_lbl)
 
     layout.addSpacing(8)
@@ -364,8 +368,8 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
     btn_row.addStretch()
     cancel_btn    = QtWidgets.QPushButton("Cancelar")
     overwrite_btn = QtWidgets.QPushButton("Sobreescribir")
-    cancel_btn.setStyleSheet(_BTN_SECONDARY)
-    overwrite_btn.setStyleSheet(_BTN_PRIMARY)
+    cancel_btn.setStyleSheet(Style.BTN_SECONDARY)
+    overwrite_btn.setStyleSheet(Style.BTN_PRIMARY)
     btn_row.addWidget(cancel_btn)
     btn_row.addSpacing(8)
     btn_row.addWidget(overwrite_btn)

@@ -1,12 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_rename_settings v1.01 | Lega
+  LGA_import_shots_rename_settings v1.02 | Lega
 
   Persistencia de configuracion para la seccion Rename.
   INI: %APPDATA%\\LGA\\HieroTools\\ImportShotsRename.ini
 
   Changelog:
+  - v1.02: El dialogo "Guardar preset" migra al modulo de estilo
+           LGA_UI_Style_HieroTools: Style.FORM + BTN_PRIMARY/BTN_SECONDARY
+           y tokens en vez del QSS propio. El ambar #d9a441 del titulo se
+           deja: es la identidad de esta familia de dialogos y no tiene
+           token equivalente.
   - v1.01: Agrega persistencia y presets de Prefix/Suffix.
 
 ____________________________________________________________________
@@ -176,31 +181,17 @@ def save_rename_presets(presets):
 def show_save_rename_preset_dialog(parent=None):
     """Diálogo para nombrar un preset de rename. Devuelve str (nombre) o None."""
     from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
-
-    _BTN_SECONDARY = (
-        "QPushButton { background-color:#3a3a3a; border:1px solid #555555;"
-        " color:#CCCCCC; padding:7px 18px; border-radius:3px; }"
-        "QPushButton:hover { background-color:#4a4a4a; }"
-    )
-    _BTN_PRIMARY_DIS = (
-        "QPushButton { background-color:#443a91; border:1px solid #5a4faa;"
-        " color:#CCCCCC; padding:7px 18px; border-radius:3px; font-weight:bold; }"
-        "QPushButton:hover { background-color:#774dcb; }"
-        "QPushButton:disabled { background-color:#2a2a4a; color:#666; border-color:#444; }"
-    )
-    _LINE_STYLE = (
-        "QLineEdit { background-color:#272727; border:1px solid #555555;"
-        " color:#cccccc; padding:5px 8px; border-radius:3px; }"
-        "QLineEdit:focus { border:1px solid #666666; }"
-    )
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
     dlg = QtWidgets.QDialog(parent)
     dlg.setWindowTitle("Guardar preset")
     dlg.setMinimumWidth(380)
     dlg.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+    # Style.FORM cubre fondo, labels, QLineEdit y el separador. El borde va
+    # aparte porque la ventana es frameless: sin el, el dialogo se funde con
+    # el fondo del host.
     dlg.setStyleSheet(
-        "QDialog { background-color:#2B2B2B; border:1px solid #555555; }"
-        "QLabel  { color:#a7a7a7; }"
+        Style.FORM + "QDialog { border: 1px solid %s; }" % Color.BORDER_HOVER
     )
     dlg.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
 
@@ -210,24 +201,25 @@ def show_save_rename_preset_dialog(parent=None):
 
     header_row = QtWidgets.QHBoxLayout()
     title_lbl = QtWidgets.QLabel("Guardar preset de rename")
+    # El ambar #d9a441 se DEJA: es el color de identidad de esta familia de
+    # dialogos (mismo que show_overwrite_warning) y no un estado del pack.
     title_lbl.setStyleSheet("color:#d9a441; font-size:13px; font-weight:bold;")
     header_row.addWidget(title_lbl)
     header_row.addStretch()
     layout.addLayout(header_row)
 
+    # El separador lo pinta la regla de QFrame HLine de Style.FORM.
     sep = QtWidgets.QFrame()
     sep.setFrameShape(QtWidgets.QFrame.HLine)
-    sep.setStyleSheet("background:#444444;")
     sep.setFixedHeight(1)
     layout.addWidget(sep)
 
     name_prompt = QtWidgets.QLabel("Nombre del preset:")
-    name_prompt.setStyleSheet("color:#a7a7a7; font-size:11px;")
+    name_prompt.setStyleSheet("font-size:11px;")
     layout.addWidget(name_prompt)
 
     line = QtWidgets.QLineEdit()
     line.setPlaceholderText("Ej: Plates v01")
-    line.setStyleSheet(_LINE_STYLE)
     layout.addWidget(line)
 
     layout.addSpacing(8)
@@ -236,8 +228,8 @@ def show_save_rename_preset_dialog(parent=None):
     btn_row.addStretch()
     btn_cancel = QtWidgets.QPushButton("Cancelar")
     btn_save   = QtWidgets.QPushButton("Guardar")
-    btn_cancel.setStyleSheet(_BTN_SECONDARY)
-    btn_save.setStyleSheet(_BTN_PRIMARY_DIS)
+    btn_cancel.setStyleSheet(Style.BTN_SECONDARY)
+    btn_save.setStyleSheet(Style.BTN_PRIMARY)
     btn_save.setEnabled(False)
     btn_row.addWidget(btn_cancel)
     btn_row.addSpacing(8)

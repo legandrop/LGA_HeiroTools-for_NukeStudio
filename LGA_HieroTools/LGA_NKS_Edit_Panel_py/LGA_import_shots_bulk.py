@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_bulk v1.02 | Lega
+  LGA_import_shots_bulk v1.03 | Lega
 
   Bulk Import: importar varios shots al timeline en una sola operacion,
   en orden alfabetico, como si se importaran uno por uno.
 
+  v1.03: Los colores de seleccion del browser salen del modulo de estilo
+         LGA_UI_Style_HieroTools (SURFACE_SELECTED / TEXT_STRONG) en vez
+         de los hex propios #b4b4b4 / #202020.
   v1.02: Sidebar muestra rutas T:/VFX-* y N:/VFX-*; columnas Type y Date
          Modified ajustan ancho por contenido con mínimos configurables.
   v1.01: Browser mas grande, seleccion gris configurable y sidebar ampliado
@@ -30,11 +33,13 @@ ____________________________________________________________________
 """
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color as UIColor
 
 
-# ✅✅💾⚠️ Color de selección de carpetas en el browser.
-SHOT_BROWSER_SELECTION_BG_COLOR = "#b4b4b4"
-SHOT_BROWSER_SELECTION_TEXT_COLOR = "#202020"
+# ✅✅💾⚠️ Color de selección de carpetas en el browser: los tokens de fila
+# seleccionada del pack (antes eran los hex propios #b4b4b4 / #202020).
+SHOT_BROWSER_SELECTION_BG_COLOR = UIColor.SURFACE_SELECTED
+SHOT_BROWSER_SELECTION_TEXT_COLOR = UIColor.TEXT_STRONG
 
 # ✅✅💾⚠️ Tamaño inicial del browser de selección.
 SHOT_BROWSER_WIDTH = 900
