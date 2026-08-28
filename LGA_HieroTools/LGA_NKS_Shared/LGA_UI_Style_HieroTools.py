@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_UI_Style_HieroTools v1.06 | Lega
+  LGA_UI_Style_HieroTools v1.20 | Lega
 
   Punto UNICO de ajuste del look de las ventanas de HieroTools. Todo lo
   visual sale de aca: colores, fondos, bordes, esquinas, espaciados y
@@ -28,6 +28,13 @@ ____________________________________________________________________
       button.setStyleSheet(Style.BTN_PRIMARY)
       label.setText("Saving to:<br>%s" % colorize_path(destination))
 
+  v1.20: Se adopta el cuerpo v1.20 de las copias del ToolPack, que
+         estaban adelante: temas (theme(), seis paletas), fuentes del
+         pack (Inter y JetBrains Mono en fonts/, load_fonts(),
+         apply_ui_font(), semibold_*()), tokens nuevos y derivados.
+         El detalle v1.07-v1.19 vive en el historial de las copias
+         del ToolPack; el cuerpo vuelve a ser identico salvo los
+         renombres de modulo y adapter.
   v1.06: El checkbox deshabilitado se distingue del habilitado, y
          Style.WINDOW tambien lo lleva: era la hoja de casi todas
          las ventanas que quedaban con el checkbox del host.
@@ -153,6 +160,91 @@ class Color(object):
     PATH_COMMON = "#C56CF0"
     PATH_SEPARATOR = "#6A6A6E"
 
+    # El campo de ruta EDITABLE de un formulario. Va mas apagado que
+    # PATH_COMMON a proposito: ahi el violeta es un path coloreado por nivel,
+    # aca es texto que se escribe, y a plena intensidad le gana al campo de
+    # al lado. No cambia con el tema.
+    PATH_FIELD = "#9C8CE0"
+
+    # Fondo del tramo que coincide con lo buscado, en un filtro en vivo.
+    MARK_BG = "#5B4A16"
+
+    # --- superficies que faltaban ------------------------------------------
+    ROW_LINE = "#2C2C2C"  # separador entre filas de una tabla
+    FIELD_BG = "#232323"  # fondo de un campo inline, sin caja hasta el hover
+
+    # --- checkbox deshabilitado PERO tildado --------------------------------
+    # Es un estado propio y no "el tildado con opacidad": una location que otra
+    # ya incluye tiene que seguir leyendose como TILDADA, solo que no editable.
+    # Bajarle la opacidad al tilde la hacia pasar por destildada, que es
+    # exactamente lo contrario de lo que hay que comunicar.
+    CHECKBOX_ON_DISABLED = "#39325F"
+    CHECKBOX_ON_DISABLED_BORDER = "#4A4278"
+    CHECKBOX_ON_DISABLED_TICK = "#C6BFEA"
+
+    # --- punto de color de un estado ----------------------------------------
+    # Van mas claros que OK/WARNING/ERROR: esos estan calibrados para pintar
+    # una barra o un fondo, y un punto de 9 px con esos valores no se ve.
+    # El icono de una accion destructiva en una barra de herramientas. Va mas
+    # claro que ERROR: ahi el rojo es un mensaje sobre el fondo de la ventana,
+    # y aca es un trazo de 17 px que a esa intensidad se apaga contra el boton.
+    DANGER_ICON = "#C97A7A"
+    # El hover de esa misma accion: el icono sube de intensidad y aparece una
+    # caja apenas rojiza. Sin la caja, el unico cambio al pasar por encima es
+    # el color del trazo, que en 17 px no se registra.
+    DANGER_ICON_HOVER = "#E08585"
+    DANGER_BG_HOVER = "#332727"
+    # El mismo icono con el boton APAGADO. Sigue siendo rojo y no gris: es lo
+    # que hace que la accion destructiva se distinga del resto de la fila
+    # aunque no se pueda ejecutar. Lo escribe _derivados().
+    DANGER_ICON_DIM = "#7A5252"
+
+    DOT_OK = "#5CB85C"
+    DOT_WARNING = "#D6AE4A"
+    DOT_ERROR = "#D65C5C"
+
+    # --- el azul del Outside informativo ------------------------------------
+    # No cambia con el tema, igual que INFO o PATH_FIELD: lo que cambia es
+    # contra que fondo se mezcla, y de eso se encarga _derivados(). Si en
+    # algun tema queda flojo contra su fondo, el paso siguiente es subirlo a
+    # THEME_TOKENS, no hardcodearlo en la tool.
+    OUTSIDE_INFO_BASE = "#1B3A5C"  # para el fondo de la celda
+    DOT_OUTSIDE_INFO = "#5B8FD6"  # para el punto de 9 px, que va claro
+
+    # --- fondo de estado en una fila SELECCIONADA ---------------------------
+    # Los escribe _derivados() mezclando el fondo del estado con el gris de la
+    # seleccion. No se aclara el color: aclarar sube el brillo pero no desatura,
+    # y la celda queda mas roja en vez de mas gris.
+    OK_BG_SELECTED = "#2C4027"
+    WARNING_BG_SELECTED = "#403723"
+    ERROR_BG_SELECTED = "#402727"
+
+    # --- Outside: un nombre, dos significados, dos colores -------------------
+    # En el Media Manager "Outside" quiere decir una cosa distinta segun el
+    # shot folder este activo o no, asi que no puede ser un solo color:
+    #
+    #   shot folder ACTIVO  -> el archivo esta afuera del shot     -> BORDO
+    #   shot folder APAGADO -> afuera de toda scan location        -> AZUL
+    #
+    # El bordo sale del ERROR_BG del tema aclarado contra el fondo: queda en
+    # la familia del rojo pero mas apagado que Offline, para que no se
+    # confundan "esta afuera" con "no existe". El azul no es un error: sin
+    # shot folder no hay adentro ni afuera, es un dato.
+    # Los cuatro los escribe _derivados(), igual que los *_BG_SELECTED.
+    OUTSIDE_BG = "#421D1D"
+    OUTSIDE_BG_INFO = "#1D324A"
+    OUTSIDE_BG_SELECTED = "#3C2929"
+    OUTSIDE_BG_INFO_SELECTED = "#293440"
+
+    # El punto de la pastilla, en la misma relacion que los otros DOT_*: mas
+    # claro que el fondo del estado, porque es texto sobre el fondo oscuro de
+    # la ventana y no una superficie.
+    DOT_OUTSIDE = "#A04A4A"
+
+    # El texto secundario de un control APAGADO, un escalon por debajo de
+    # TEXT_DIM. Lo escribe _derivados(), como los de arriba.
+    TEXT_DISABLED = "#4E4E4E"
+
     # Nombre propio de una entidad del pipeline destacado en un mensaje: una
     # task, un preset, un nodo. Hoy vale lo mismo que PATH_COMMON y se ve
     # igual, pero tiene token propio para que retocar la paleta de paths no le
@@ -199,6 +291,17 @@ class Metric(object):
 
     RADIUS = 5  # esquinas de botones y cajas
     RADIUS_SMALL = 3  # esquinas de controles chicos
+    # Los dos del rediseno del Media Manager. Se SUMAN en vez de cambiar
+    # RADIUS: ese valor lo usan las once ventanas ya migradas y subirlo les
+    # cambiaria el aspecto a todas sin que nadie lo hubiera pedido.
+    RADIUS_CONTROL = 8  # boton y campo de una ventana rediseniada
+    RADIUS_FIELD = 6  # campo inline y pastilla de atajo
+    RADIUS_CARD = 10  # caja de una tabla o de una tarjeta informativa
+
+    # Aire entre el cuadrito del checkbox y su etiqueta. Solo para los que
+    # tienen texto: el default de la hoja es 0 porque un checkbox sin texto
+    # reserva esa separacion igual y queda descentrado en una columna.
+    CHECKBOX_LABEL_GAP = 8
 
     ROW_HEIGHT = 24  # alto de fila de tabla
     # Alto de un boton de una fila de acciones. Va fijo en los dos roles porque
@@ -210,6 +313,379 @@ class Metric(object):
     # La cruz de cerrar. 26 px es el minimo comodo para acertarle con el
     # mouse sin apuntar: mas chica se falla y se termina moviendo la ventana.
     CLOSE_BUTTON_SIZE = 26
+
+    # --- tamano de letra de las VENTANAS DE FORMULARIO -----------------------
+    # Las ventanas que no llaman a apply_ui_font heredan la fuente del host, y
+    # la de Nuke en macOS es varios puntos mas chica que la del prototipo: al
+    # lado de un indicador de checkbox de 16 px el texto se lee diminuto.
+    # 14 y no 13 -la medida de la tabla del Media Manager- porque el que manda
+    # aca es el checkbox: una tabla no tiene al lado un control de 16 px con el
+    # que comparar el texto, y una ventana de formulario es toda checkboxes.
+    FORM_FONT_SIZE = 14
+    # El path del pie va un escalon abajo: es dato de referencia, no contenido.
+    FORM_PATH_FONT_SIZE = 12
+
+    # --- tamano de letra de las TABLAS --------------------------------------
+    # Lo elige el usuario. Toca SOLO las tablas y no el resto de la ventana:
+    # si escalara todo, la ventana crece sin control y los iconos quedan
+    # chicos al lado del texto.
+    TABLE_FONT_SIZE = 13
+    TABLE_FONT_SIZE_MIN = 9
+    TABLE_FONT_SIZE_MAX = 20
+
+    # El path va un punto MAS GRANDE que el resto de la tabla. Un path se lee
+    # caracter por caracter -un 8 contra un 3, un _v02 contra un _v03- y a la
+    # misma medida que el resto es lo primero que cuesta. Subir el ajuste
+    # entero para que se lean bien agranda toda la ventana sin necesidad.
+    PATH_FONT_OFFSET = 1
+
+
+# ---------------------------------------------------------------------------
+#                                   Temas
+# ---------------------------------------------------------------------------
+# Un tema es la paleta entera. Los seis definen EXACTAMENTE los mismos tokens:
+# si uno agrega o saca una clave, Theme() lo grita en vez de dejar un
+# color viejo pegado de la paleta anterior.
+#
+# Se referencian por "id" y NUNCA por indice, ni aca ni en el .ini de la tool:
+# agregar un tema en el medio de la lista no puede cambiar cual es el default
+# ni que tema tiene guardado el usuario.
+#
+# El ORDEN de la tupla si importa, pero solo para la UI: es el orden en que la
+# ventana de ajustes dibuja la tira de botones. "pack" va primero porque es el
+# tema BASE y el que recibe una tool que no pide ninguno, asi que el primero de
+# la izquierda es tambien el default. Que sea el primero no es lo que lo hace
+# default: eso lo dice BASE_THEME, por id.
+#
+# Los valores del tema "lga" salen del codigo de las apps Qt/C++ de LGA, no de
+# una captura: COLOR_VARS en LGA_Base_QT_C_Py/src/ui/mainwindow/MainWindow.cpp,
+# resources/styles/dark_theme.qss y include/lga_base_qt_c_py/DialogStyle.h.
+# Ahi el violeta es el MISMO del pack (#443a91 / #774dcb) y no hay un solo
+# texto blanco: txt_principal es #B2B2B2 y ese es tambien el color del texto de
+# los botones, incluido el violeta de accion.
+
+THEMES = (
+    {
+        "id": "pack",
+        "label": "Pack",
+        "desc": (
+            "Lo que hay hoy en LGA_UI_Style_HieroTools: gris 212121 y el violeta de la marca."
+        ),
+        "colors": {
+            "WINDOW": "#212121",
+            "SURFACE": "#272727",
+            "SURFACE_RAISED": "#2E2E2E",
+            "SURFACE_HEADER": "#2B2B2B",
+            "SURFACE_HOVER": "#383838",
+            "SURFACE_SELECTED": "#353535",
+            "ROW_LINE": "#2C2C2C",
+            "FIELD_BG": "#232323",
+            "TEXT": "#A7A7A7",
+            "TEXT_STRONG": "#E8E8E8",
+            "TEXT_DIM": "#6E6E6E",
+            "TEXT_HEADER": "#999999",
+            "TEXT_ON_ACCENT": "#FFFFFF",
+            "BORDER": "#333333",
+            "BORDER_STRONG": "#444444",
+            "BORDER_HOVER": "#555555",
+            "ACCENT": "#443A91",
+            "ACCENT_HOVER": "#774DCB",
+            "CHECKBOX_OFF": "#2A2832",
+            "CHECKBOX_OFF_HOVER": "#3A3744",
+            "CHECKBOX_ON": "#393455",
+            "CHECKBOX_ON_HOVER": "#4C4770",
+            "CHECKBOX_BORDER": "#444444",
+            "CHECKBOX_ON_DISABLED": "#39325F",
+            "CHECKBOX_ON_DISABLED_BORDER": "#4A4278",
+            "CHECKBOX_ON_DISABLED_TICK": "#C6BFEA",
+            "OK_BG": "#244C19",
+            "WARNING_BG": "#4C3A11",
+            "ERROR_BG": "#4C1919",
+            "SURFACE_SUNKEN": "#1A1A1A",
+            "ACCENT_DISABLED": "#2A2540",
+            "ACCENT_TRACK": "#393959",
+            "DOT_OK": "#5CB85C",
+            "DOT_WARNING": "#D6AE4A",
+            "DOT_ERROR": "#D65C5C",
+            "PATH_COMMON": "#C56CF0",
+            "PATH_SEPARATOR": "#6A6A6E",
+            "MARK_BG": "#5B4A16",
+        },
+    },
+    {
+        "id": "lga",
+        "label": "LGA",
+        "desc": (
+            "Los colores exactos de las apps Qt/C++ de LGA (FileManager S3, PipeSync). Como el del pack pero mas oscuro, y sin ningun texto blanco."
+        ),
+        "colors": {
+            "WINDOW": "#161616",
+            "SURFACE": "#1D1D1D",
+            "SURFACE_RAISED": "#2A2A2A",
+            "SURFACE_HEADER": "#1A1A1A",
+            "SURFACE_HOVER": "#383838",
+            "SURFACE_SELECTED": "#2E2E2E",
+            "ROW_LINE": "#232323",
+            "FIELD_BG": "#1A1A1A",
+            "TEXT": "#B2B2B2",
+            "TEXT_STRONG": "#D0D0D0",
+            "TEXT_DIM": "#7B7B7B",
+            "TEXT_HEADER": "#8F8F8F",
+            "TEXT_ON_ACCENT": "#D0D0D0",
+            "BORDER": "#303030",
+            "BORDER_STRONG": "#3A3A3A",
+            "BORDER_HOVER": "#4A4A4A",
+            "ACCENT": "#443A91",
+            "ACCENT_HOVER": "#774DCB",
+            "CHECKBOX_OFF": "#2A2832",
+            "CHECKBOX_OFF_HOVER": "#3A3744",
+            "CHECKBOX_ON": "#393455",
+            "CHECKBOX_ON_HOVER": "#4C4770",
+            "CHECKBOX_BORDER": "#272727",
+            "CHECKBOX_ON_DISABLED": "#332F4A",
+            "CHECKBOX_ON_DISABLED_BORDER": "#413C5E",
+            "CHECKBOX_ON_DISABLED_TICK": "#B5AFD2",
+            "OK_BG": "#1D4413",
+            "WARNING_BG": "#44330E",
+            "ERROR_BG": "#461616",
+            "SURFACE_SUNKEN": "#0E0E0E",
+            "ACCENT_DISABLED": "#272445",
+            "ACCENT_TRACK": "#362F6C",
+            "DOT_OK": "#5FA855",
+            "DOT_WARNING": "#C4A048",
+            "DOT_ERROR": "#C45E5E",
+            "PATH_COMMON": "#C56CF0",
+            "PATH_SEPARATOR": "#5A5A5E",
+            "MARK_BG": "#4E3F0E",
+        },
+    },
+    {
+        "id": "graphite",
+        "label": "Graphite",
+        "desc": (
+            "Mas oscuro y con mas contraste entre niveles. El violeta sube para no perderse contra el fondo."
+        ),
+        "colors": {
+            "WINDOW": "#171717",
+            "SURFACE": "#1E1E1E",
+            "SURFACE_RAISED": "#272727",
+            "SURFACE_HEADER": "#222222",
+            "SURFACE_HOVER": "#323232",
+            "SURFACE_SELECTED": "#2E2E2E",
+            "ROW_LINE": "#262626",
+            "FIELD_BG": "#1A1A1A",
+            "TEXT": "#A2A2A2",
+            "TEXT_STRONG": "#F0F0F0",
+            "TEXT_DIM": "#6A6A6A",
+            "TEXT_HEADER": "#8F8F8F",
+            "TEXT_ON_ACCENT": "#FFFFFF",
+            "BORDER": "#2C2C2C",
+            "BORDER_STRONG": "#3D3D3D",
+            "BORDER_HOVER": "#525252",
+            "ACCENT": "#5B4FC4",
+            "ACCENT_HOVER": "#8A62E0",
+            "CHECKBOX_OFF": "#242230",
+            "CHECKBOX_OFF_HOVER": "#332F42",
+            "CHECKBOX_ON": "#5B4FC4",
+            "CHECKBOX_ON_HOVER": "#6F62DC",
+            "CHECKBOX_BORDER": "#1E1E1E",
+            "CHECKBOX_ON_DISABLED": "#3B3468",
+            "CHECKBOX_ON_DISABLED_BORDER": "#4E4682",
+            "CHECKBOX_ON_DISABLED_TICK": "#CDC6F0",
+            "OK_BG": "#1E4415",
+            "WARNING_BG": "#45330D",
+            "ERROR_BG": "#471515",
+            "SURFACE_SUNKEN": "#0F0F0F",
+            "ACCENT_DISABLED": "#312C59",
+            "ACCENT_TRACK": "#473E90",
+            "DOT_OK": "#63C463",
+            "DOT_WARNING": "#DFB753",
+            "DOT_ERROR": "#E06666",
+            "PATH_COMMON": "#C56CF0",
+            "PATH_SEPARATOR": "#5E5E62",
+            "MARK_BG": "#54430F",
+        },
+    },
+    {
+        "id": "slate",
+        "label": "Slate",
+        "desc": (
+            "Superficies con tinte azul frio y el acento corrido a indigo. Los paths de colores calidos resaltan mas."
+        ),
+        "colors": {
+            "WINDOW": "#1B1E24",
+            "SURFACE": "#21252D",
+            "SURFACE_RAISED": "#2A2F39",
+            "SURFACE_HEADER": "#252A33",
+            "SURFACE_HOVER": "#333945",
+            "SURFACE_SELECTED": "#2F343E",
+            "ROW_LINE": "#282D36",
+            "FIELD_BG": "#1D2128",
+            "TEXT": "#A3ACBA",
+            "TEXT_STRONG": "#E9EDF3",
+            "TEXT_DIM": "#6B7484",
+            "TEXT_HEADER": "#939CAA",
+            "TEXT_ON_ACCENT": "#FFFFFF",
+            "BORDER": "#2E3440",
+            "BORDER_STRONG": "#3E4553",
+            "BORDER_HOVER": "#4E5666",
+            "ACCENT": "#4A55C8",
+            "ACCENT_HOVER": "#6E7BE8",
+            "CHECKBOX_OFF": "#262B37",
+            "CHECKBOX_OFF_HOVER": "#333A49",
+            "CHECKBOX_ON": "#4A55C8",
+            "CHECKBOX_ON_HOVER": "#5F6BDC",
+            "CHECKBOX_BORDER": "#21252D",
+            "CHECKBOX_ON_DISABLED": "#333A6B",
+            "CHECKBOX_ON_DISABLED_BORDER": "#454E85",
+            "CHECKBOX_ON_DISABLED_TICK": "#C3C9EF",
+            "OK_BG": "#1F4A2C",
+            "WARNING_BG": "#4A3A18",
+            "ERROR_BG": "#4A2024",
+            "SURFACE_SUNKEN": "#121417",
+            "ACCENT_DISABLED": "#2D3362",
+            "ACCENT_TRACK": "#3C4497",
+            "DOT_OK": "#5FC287",
+            "DOT_WARNING": "#DDB35C",
+            "DOT_ERROR": "#E0687A",
+            "PATH_COMMON": "#C56CF0",
+            "PATH_SEPARATOR": "#5A626E",
+            "MARK_BG": "#57461A",
+        },
+    },
+    {
+        "id": "nuke",
+        "label": "Nuke",
+        "desc": (
+            "Grises mas claros, cerca de los de Nuke, para que la ventana no sea una mancha negra adentro del host."
+        ),
+        "colors": {
+            "WINDOW": "#2B2B2B",
+            "SURFACE": "#333333",
+            "SURFACE_RAISED": "#3B3B3B",
+            "SURFACE_HEADER": "#373737",
+            "SURFACE_HOVER": "#464646",
+            "SURFACE_SELECTED": "#434343",
+            "ROW_LINE": "#3A3A3A",
+            "FIELD_BG": "#2E2E2E",
+            "TEXT": "#B4B4B4",
+            "TEXT_STRONG": "#EFEFEF",
+            "TEXT_DIM": "#828282",
+            "TEXT_HEADER": "#A6A6A6",
+            "TEXT_ON_ACCENT": "#FFFFFF",
+            "BORDER": "#3F3F3F",
+            "BORDER_STRONG": "#505050",
+            "BORDER_HOVER": "#616161",
+            "ACCENT": "#5346A8",
+            "ACCENT_HOVER": "#8058D8",
+            "CHECKBOX_OFF": "#38363F",
+            "CHECKBOX_OFF_HOVER": "#464350",
+            "CHECKBOX_ON": "#5346A8",
+            "CHECKBOX_ON_HOVER": "#6857C6",
+            "CHECKBOX_BORDER": "#333333",
+            "CHECKBOX_ON_DISABLED": "#474071",
+            "CHECKBOX_ON_DISABLED_BORDER": "#585089",
+            "CHECKBOX_ON_DISABLED_TICK": "#CFC9EC",
+            "OK_BG": "#2F5A24",
+            "WARNING_BG": "#5A481D",
+            "ERROR_BG": "#5A2828",
+            "SURFACE_SUNKEN": "#1C1C1C",
+            "ACCENT_DISABLED": "#3A355A",
+            "ACCENT_TRACK": "#473E82",
+            "DOT_OK": "#6FC46F",
+            "DOT_WARNING": "#DDB85E",
+            "DOT_ERROR": "#DF7373",
+            "PATH_COMMON": "#C56CF0",
+            "PATH_SEPARATOR": "#767676",
+            "MARK_BG": "#665220",
+        },
+    },
+    {
+        "id": "high-contrast",
+        "label": "High contrast",
+        "desc": (
+            "Negro real y bordes marcados. Para monitores muy oscuros o para leer la tabla de lejos."
+        ),
+        "colors": {
+            "WINDOW": "#0D0D0D",
+            "SURFACE": "#151515",
+            "SURFACE_RAISED": "#1F1F1F",
+            "SURFACE_HEADER": "#191919",
+            "SURFACE_HOVER": "#2B2B2B",
+            "SURFACE_SELECTED": "#282828",
+            "ROW_LINE": "#202020",
+            "FIELD_BG": "#101010",
+            "TEXT": "#B8B8B8",
+            "TEXT_STRONG": "#FFFFFF",
+            "TEXT_DIM": "#787878",
+            "TEXT_HEADER": "#A0A0A0",
+            "TEXT_ON_ACCENT": "#FFFFFF",
+            "BORDER": "#303030",
+            "BORDER_STRONG": "#484848",
+            "BORDER_HOVER": "#5E5E5E",
+            "ACCENT": "#6A5AE0",
+            "ACCENT_HOVER": "#9370FF",
+            "CHECKBOX_OFF": "#1E1C2A",
+            "CHECKBOX_OFF_HOVER": "#2E2B3E",
+            "CHECKBOX_ON": "#6A5AE0",
+            "CHECKBOX_ON_HOVER": "#7F6EF5",
+            "CHECKBOX_BORDER": "#151515",
+            "CHECKBOX_ON_DISABLED": "#413876",
+            "CHECKBOX_ON_DISABLED_BORDER": "#564C95",
+            "CHECKBOX_ON_DISABLED_TICK": "#DAD4FA",
+            "OK_BG": "#173D0F",
+            "WARNING_BG": "#3F2E08",
+            "ERROR_BG": "#420F0F",
+            "SURFACE_SUNKEN": "#080808",
+            "ACCENT_DISABLED": "#302A5D",
+            "ACCENT_TRACK": "#4E43A1",
+            "DOT_OK": "#6ED66E",
+            "DOT_WARNING": "#EFC45E",
+            "DOT_ERROR": "#F07070",
+            "PATH_COMMON": "#D07BF7",
+            "PATH_SEPARATOR": "#6E6E72",
+            "MARK_BG": "#4C3B0A",
+        },
+    },
+)
+
+# El tema BASE es el que reciben las tools que no piden ninguno, o sea las que
+# hacen `from ... import Style, Color`. Es "pack" y tiene que seguir siendolo:
+# son once ventanas ya migradas que nadie pidio cambiar, y cambiarlas desde
+# aca seria decidir por ellas sin que ninguna se entere.
+#
+# Una tool que quiere otro aspecto lo pide: `UI = theme("lga")`. El Media
+# Manager deja elegir el tema al usuario y arranca tambien en "pack".
+BASE_THEME = "pack"
+
+
+def theme_ids():
+    """Los id de los temas, en el orden en que se muestran."""
+    return tuple(t["id"] for t in THEMES)
+
+
+def get_theme(theme_id):
+    """El tema pedido, o el default si ese id no existe.
+
+    No explota con un id desconocido: un .ini escrito por una version mas
+    nueva del pack, o a mano, tiene que dejar la ventana usable.
+    """
+    for tema in THEMES:
+        if tema["id"] == theme_id:
+            return tema
+    for tema in THEMES:
+        if tema["id"] == BASE_THEME:
+            return tema
+    return THEMES[0]
+
+
+# El juego de tokens que TIENE que traer cada tema. Sale del tema BASE buscado
+# por id y no de THEMES[0]: sacarlo del primero de la lista es referenciar un
+# tema por indice, que es exactamente lo que este modulo dice no hacer, y
+# alcanzaba con agregar un tema arriba para cambiar en silencio contra que se
+# valida. (Este modulo ya se rompio asi una vez, cuando "lga" se agrego al
+# principio de la lista.)
+THEME_TOKENS = frozenset(get_theme(BASE_THEME)["colors"])
 
 
 # La tilde del checkbox viaja al lado de este modulo. QSS pide una ruta de
@@ -231,7 +707,30 @@ CHECKMARK_OFF_PATH = os.path.join(_ICON_DIR, "LGA_UI_checkmark_off.svg").replace
 # comparten la tabla, los campos de texto multilinea y cualquier area
 # scrolleable: cuando estaba copiada en cada tool cada una le puso un ancho
 # distinto (8 o 12 px) y el salto se notaba al comparar dos ventanas.
-SCROLLBAR = """
+
+
+class Style(object):
+    """QSS listo para usar. Se arma con la paleta de arriba, nunca con hex."""
+
+    # Los atributos los escribe _build_styles(). Antes se armaban en el
+    # cuerpo de la clase, o sea una sola vez al importar el modulo, y no
+    # habia forma de tener dos temas a la vez.
+    #
+    # Esta clase es la del tema BASE. Los otros temas tienen la suya, que
+    # se pide con theme(id).Style.
+    pass
+
+
+def _build_styles(Color, Style):
+    """
+    Arma todas las hojas de UN tema.
+
+    Color y Style son parametros a proposito y no los objetos del modulo:
+    asi cada tema tiene su juego propio y dos tools con temas distintos no
+    se pisan. El cuerpo de abajo los usa por nombre, igual que antes.
+    """
+
+    _scrollbar = """
 QScrollBar:vertical {
     background: %(window)s;
     width: %(sb)dpx;
@@ -258,43 +757,50 @@ QScrollBar::handle:horizontal {
 QScrollBar::handle:horizontal:hover { background: %(border_hover)s; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0px; height: 0px; background: none; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
-""" % {
-    "window": Color.WINDOW,
-    "border": Color.BORDER_STRONG,
-    "border_hover": Color.BORDER_HOVER,
-    "sb": Metric.SCROLLBAR_WIDTH,
-    "sb_radius": Metric.SCROLLBAR_WIDTH // 2,
-}
-
-
-class Style(object):
-    """QSS listo para usar. Se arma con la paleta de arriba, nunca con hex."""
+"""     % {
+        "window": Color.WINDOW,
+        "border": Color.BORDER_STRONG,
+        "border_hover": Color.BORDER_HOVER,
+        "sb": Metric.SCROLLBAR_WIDTH,
+        "sb_radius": Metric.SCROLLBAR_WIDTH // 2,
+    }
+    Style.SCROLLBAR = _scrollbar
 
     # Fondo de la ventana. Va sin border-radius: una ventana con esquinas
     # redondeadas y sin frame deja los cuatro angulos del rectangulo pintados
     # por debajo, que se ve peor que la esquina cuadrada.
-    WINDOW = "QWidget { background-color: %s; color: %s; }" % (
+    Style.WINDOW = "QWidget { background-color: %s; color: %s; }" % (
         Color.WINDOW,
         Color.TEXT,
     )
 
     # Caja apoyada sobre la ventana (avisos, agrupaciones).
-    PANEL = "background-color: %s; border-radius: %dpx;" % (
+    Style.PANEL = "background-color: %s; border-radius: %dpx;" % (
         Color.SURFACE,
         Metric.RADIUS,
     )
 
     # --- botones -----------------------------------------------------------
+    # Los dos botones de accion van en SemiBold (600) y no en bold. El pack
+    # carga Inter en tres pesos -400, 600 y 700- y `font-weight: bold` pide el
+    # 700, que es el peso del titulo de una ventana. Al lado de una fila de
+    # controles en 400 el boton quedaba dos escalones mas pesado que todo lo
+    # demas; el rediseno usa 600 en todo lo enfatizado (barra, cabeceras de
+    # tabla, pastillas) y estos dos eran la unica excepcion.
+    #
+    # El texto va en TEXT_STRONG y no en TEXT: son la accion de la ventana, y
+    # en el gris de cuerpo se leian mas apagados que las etiquetas de al lado.
+
     # El boton de accion. Es el unico violeta de la ventana: si hay dos, el
     # usuario no sabe cual ejecuta Enter.
-    BTN_PRIMARY = """
+    Style.BTN_PRIMARY = """
 QPushButton {
     background-color: %(accent)s;
     border: none;
-    color: %(text_strong)s;
+    color: %(on_accent)s;
     padding: 7px 18px;
     border-radius: %(radius)dpx;
-    font-weight: bold;
+    %(semibold)s
 }
 QPushButton:hover { background-color: %(accent_hover)s; color: %(on_accent)s; }
 QPushButton:disabled { background-color: %(accent_dis)s; color: %(text_dim)s; }
@@ -303,37 +809,39 @@ QPushButton:disabled { background-color: %(accent_dis)s; color: %(text_dim)s; }
         "accent_hover": Color.ACCENT_HOVER,
         "accent_dis": Color.ACCENT_DISABLED,
         "on_accent": Color.TEXT_ON_ACCENT,
-        "text_strong": Color.TEXT_STRONG,
         "text_dim": Color.TEXT_DIM,
         "radius": Metric.RADIUS,
+        "semibold": semibold_css(),
     }
 
     # El boton que NO ejecuta la accion (Cancel, Close). Misma caja que el
     # primario para que la fila quede pareja; lo unico que cambia es el color.
-    BTN_SECONDARY = """
+    Style.BTN_SECONDARY = """
 QPushButton {
     background-color: %(raised)s;
     border: 1px solid %(border)s;
-    color: %(text)s;
+    color: %(text_strong)s;
     padding: 7px 18px;
     border-radius: %(radius)dpx;
-    font-weight: bold;
+    %(semibold)s
 }
-QPushButton:hover { background-color: %(hover)s; color: %(text_strong)s; }
+QPushButton:hover { background-color: %(hover)s; border-color: %(border_hover)s;
+                    color: %(text_strong)s; }
 QPushButton:disabled { background-color: %(surface)s; color: %(text_dim)s; }
 """ % {
         "raised": Color.SURFACE_RAISED,
         "surface": Color.SURFACE,
         "hover": Color.SURFACE_HOVER,
         "border": Color.BORDER_STRONG,
-        "text": Color.TEXT,
+        "border_hover": Color.BORDER_HOVER,
         "text_strong": Color.TEXT_STRONG,
         "text_dim": Color.TEXT_DIM,
         "radius": Metric.RADIUS,
+        "semibold": semibold_css(),
     }
 
     # Boton auxiliar de una fila de herramientas (All / None / Swap / Reset).
-    BTN_SMALL = """
+    Style.BTN_SMALL = """
 QPushButton {
     background-color: %(raised)s;
     border: 1px solid %(border)s;
@@ -358,7 +866,7 @@ QPushButton:disabled { background-color: %(surface)s; color: %(text_dim)s; }
     # Boton cuadrado con un glifo adentro (swap, papelera). Va aparte de
     # BTN_SMALL porque ese reserva 12 px de padding horizontal por lado: en un
     # boton de ancho fijo no queda lugar para el glifo y Qt lo elide a "...".
-    BTN_ICON = """
+    Style.BTN_ICON = """
 QPushButton {
     background-color: %(raised)s;
     border: 1px solid %(border)s;
@@ -382,7 +890,7 @@ QPushButton:disabled { background-color: %(surface)s; color: %(text_dim)s; }
 
     # La cruz de cerrar de las ventanas sin frame. Sin caja hasta el hover,
     # asi no compite con el boton de accion.
-    BTN_CLOSE = """
+    Style.BTN_CLOSE = """
 QPushButton {
     background-color: transparent;
     border: none;
@@ -400,7 +908,7 @@ QPushButton:hover { background-color: %(error)s; color: %(on_accent)s; }
     }
 
     # --- campos ------------------------------------------------------------
-    LINE_EDIT = """
+    Style.LINE_EDIT = """
 QLineEdit {
     background-color: %(surface)s;
     color: %(text)s;
@@ -425,7 +933,7 @@ QLineEdit:disabled { color: %(text_dim)s; border-color: %(border)s; }
         "radius": Metric.RADIUS_SMALL,
     }
 
-    COMBO = """
+    Style.COMBO = """
 QComboBox {
     background-color: %(surface)s;
     color: %(text)s;
@@ -460,13 +968,23 @@ QComboBox QAbstractItemView {
     # con el tema del host, asi que el mismo checkbox se veia distinto en Nuke,
     # en Hiero y en las apps Qt. Nunca poner background al QCheckBox entero:
     # colorea tambien el texto y el padding.
-    CHECKBOX = """
+    Style.CHECKBOX = """
 QCheckBox {
     color: %(text)s;
     padding: 2px;
     background: transparent;
     border: none;
+    /* Sin aire entre el cuadrito y el texto. Un QCheckBox("") sin texto igual
+       reserva esa separacion, asi que el widget mide mas que su indicador y al
+       centrarlo en una columna el cuadrito queda corrido a la izquierda: el
+       titulo de la columna, ese si centrado de verdad, no le caia encima. */
+    spacing: 0px;
 }
+/* El de arriba es el caso sin texto. El que SI tiene etiqueta necesita aire:
+   pegado al cuadrito, el nombre de la tool parece parte del control. Va por
+   propiedad porque QSS no distingue un checkbox con texto de uno sin el:
+       checkbox.setProperty("lgaLabeled", True)   # antes del primer polish */
+QCheckBox[lgaLabeled="true"] { spacing: %(gap)dpx; }
 QCheckBox::indicator {
     width: 16px;
     height: 16px;
@@ -483,21 +1001,30 @@ QCheckBox::indicator:checked:hover { background-color: %(on_hover)s; }
 QCheckBox:disabled { color: %(text_dim)s; }
 QCheckBox::indicator:disabled {
     background-color: %(surface)s;
-    border-color: %(border)s;
+    border-color: %(border_dis)s;
 }
-QCheckBox::indicator:checked:disabled { image: url(%(checkmark_off)s); }
+QCheckBox::indicator:checked:disabled {
+    background-color: %(on_dis)s;
+    border-color: %(on_dis_border)s;
+    image: url(%(checkmark_off)s);
+}
 """ % {
         "text": Color.TEXT,
+        "gap": Metric.CHECKBOX_LABEL_GAP,
         "off": Color.CHECKBOX_OFF,
         "off_hover": Color.CHECKBOX_OFF_HOVER,
         "on": Color.CHECKBOX_ON,
         "on_hover": Color.CHECKBOX_ON_HOVER,
+        # "border" estaba dos veces en este dict y ganaba la segunda, asi que
+        # CHECKBOX_BORDER estaba muerto y el borde real salia de BORDER_STRONG.
         "border": Color.CHECKBOX_BORDER,
+        "border_dis": Color.BORDER_STRONG,
+        "on_dis": Color.CHECKBOX_ON_DISABLED,
+        "on_dis_border": Color.CHECKBOX_ON_DISABLED_BORDER,
         "surface": Color.SURFACE,
         "checkmark": CHECKMARK_PATH,
         "checkmark_off": CHECKMARK_OFF_PATH,
         "text_dim": Color.TEXT_DIM,
-        "border": Color.BORDER_STRONG,
         "radius": Metric.RADIUS_SMALL,
     }
 
@@ -507,7 +1034,10 @@ QCheckBox::indicator:checked:disabled { image: url(%(checkmark_off)s); }
     # importan en un try y se quedan sin nada si el usuario no tiene instalado
     # el ToolPack, que es justo la dependencia cruzada que este modulo evita.
     # Con esto, el pack que no tenga el helper igual pinta sus tooltips.
-    TOOLTIP = """
+    # Los dos hex van a mano a proposito: son los mismos de
+    # LGA_tooltip_helper, y si aca salieran del tema, un pack con el helper
+    # instalado y otro sin el pintarian tooltips distintos.
+    Style.TOOLTIP = """
 QToolTip {
     background-color: #1E1E1E;
     color: #CCCCCC;
@@ -520,7 +1050,7 @@ QToolTip {
     # Barra de progreso. El riel va en un violeta apagado y el relleno en el
     # violeta de la app: es la misma senal que el boton de accion, asi que se
     # lee como "esto es lo que pediste, avanzando".
-    PROGRESS = """
+    Style.PROGRESS = """
 QProgressBar {
     background-color: %(track)s;
     border: none;
@@ -543,7 +1073,7 @@ QProgressBar::chunk { background-color: %(accent)s; border-radius: %(radius)dpx;
 
     # El fondo de ventana arrastra el checkbox: es la hoja que aplican
     # casi todas las ventanas, y sin esto quedaban con el del host.
-    WINDOW = WINDOW + CHECKBOX
+    Style.WINDOW = Style.WINDOW + Style.CHECKBOX
 
     # --- ventana de formulario ---------------------------------------------
     # Hoja completa para una ventana de ajustes: en vez de llamar a
@@ -560,7 +1090,7 @@ QProgressBar::chunk { background-color: %(accent)s; border-radius: %(radius)dpx;
     # QWidget { background-color } de abajo tambien los alcanza, y quedaban
     # con el fondo del pack y los botones del tema del host. Se les da el
     # boton secundario para que el cartel cierre coherente.
-    FORM = """
+    Style.FORM = """
 QWidget { background-color: %(window)s; color: %(text)s; }
 QLabel { background: transparent; color: %(text)s; }
 QLabel[lgaTitle="true"] {
@@ -624,8 +1154,8 @@ QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {
 }
 %(scrollbar)s
 """ % {
-        "scrollbar": SCROLLBAR,
-        "checkbox": CHECKBOX,
+        "scrollbar": _scrollbar,
+        "checkbox": Style.CHECKBOX,
         "window": Color.WINDOW,
         "surface": Color.SURFACE,
         "raised": Color.SURFACE_RAISED,
@@ -643,7 +1173,7 @@ QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {
     # --- tabla -------------------------------------------------------------
     # La barra de scroll va incluida: cuando estaba suelta cada tool le ponia
     # un ancho distinto (8 / 12 px) y se notaba al comparar dos ventanas.
-    TABLE = """
+    Style.TABLE = """
 QTableWidget {
     background-color: %(surface)s;
     border: 1px solid %(border_soft)s;
@@ -670,13 +1200,13 @@ QTableWidget::item:selected { background-color: %(selected)s; color: %(text_stro
         "selected": Color.SURFACE_SELECTED,
         "header_bg": Color.SURFACE_HEADER,
         "header_fg": Color.TEXT_HEADER,
-        "scrollbar": SCROLLBAR,
+        "scrollbar": _scrollbar,
     }
 
     # Bloque de detalle tecnico (traceback, salida de un proceso). Va mas
     # oscuro que la ventana a proposito, para que se lea como un bloque de
     # datos pegado y no como una segunda parte del mensaje.
-    DETAIL = """
+    Style.DETAIL = """
 QTextEdit {
     background-color: %(sunken)s;
     color: %(text)s;
@@ -690,6 +1220,383 @@ QTextEdit {
         "text": Color.TEXT,
         "radius": Metric.RADIUS_SMALL,
     }
+
+    return Style
+
+
+# ---------------------------------------------------------------------------
+#                            Elegir un tema
+# ---------------------------------------------------------------------------
+# Cada tema se arma una vez y queda cacheado. No hay "tema activo": el tema es
+# de la tool que lo pide, no del modulo.
+_themes = {}
+# Con que familia de semibold se armaron los temas cacheados. Las hojas la
+# llevan escrita adentro, asi que si las fuentes cargan despues hay que
+# rearmarlos. Ver theme().
+_themes_fuente = None
+
+
+def _mix(color_a, color_b, factor=0.5):
+    """Mezcla dos hex. factor 0 devuelve el primero y 1 el segundo."""
+    def canales(valor):
+        valor = valor.lstrip("#")
+        return [int(valor[i:i + 2], 16) for i in (0, 2, 4)]
+
+    a, b = canales(color_a), canales(color_b)
+    mezcla = [int(round(x + (y - x) * factor)) for x, y in zip(a, b)]
+    return "#%02X%02X%02X" % tuple(mezcla)
+
+
+def _derivados(colores):
+    """
+    Los tokens que no se escriben a mano en cada tema.
+
+    El fondo de una celda de estado en la fila SELECCIONADA se mezcla contra
+    el gris de la seleccion, no se aclara: aclarar sube el brillo pero no
+    desatura, y la celda queda mas roja en vez de mas gris.
+    """
+    sel = colores["SURFACE_SELECTED"]
+    fondo = colores["WINDOW"]
+    # Los dos Outside se mezclan contra el fondo de ESTE tema, no contra un
+    # gris fijo: es lo que hace que el mismo par de reglas sirva para los seis
+    # sin escribir doce hexes a mano.
+    outside = _mix(colores["ERROR_BG"], fondo, 0.42)
+    # Del dict del tema si algun dia se sube a THEME_TOKENS, y del modulo
+    # mientras no. Leerlo solo de Color dejaria el valor del tema ignorado en
+    # silencio el dia que alguien lo agregue.
+    azul = colores.get("OUTSIDE_INFO_BASE", Color.OUTSIDE_INFO_BASE)
+    outside_info = _mix(azul, fondo, 0.30)
+    return {
+        "OK_BG_SELECTED": _mix(colores["OK_BG"], sel),
+        "WARNING_BG_SELECTED": _mix(colores["WARNING_BG"], sel),
+        "ERROR_BG_SELECTED": _mix(colores["ERROR_BG"], sel),
+        "OUTSIDE_BG": outside,
+        "OUTSIDE_BG_INFO": outside_info,
+        "OUTSIDE_BG_SELECTED": _mix(outside, sel),
+        "OUTSIDE_BG_INFO_SELECTED": _mix(outside_info, sel),
+        "DOT_OUTSIDE": _mix(colores["DOT_ERROR"], fondo, 0.30),
+        # El texto secundario de un control APAGADO. El rediseno atenua el
+        # control entero, y el gris de cuerpo ya apagado tiene que bajar otro
+        # escalon: dejandolo en TEXT_DIM, el atajo de un boton deshabilitado
+        # se leia igual de fuerte que el de uno activo.
+        "TEXT_DISABLED": _mix(colores["TEXT_DIM"], colores["SURFACE_RAISED"], 0.55),
+        # El icono destructivo con el boton apagado: el mismo rojo mezclado
+        # contra la superficie del boton, o sea atenuado sin dejar de ser rojo.
+        # DANGER_ICON no esta en THEME_TOKENS, asi que sale del modulo.
+        "DANGER_ICON_DIM": _mix(
+            colores.get("DANGER_ICON", Color.DANGER_ICON),
+            colores["SURFACE_RAISED"],
+            0.58,
+        ),
+    }
+
+
+class Theme(object):
+    """
+    Un tema: su paleta y sus hojas.
+
+        UI = theme("lga")
+        ventana.setStyleSheet(UI.Style.WINDOW)
+        label.setStyleSheet("color: %s;" % UI.Color.TEXT)
+    """
+
+    def __init__(self, spec):
+        self.id = spec["id"]
+        self.label = spec["label"]
+        self.desc = spec["desc"]
+
+        colores = dict(spec["colors"])
+        faltantes = sorted(THEME_TOKENS - set(colores))
+        sobrantes = sorted(set(colores) - THEME_TOKENS)
+        if faltantes or sobrantes:
+            raise ValueError(
+                "el tema '%s' no coincide con THEME_TOKENS. Faltan: %s. Sobran: %s"
+                % (self.id, ", ".join(faltantes) or "-", ", ".join(sobrantes) or "-")
+            )
+        colores.update(_derivados(colores))
+
+        if self.id == BASE_THEME:
+            # El tema base ES la clase Color del modulo, no una copia: las
+            # tools que hacen `from ... import Color` tienen que recibir
+            # exactamente este objeto.
+            for nombre, valor in colores.items():
+                setattr(Color, nombre, valor)
+            self.Color = Color
+            self.Style = _build_styles(Color, Style)
+        else:
+            # Los demas son subclases: heredan los tokens que NO cambian con
+            # el tema (OK, WARNING, INFO, ENTITY, PATH_FIELD, la paleta de
+            # paths) y pisan los que si.
+            self.Color = type("Color_%s" % self.id.replace("-", "_"),
+                              (Color,), colores)
+            self.Style = _build_styles(
+                self.Color, type("Style_%s" % self.id.replace("-", "_"), (), {})
+            )
+
+
+def theme(theme_id=None):
+    """
+    El tema pedido, armado y cacheado.
+
+    Con un id desconocido devuelve el base en vez de explotar: un .ini escrito
+    por una version mas nueva del pack, o a mano, tiene que dejar la ventana
+    usable igual.
+    """
+    global _themes_fuente
+    # Las hojas llevan la familia del semibold escrita adentro, y las fuentes
+    # solo se pueden registrar cuando existe QApplication. Si un tema se armo
+    # antes de eso -por ejemplo al importar el modulo desde menu.py- quedo con
+    # el peso pedido por numero, que devuelve la Bold. Al cambiar el estado de
+    # las fuentes se tira el cache y se rearma: sin esto, la primera ventana de
+    # la sesion se quedaba en negrita para siempre.
+    estado_fuente = semibold_family()
+    if estado_fuente != _themes_fuente:
+        _themes.clear()
+        _themes_fuente = estado_fuente
+    if theme_id not in _themes:
+        spec = get_theme(theme_id)
+        _themes[spec["id"]] = Theme(spec)
+        if theme_id != spec["id"]:
+            _themes[theme_id] = _themes[spec["id"]]
+    return _themes[theme_id]
+
+
+# ---------------------------------------------------------------------------
+#                                  Fuentes
+# ---------------------------------------------------------------------------
+# Las fuentes viajan adentro del pack en vez de usar la del sistema: en macOS
+# la del sistema es SF Pro y en Windows Segoe UI, o sea que la misma ventana se
+# ve distinta en cada maquina y cualquier ancho ajustado en una se corre en la
+# otra.
+#
+# Son TTF y no woff2 a proposito: QFontDatabase.addApplicationFont carga TTF y
+# OTF, y no soporta woff2.
+#
+# OJO CON LA FAMILIA DEL SEMIBOLD. Las tres caras de Inter NO forman una sola
+# familia para Qt:
+#
+#     Inter-400.ttf -> familia "Inter",          subfamilia Regular
+#     Inter-700.ttf -> familia "Inter",          subfamilia Bold
+#     Inter-600.ttf -> familia "Inter SemiBold", subfamilia Regular   <-- APARTE
+#
+# Es el naming RIBBI clasico: una familia solo puede tener Regular, Bold,
+# Italic y Bold-Italic, asi que cualquier peso intermedio se publica como una
+# familia propia. Consecuencia: pedir `font-weight: 600` sobre "Inter" no
+# devuelve la SemiBold —no esta en esa familia— sino la cara mas cercana que
+# SI esta, o sea la Bold de 700. Por eso hay que nombrar la familia del
+# semibold explicitamente, y para eso estan semibold_family() y semibold_css().
+# Lo mismo pasa con la Medium de JetBrains Mono, que hoy no se usa.
+_FONT_DIR = os.path.join(_ICON_DIR, "fonts")
+_UI_FONT_REGULAR = "Inter-400.ttf"
+_UI_FONT_SEMIBOLD = "Inter-600.ttf"
+_UI_FONT_BOLD = "Inter-700.ttf"
+# Mono SOLO para el campo de ruta EDITABLE de un formulario: ahi las rutas son
+# relativas y con Inter los "../" no se distinguen, el punto y la barra se
+# pegan. En una tabla de rutas absolutas Inter se lee mejor.
+_MONO_FONT_REGULAR = "JetBrainsMono-400.ttf"
+_MONO_FONT_MEDIUM = "JetBrainsMono-500.ttf"
+
+_families = None
+# La familia del peso 600, que es OTRA que la de la regular. Vive aparte de
+# _families para no cambiarle la forma al valor que devuelve load_fonts().
+_semibold_family = ""
+
+
+def _register(archivo):
+    """
+    Registra UN archivo y devuelve la familia que Qt le asigno, o "".
+
+    De a un archivo y no de a un grupo: cada cara puede caer en una familia
+    distinta -la SemiBold de Inter cae en "Inter SemiBold"- y registrandolas
+    juntas se perdia cual era cual.
+
+    Se devuelve el nombre que INFORMA Qt y no la string "Inter": si el archivo
+    no cargo hay que caer a la fuente del host, no pedir una familia que no
+    existe, que deja la ventana con la fuente por default de Qt.
+    """
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
+    except Exception:
+        return ""
+
+    ruta = os.path.join(_FONT_DIR, archivo)
+    if not os.path.exists(ruta):
+        return ""
+    try:
+        ident = QtGui.QFontDatabase.addApplicationFont(ruta)
+    except Exception:
+        return ""
+    if ident == -1:
+        return ""
+    try:
+        nombres = list(QtGui.QFontDatabase.applicationFontFamilies(ident))
+    except Exception:
+        return ""
+    return nombres[0] if nombres else ""
+
+
+def load_fonts():
+    """
+    Registra las fuentes del pack UNA sola vez por sesion de Nuke.
+
+    Devuelve (familia_ui, familia_mono). Cualquiera de las dos puede venir
+    vacia: sin fuente propia se usa la del host, que es feo pero funciona.
+    La familia del semibold se guarda aparte y se pide con semibold_family().
+    """
+    global _families, _semibold_family
+    if _families is not None:
+        return _families
+    ui = _register(_UI_FONT_REGULAR)
+    # La SemiBold cae en su propia familia y hay que quedarse con SU nombre.
+    semibold = _register(_UI_FONT_SEMIBOLD)
+    # La Bold entra en la misma familia que la regular, asi que su nombre no
+    # se usa; se registra igual para que `font-weight: bold` tenga cara real.
+    _register(_UI_FONT_BOLD)
+    mono = _register(_MONO_FONT_REGULAR)
+    _register(_MONO_FONT_MEDIUM)
+
+    familias = (ui, mono)
+    # Se cachea SOLO si cargo algo. addApplicationFont devuelve -1 mientras no
+    # exista QApplication, asi que cachear el fracaso dejaba al pack sin sus
+    # fuentes para el resto de la sesion de Nuke aunque la GUI ya estuviera
+    # levantada.
+    if ui or mono:
+        _families = familias
+        _semibold_family = semibold
+    return familias
+
+
+def font_family():
+    """La familia de interfaz, o "" si no se pudo cargar."""
+    return load_fonts()[0]
+
+
+def mono_family():
+    """La familia mono, o "" si no se pudo cargar."""
+    return load_fonts()[1]
+
+
+def semibold_family():
+    """
+    La familia del peso 600, que NO es la misma que la de la regular.
+
+    Devuelve "" si no cargo, y ahi quien llama tiene que caer a pedir el peso
+    por numero, que da la Bold pero es lo unico que queda.
+    """
+    load_fonts()
+    return _semibold_family
+
+
+def semibold_css():
+    """
+    Como se pide el peso 600 en una hoja de estilo.
+
+    NO alcanza con `font-weight: 600`: la SemiBold de Inter vive en su propia
+    familia, asi que ese pedido sobre "Inter" devuelve la Bold de 700. Hay que
+    nombrar la familia. Se usa en TODO lo que el disenio pone en semibold:
+
+        boton.setStyleSheet("QPushButton { %s }" % UIStyle.semibold_css())
+    """
+    familia = semibold_family()
+    if not familia:
+        return "font-weight: 600;"
+    # El peso va en normal a proposito: la familia tiene UNA sola cara, la de
+    # 600, y pedirle 600 ademas la haria candidata a que Qt le sintetice
+    # negrita encima.
+    return "font-family: '%s'; font-weight: normal;" % familia
+
+
+def apply_ui_font(widget, size=None):
+    """
+    Le pone al widget -y a todo lo que cuelgue de el- la familia del pack.
+
+    ESTO HAY QUE LLAMARLO. Registrar las fuentes no alcanza: mientras nadie se
+    las ponga a una ventana, la ventana se dibuja con la del host, y ahi el
+    `font-weight` de las hojas no encuentra una cara real para el peso pedido.
+    En macOS Qt entonces SINTETIZA la negrita engrosando el trazo, asi que todo
+    lo que el disenio pide en 600 sale con el peso -y el ancho, un 8 a 20% mas-
+    de una 700 falsa, y la ventana entera se lee mas pesada que el prototipo.
+    Con Inter puesta, 600 es Inter SemiBold y 700 es Inter Bold, que son caras
+    reales del archivo.
+
+    Va por QFont y no por `font-family` en la hoja: Qt lo propaga a los hijos,
+    asi que las hojas de cada control siguen pudiendo pedir tamano y peso sin
+    repetir la familia en cada una. Se llama DESPUES de armar la ventana, para
+    que alcance tambien a los hijos que ya existen.
+
+    Devuelve False si las fuentes no cargaron: sin fuente propia se usa la del
+    host, que es feo pero funciona. El TAMANO se aplica igual en ese caso: es
+    justamente donde mas hace falta, porque la fuente del host viene con SU
+    tamano y ese es el que dejaba el texto diminuto al lado de los controles.
+
+    LA HERENCIA NO ALCANZA CUANDO LA VENTANA TIENE HOJA DE ESTILO. La teoria
+    es que un QFont puesto en el padre baja solo a los hijos, y asi era antes
+    de las hojas; pero al aplicar un QSS, QStyleSheetStyle le fija a CADA hijo
+    la fuente que resuelve para el -la de la app si la hoja no dice nada- y esa
+    fuente queda marcada como propia, o sea que ya no hereda nada del padre.
+    Medido en el panel de Enable Tools: la ventana quedaba en Inter 13 px y sus
+    checkboxes en la Sans Serif de 9 pt del host. Por eso se recorren los hijos
+    uno por uno. Lo que la hoja SI declara -un font-size en una regla- le sigue
+    ganando a esto, que es lo que se quiere: la hoja es la excepcion explicita.
+    """
+    familia = font_family()
+    if not familia and not size:
+        return False
+
+    def poner(objetivo):
+        fuente = objetivo.font()
+        if familia:
+            fuente.setFamily(familia)
+        if size:
+            fuente.setPixelSize(size)
+        objetivo.setFont(fuente)
+
+    poner(widget)
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
+    except Exception:
+        return bool(familia)
+    for hijo in widget.findChildren(QtWidgets.QWidget):
+        poner(hijo)
+    return bool(familia)
+
+
+def semibold(fuente):
+    """
+    Deja un QFont en el peso 600. Para lo que se dibuja a mano.
+
+    Lo primero es la FAMILIA: la SemiBold de Inter vive en "Inter SemiBold",
+    asi que subirle el peso a un QFont de la familia "Inter" no la encuentra
+    -no esta ahi- y Qt devuelve la Bold de 700. Nombrando la familia, el peso
+    sale solo, porque esa familia tiene una sola cara y es la de 600.
+
+    Sin las fuentes del pack queda el camino viejo: pedir el peso por enum.
+    `QFont.DemiBold` no esta garantizado -en PySide6 con enums estrictos hay
+    que ir por `QFont.Weight.DemiBold`- y el fallback natural, `setBold(True)`,
+    pide 700, que es un escalon de mas.
+    """
+    familia = semibold_family()
+    if familia:
+        fuente.setFamily(familia)
+        fuente.setBold(False)
+        return fuente
+
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
+    except Exception:
+        return fuente
+    QFont = QtGui.QFont
+    peso = getattr(getattr(QFont, "Weight", None), "DemiBold", None)
+    if peso is None:
+        peso = getattr(QFont, "DemiBold", None)
+    if peso is not None:
+        try:
+            fuente.setWeight(peso)
+            return fuente
+        except (TypeError, OverflowError):
+            pass
+    fuente.setBold(True)
+    return fuente
 
 
 # ---------------------------------------------------------------------------
@@ -793,3 +1700,19 @@ def colorize_path_pair(from_path, to_path):
         return separator.join(painted)
 
     return paint(from_segments), paint(to_segments)
+
+
+# El modulo se arma apenas se importa con el tema BASE: sin esto,
+# Style.LO_QUE_SEA no existe y cualquier tool que lo pida al construir su
+# ventana explota.
+#
+# Que el base sea "pack" es lo que hace que este cambio sea invisible para las
+# tools que ya estaban: siguen haciendo `from ... import Style, Color` y
+# reciben lo mismo de siempre, sin tocarles una linea. La que quiera otro tema
+# lo pide con theme("lga") y no le cambia el aspecto a ninguna otra.
+theme(BASE_THEME)
+
+# Suelto, por compatibilidad: hay una tool que hace
+# `from ... import SCROLLBAR`. Como es un string, ese import liga por VALOR,
+# asi que solo puede traer el del tema base.
+SCROLLBAR = Style.SCROLLBAR
