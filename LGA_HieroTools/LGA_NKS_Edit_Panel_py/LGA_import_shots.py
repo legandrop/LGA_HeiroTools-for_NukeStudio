@@ -1,13 +1,25 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.36 | Lega
+  LGA_import_shots v1.38 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.38: Fin de la migracion de estilo: el QSS suelto que quedaba
+         (spinboxes, combos con flecha propia, QSS de rename/transcode,
+         labels, log, barra de progreso y header de preview) pasa a
+         tokens del modulo; el header seq/shot usa INFO/ENTITY como sus
+         ventanas hermanas. Quedan como data los colores por tipo/estado,
+         la banda #313131 de secciones, el hover/pressed del link de
+         shot, el ambar del footer de omitidos y la maquinaria de tabs
+         (paridad con CreateV000).
+  v1.37: La columna de checkbox de las tablas media/rename/convert pasa
+         de 28 a 34 px: el padding horizontal de item de Style.TABLE
+         (6px por lado) achicaba el rect del cell widget y el checkbox
+         del pack salia recortado a la derecha.
   v1.36: Migracion al modulo de estilo LGA_UI_Style_HieroTools: los
          bloques QSS locales (_DIALOG_STYLE, _TABLE_STYLE, _BTN_*) pasan
          a las hojas del modulo, la hoja de tabs se arma con tokens de
@@ -1252,7 +1264,7 @@ def _show_shot_exists_confirm(shot_name):
 
 def _section_label(text):
     lbl = QtWidgets.QLabel(text)
-    lbl.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 4px;")
+    lbl.setStyleSheet("color: %s; font-weight: bold; padding-top: 4px;" % Color.TEXT_STRONG)
     return lbl
 
 
@@ -1261,7 +1273,7 @@ def _rn_escape(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _cell_html_label(html, bg="#272727"):
+def _cell_html_label(html, bg=Color.SURFACE):
     """QLabel con HTML coloreado para usar como cellWidget en tablas.
     Transparente a eventos de mouse para que el cellClicked de la tabla
     siga funcionando correctamente."""
@@ -1289,7 +1301,7 @@ def _separator(orientation="h"):
         QtWidgets.QFrame.HLine if orientation == "h" else QtWidgets.QFrame.VLine
     )
     sep.setFrameShadow(QtWidgets.QFrame.Sunken)
-    sep.setStyleSheet("color: #444444; margin: 0px;")
+    sep.setStyleSheet("color: %s; margin: 0px;" % Color.BORDER_STRONG)
     return sep
 
 
@@ -1352,7 +1364,7 @@ class _ArrowComboBox(QtWidgets.QComboBox):
         path.lineTo(cx + 4, cy - 2)
         path.lineTo(cx, cy + 3)
         path.closeSubpath()
-        p.fillPath(path, QtGui.QColor("#999999"))
+        p.fillPath(path, QtGui.QColor(Color.TEXT))
         p.end()
 
 
@@ -1365,17 +1377,24 @@ class _ArrowComboBox(QtWidgets.QComboBox):
 class _ArrowSpinBox(QtWidgets.QSpinBox):
     """QSpinBox que dibuja sus propias flechas ▲▼ via paintEvent.
     Solución análoga a _ArrowComboBox: los botones nativos funcionan,
-    solo se pinta encima. Selección de texto: fondo gris claro / texto oscuro."""
+    solo se pinta encima. Selección de texto: los colores de selección
+    del pack (mismos que Style.LINE_EDIT)."""
 
     _STYLE = (
-        "QSpinBox { background:#272727; border:1px solid #444; color:#a7a7a7;"
+        "QSpinBox { background:%(surface)s; border:1px solid %(border)s; color:%(text)s;"
         " padding:2px 20px 2px 4px;"
-        " selection-background-color:#505060; selection-color:#d0d0d0; }"
+        " selection-background-color:%(accent)s; selection-color:%(text_strong)s; }"
         "QSpinBox::up-button, QSpinBox::down-button"
         " { background:transparent; border:none; width:18px; }"
         "QSpinBox::up-arrow, QSpinBox::down-arrow"
         " { image:none; width:0; height:0; }"
-    )
+    ) % {
+        "surface": Color.SURFACE,
+        "border": Color.BORDER_STRONG,
+        "text": Color.TEXT,
+        "accent": Color.ACCENT,
+        "text_strong": Color.TEXT_STRONG,
+    }
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -1390,7 +1409,7 @@ class _ArrowSpinBox(QtWidgets.QSpinBox):
         path_up.lineTo(cx + 4, cy_up + 2)
         path_up.lineTo(cx,     cy_up - 2)
         path_up.closeSubpath()
-        p.fillPath(path_up, QtGui.QColor("#999999"))
+        p.fillPath(path_up, QtGui.QColor(Color.TEXT))
         # Flecha ▼ (cuarto inferior derecho)
         cy_dn = r.height() * 3 // 4
         path_dn = QtGui.QPainterPath()
@@ -1398,7 +1417,7 @@ class _ArrowSpinBox(QtWidgets.QSpinBox):
         path_dn.lineTo(cx + 4, cy_dn - 2)
         path_dn.lineTo(cx,     cy_dn + 2)
         path_dn.closeSubpath()
-        p.fillPath(path_dn, QtGui.QColor("#999999"))
+        p.fillPath(path_dn, QtGui.QColor(Color.TEXT))
         p.end()
 
 
@@ -1407,14 +1426,21 @@ class _ArrowSpinBox(QtWidgets.QSpinBox):
 #  Uso: combo.setStyleSheet(_COMBO_ARROW_STYLE) + combo.setView(QListView())
 # ══════════════════════════════════════════════════════════════════
 
+# El popup usa SURFACE_HEADER: es el mismo #2B2B2B que ya usaba el hex, y el
+# que pintan tambien los delegates de estos combos.
 _COMBO_BASE = (
-    "QComboBox { background-color:#272727; border:1px solid #444; "
-    "color:#a7a7a7; padding:3px 6px; }"
+    "QComboBox { background-color:%(surface)s; border:1px solid %(border)s; "
+    "color:%(text)s; padding:3px 6px; }"
     "QComboBox::drop-down { border:0px; width:18px; }"
     "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
-    "QComboBox QAbstractItemView { background-color:#2B2B2B; color:#a7a7a7; "
-    "selection-background-color:#272727; selection-color:#a7a7a7; outline:0; }"
-)
+    "QComboBox QAbstractItemView { background-color:%(popup)s; color:%(text)s; "
+    "selection-background-color:%(surface)s; selection-color:%(text)s; outline:0; }"
+) % {
+    "surface": Color.SURFACE,
+    "border": Color.BORDER_STRONG,
+    "text": Color.TEXT,
+    "popup": Color.SURFACE_HEADER,
+}
 
 
 def _ar_str(w, h):
@@ -1529,8 +1555,8 @@ class _ResPresetListView(QtWidgets.QListView):
 class _ResPresetDelegate(QtWidgets.QStyledItemDelegate):
     """Pinta items del combo de resoluciones con [AR] en dorado y trash icon a la derecha."""
 
-    _CLR_TEXT = "#a7a7a7"
-    _CLR_AR   = "#a89060"
+    _CLR_TEXT = Color.TEXT
+    _CLR_AR   = "#a89060"  # data: dorado de aspect ratio, sin token en la paleta
 
     def __init__(self, list_view, pix_trash, pix_hover, parent=None):
         super(_ResPresetDelegate, self).__init__(parent)
@@ -1547,9 +1573,9 @@ class _ResPresetDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         painter.save()
-        bg = (QtGui.QColor("#353535")
+        bg = (QtGui.QColor(Color.SURFACE_SELECTED)
               if (option.state & QtWidgets.QStyle.State_Selected)
-              else QtGui.QColor("#2B2B2B"))
+              else QtGui.QColor(Color.SURFACE_HEADER))
         painter.fillRect(option.rect, bg)
 
         text = index.data() or ""
@@ -1723,7 +1749,7 @@ class _TrackComboDelegate(QtWidgets.QStyledItemDelegate):
     En hover el fondo se aclara levemente.
     """
 
-    _CLR_TEXT        = "#a7a7a7"
+    _CLR_TEXT        = Color.TEXT
     _CLR_CREATE_TEXT = "#7aba7a"   # verde suave — acción positiva
     _CLR_CREATE_BG   = "#1a2a1a"   # fondo verde muy oscuro
     _CLR_CREATE_HOV  = "#253525"   # hover: verde oscuro un poco más claro
@@ -1749,9 +1775,9 @@ class _TrackComboDelegate(QtWidgets.QStyledItemDelegate):
             bg = QtGui.QColor(self._CLR_CREATE_HOV if hovered
                               else self._CLR_CREATE_BG)
         else:
-            bg = (QtGui.QColor("#353535")
+            bg = (QtGui.QColor(Color.SURFACE_SELECTED)
                   if (option.state & QtWidgets.QStyle.State_Selected)
-                  else QtGui.QColor("#2B2B2B"))
+                  else QtGui.QColor(Color.SURFACE_HEADER))
         painter.fillRect(option.rect, bg)
 
         text_rect = option.rect.adjusted(6, 0, -4, 0)
@@ -1834,9 +1860,9 @@ class _PreviewHeaderView(QtWidgets.QHeaderView):
     directamente para que los shots nuevos sean realmente verdes.
     """
 
-    DEFAULT_TEXT_COLOR = "#999999"
-    BACKGROUND_COLOR = "#2B2B2B"
-    BOTTOM_BORDER_COLOR = "#444444"
+    DEFAULT_TEXT_COLOR = Color.TEXT_HEADER
+    BACKGROUND_COLOR = Color.SURFACE_HEADER
+    BOTTOM_BORDER_COLOR = Color.BORDER_STRONG
 
     def __init__(self, orientation, parent=None):
         super(_PreviewHeaderView, self).__init__(orientation, parent)
@@ -2095,11 +2121,13 @@ class ImportShotDialog(QtWidgets.QDialog):
         _hdr_lay.addWidget(self._tab_bar, 0, QtCore.Qt.AlignBottom)
         _hdr_lay.addStretch(1)
 
+        # Secuencia en INFO y shot en ENTITY: mismo criterio de header que
+        # CreateV000 y la ventana de Transcode Queue.
         _shot_lbl = QtWidgets.QLabel(
-            "<span style='color:#6AB5CA;'>%s</span>"
-            " <span style='color:#888888;'>/</span> "
-            "<span style='color:#B56AB5;'>%s</span>"
-            % (self._seq_name(), self.shot_name)
+            "<span style='color:%s;'>%s</span>"
+            " <span style='color:%s;'>/</span> "
+            "<span style='color:%s;'>%s</span>"
+            % (Color.INFO, self._seq_name(), Color.TEXT_DIM, Color.ENTITY, self.shot_name)
         )
         _shot_lbl.setTextFormat(QtCore.Qt.RichText)
         _shot_lbl.setStyleSheet(
@@ -2194,11 +2222,14 @@ class ImportShotDialog(QtWidgets.QDialog):
         row.setSpacing(0)
 
         pre_lbl = QtWidgets.QLabel("")
-        pre_lbl.setStyleSheet("color:#a7a7a7; padding:0px;")
+        pre_lbl.setStyleSheet("color:%s; padding:0px;" % Color.TEXT)
 
         shot_btn = QtWidgets.QPushButton("")
         shot_btn.setFlat(True)
         shot_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        # Hover/pressed del link: variantes clara y oscura del magenta de
+        # entidad; la paleta no tiene tokens para esos dos matices (mismo
+        # criterio que la ventana de Transcode Queue).
         shot_btn.setStyleSheet(
             "QPushButton { background: transparent; border:0px; padding:0px;"
             " margin:0px; color:%s; text-align:left; }"
@@ -2213,7 +2244,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         )
 
         post_lbl = QtWidgets.QLabel("")
-        post_lbl.setStyleSheet("color:#a7a7a7; padding:0px;")
+        post_lbl.setStyleSheet("color:%s; padding:0px;" % Color.TEXT)
 
         row.addWidget(pre_lbl)
         row.addWidget(shot_btn)
@@ -2438,7 +2469,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         return page
 
     def _build_media_table(self):
-        # col 0: barra de color (4 px)  col 1: checkbox (28 px)
+        # col 0: barra de color (4 px)  col 1: checkbox (34 px)
         # col 2: Nombre  3: Tipo  4: Resolución  5: FPS  6: Compresión  7: Frames/Duration  8: Track
         headers = ["", "", "Nombre", "Tipo", "Resolución", "FPS", "Compresión", "Frames/Duration", "Track"]
         table = QtWidgets.QTableWidget()
@@ -2471,7 +2502,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
         table.setColumnWidth(0, 5)
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-        table.setColumnWidth(1, 28)
+        # 34px y no 28: el padding horizontal de item de Style.TABLE (6px por
+        # lado) achica el rect del cell widget y el checkbox salia recortado.
+        table.setColumnWidth(1, 34)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         # Tipo, FPS, Compresión — ajustan al contenido
         for col in (3, 5, 6):
@@ -3146,7 +3179,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             return
         unassigned = (combo.currentData(QtCore.Qt.UserRole) is None)
         combo.setProperty("unassigned", "true" if unassigned else "false")
-        text_color = "#e05b5b" if unassigned else "#a7a7a7"
+        text_color = "#e05b5b" if unassigned else Color.TEXT
         font_weight = "bold" if unassigned else "normal"
 
         if not unassigned:
@@ -3166,15 +3199,24 @@ class ImportShotDialog(QtWidgets.QDialog):
                 )
 
         combo.setStyleSheet(
-            "QComboBox { background-color:#272727; border:0px; "
-            "color:%s; font-weight:%s; padding:1px 4px; }"
-            "QComboBox::drop-down { border:0px; width:14px; }"
-            "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
-            "QComboBox QAbstractItemView { background-color:#2B2B2B; "
-            "border:1px solid #444444; color:#a7a7a7; font-weight:normal; "
-            "selection-background-color:#272727; selection-color:#a7a7a7; "
-            "outline:none; }"
-            % (text_color, font_weight)
+            (
+                "QComboBox { background-color:%(surface)s; border:0px; "
+                "color:%(fg)s; font-weight:%(fw)s; padding:1px 4px; }"
+                "QComboBox::drop-down { border:0px; width:14px; }"
+                "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
+                "QComboBox QAbstractItemView { background-color:%(popup)s; "
+                "border:1px solid %(border)s; color:%(text)s; font-weight:normal; "
+                "selection-background-color:%(surface)s; selection-color:%(text)s; "
+                "outline:none; }"
+            )
+            % {
+                "surface": Color.SURFACE,
+                "popup": Color.SURFACE_HEADER,
+                "border": Color.BORDER_STRONG,
+                "text": Color.TEXT,
+                "fg": text_color,
+                "fw": font_weight,
+            }
         )
 
     def _on_track_combo_changed(self, changed_row: int, new_track_key, new_track_text=None):
@@ -3440,7 +3482,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             return
         is_checked = chk.isChecked()
         _dash = "<span style='color:#444444;'>—</span>"
-        _plain = "<span style='color:#a7a7a7;'>%s</span>"
+        _plain = "<span style='color:%s;'>%%s</span>" % Color.TEXT
         # Cols 2 y 5 (original): colores solo si checkbox activado
         orig_disp = it.get("original_html", "") if is_checked else (_plain % _rn_escape(it.get("original_name", "")))
         fold_orig_disp = it.get("folder_original_html", "") if is_checked else (_plain % _rn_escape(it.get("folder_name", "")))
@@ -3474,7 +3516,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         if Rename_Test_mode:
             _tm_row = QtWidgets.QHBoxLayout()
             _tm_lbl = QtWidgets.QLabel("  ⚠  TEST MODE")
-            _tm_lbl.setStyleSheet("color:#d9a441; font-weight:bold; padding:2px 6px;")
+            _tm_lbl.setStyleSheet(
+                "color:%s; font-weight:bold; padding:2px 6px;" % Color.WARNING_TEXT
+            )
             _tm_row.addWidget(_tm_lbl)
             _tm_row.addStretch()
             layout.addLayout(_tm_row)
@@ -3500,7 +3544,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         hdr.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
         self._rename_table.setColumnWidth(0, 5)
         hdr.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-        self._rename_table.setColumnWidth(1, 28)
+        # 34px: compensa el padding de item de Style.TABLE (6px por lado)
+        self._rename_table.setColumnWidth(1, 34)
         hdr.setSectionResizeMode(2, QtWidgets.QHeaderView.Interactive)
         self._rename_table.setColumnWidth(2, 300)
         hdr.setSectionResizeMode(3, QtWidgets.QHeaderView.Fixed)
@@ -3519,17 +3564,15 @@ class ImportShotDialog(QtWidgets.QDialog):
         layout.addWidget(self._rename_table, 1)
 
         self._rename_summary_lbl = QtWidgets.QLabel("")
-        self._rename_summary_lbl.setStyleSheet("color:#888888; padding:2px 6px;")
+        self._rename_summary_lbl.setStyleSheet(
+            "color:%s; padding:2px 6px;" % Color.TEXT_DIM
+        )
         layout.addWidget(self._rename_summary_lbl)
 
         layout.addWidget(_separator())
 
-        line_style = (
-            "QLineEdit { background-color:#272727; border:1px solid #444;"
-            " color:#a7a7a7; padding:4px 8px; border-radius:3px;"
-            " selection-background-color:#505060; selection-color:#d0d0d0; }"
-            "QLineEdit:focus { border:1px solid #555555; }"
-        )
+        # Campos de texto del rename con la hoja de campos del pack.
+        line_style = Style.LINE_EDIT
 
         # Opciones en 2 columnas — igual que transcode
         opts_row = QtWidgets.QHBoxLayout()
@@ -3643,7 +3686,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         col_right.addWidget(_section_label("Delimiter"))
         delim_inner = QtWidgets.QHBoxLayout()
         delim_lbl = QtWidgets.QLabel("Before frame:")
-        delim_lbl.setStyleSheet("color:#a7a7a7;")
+        delim_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         delim_inner.addWidget(delim_lbl)
         self._rename_delim_combo = _ArrowComboBox()
         self._rename_delim_combo.setStyleSheet(self._COMBO_STYLE)
@@ -3661,7 +3704,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         col_right.addWidget(_section_label("Frame Number Digit"))
         pad_inner = QtWidgets.QHBoxLayout()
         pad_lbl = QtWidgets.QLabel("Digits:")
-        pad_lbl.setStyleSheet("color:#a7a7a7;")
+        pad_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         pad_inner.addWidget(pad_lbl)
         self._rename_digits_spin = _ArrowSpinBox()
         self._rename_digits_spin.setRange(1, 12)
@@ -3694,7 +3737,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         preset_row = QtWidgets.QHBoxLayout()
         preset_row.setSpacing(6)
         preset_lbl = QtWidgets.QLabel("Preset:")
-        preset_lbl.setStyleSheet("color:#a7a7a7;")
+        preset_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         preset_row.addWidget(preset_lbl)
         self._rename_preset_combo = _ArrowComboBox()
         self._rename_preset_combo.setStyleSheet(self._COMBO_STYLE)
@@ -4149,7 +4192,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             self._rename_table.setCellWidget(i, 1, cbox)
 
             _dash = "<span style='color:#444444;'>—</span>"
-            _plain = "<span style='color:#a7a7a7;'>%s</span>"
+            _plain = "<span style='color:%s;'>%%s</span>" % Color.TEXT
             # Col 2 (original): colores solo si checkbox activo; plano si no
             if blocked:
                 orig_disp = _plain % _rn_escape(it.get("original_name", ""))
@@ -4394,51 +4437,55 @@ class ImportShotDialog(QtWidgets.QDialog):
     # ══════════════════════════════════════════════════════════
 
     # Presets de resolución: label ➜ (W, H) o None (original)
-    _COMBO_STYLE = (
-        "QComboBox { background-color:#272727; border:1px solid #444; "
-        "color:#a7a7a7; padding:3px 6px; }"
-        "QComboBox::drop-down { border:0px; width:18px; }"
-        "QComboBox::down-arrow { image:none; width:0px; height:0px; }"
-        "QComboBox QAbstractItemView { background-color:#2B2B2B; color:#a7a7a7; "
-        "selection-background-color:#272727; selection-color:#a7a7a7; outline:0; }"
-    )
+    # Era una copia literal de _COMBO_BASE; ahora comparte la misma hoja.
+    _COMBO_STYLE = _COMBO_BASE
 
+    # Spinbox con flechas propias dibujadas por CSS (triangulos de borde):
+    # redefine ::up-arrow/::down-arrow a proposito, que es lo que exige la
+    # trampa documentada del QSpinBox para no quedarse sin flechas.
     _SPIN_STYLE = """
         QSpinBox, QDoubleSpinBox {
-            background-color: #272727; border: 1px solid #444;
-            color: #a7a7a7; padding: 2px 20px 2px 4px;
+            background-color: %(surface)s; border: 1px solid %(border)s;
+            color: %(text)s; padding: 2px 20px 2px 4px;
         }
         QSpinBox::up-button, QDoubleSpinBox::up-button {
             subcontrol-origin: border; subcontrol-position: top right;
-            width: 18px; border-left: 1px solid #444;
-            background-color: #2e2e2e;
+            width: 18px; border-left: 1px solid %(border)s;
+            background-color: %(raised)s;
         }
         QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {
-            background-color: #3a3a3a;
+            background-color: %(hover)s;
         }
         QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
             image: none;
             border-left: 4px solid transparent;
             border-right: 4px solid transparent;
-            border-bottom: 4px solid #888;
+            border-bottom: 4px solid %(arrow)s;
             width: 0px; height: 0px;
         }
         QSpinBox::down-button, QDoubleSpinBox::down-button {
             subcontrol-origin: border; subcontrol-position: bottom right;
-            width: 18px; border-left: 1px solid #444;
-            background-color: #2e2e2e;
+            width: 18px; border-left: 1px solid %(border)s;
+            background-color: %(raised)s;
         }
         QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-            background-color: #3a3a3a;
+            background-color: %(hover)s;
         }
         QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
             image: none;
             border-left: 4px solid transparent;
             border-right: 4px solid transparent;
-            border-top: 4px solid #888;
+            border-top: 4px solid %(arrow)s;
             width: 0px; height: 0px;
         }
-    """
+    """ % {
+        "surface": Color.SURFACE,
+        "border": Color.BORDER_STRONG,
+        "text": Color.TEXT,
+        "raised": Color.SURFACE_RAISED,
+        "hover": Color.SURFACE_HOVER,
+        "arrow": Color.TEXT,
+    }
 
     def _build_page_convert(self):
         page = QtWidgets.QWidget()
@@ -4466,7 +4513,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         hdr.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
         self._convert_table.setColumnWidth(0, 5)
         hdr.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-        self._convert_table.setColumnWidth(1, 28)
+        # 34px: compensa el padding de item de Style.TABLE (6px por lado)
+        self._convert_table.setColumnWidth(1, 34)
         hdr.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         # Origen (col 3) — 400px para "4096×2160 (2.39:1) (2) · 16b · RGB · dwaa · 480f - 20.0s"
         hdr.setSectionResizeMode(3, QtWidgets.QHeaderView.Interactive)
@@ -4507,14 +4555,16 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._convert_dwaa_level_lbl = QtWidgets.QLabel(
             "compression %d" % _DWAA_COMPRESSION_LEVEL
         )
-        self._convert_dwaa_level_lbl.setStyleSheet("color:#666666; padding:2px;")
+        self._convert_dwaa_level_lbl.setStyleSheet(
+            "color:%s; padding:2px;" % Color.TEXT_DIM
+        )
         dwaa_option_row.addWidget(self._convert_dwaa_level_lbl)
         dwaa_option_row.addStretch()
         col_codec.addLayout(dwaa_option_row)
 
         ch_row = QtWidgets.QHBoxLayout()
         ch_lbl = QtWidgets.QLabel("Channels:")
-        ch_lbl.setStyleSheet("color:#a7a7a7;")
+        ch_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         ch_row.addWidget(ch_lbl)
         self._convert_channels = _ArrowComboBox()
         self._convert_channels.setStyleSheet(self._COMBO_STYLE)
@@ -4542,7 +4592,7 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         res_row = QtWidgets.QHBoxLayout()
         res_lbl = QtWidgets.QLabel("Destino:")
-        res_lbl.setStyleSheet("color:#a7a7a7;")
+        res_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         res_row.addWidget(res_lbl)
         self._res_combo = _ArrowComboBox()
         self._res_combo.setStyleSheet(self._COMBO_STYLE)
@@ -4580,7 +4630,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._convert_custom_h.setStyleSheet(_ArrowSpinBox._STYLE)
         self._convert_custom_h.setFixedWidth(88)
         x_lbl = QtWidgets.QLabel("×")
-        x_lbl.setStyleSheet("color:#a7a7a7;")
+        x_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         self._save_preset_btn = QtWidgets.QPushButton("Save preset")
         self._save_preset_btn.setStyleSheet(_BTN_SMALL)
         self._save_preset_btn.setFixedHeight(24)
@@ -4614,7 +4664,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         md_row.setContentsMargins(0, 0, 0, 0)
         md_row.setSpacing(6)
         md_lbl = QtWidgets.QLabel("|  Dimensión que manda:")
-        md_lbl.setStyleSheet("color:#a7a7a7;")
+        md_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         md_row.addWidget(md_lbl)
         self._convert_match_dim = _ArrowComboBox()
         self._convert_match_dim.setStyleSheet(self._COMBO_STYLE)
@@ -4644,7 +4694,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         deana_row.setContentsMargins(0, 0, 0, 0)
         deana_row.setSpacing(6)
         deana_lbl = QtWidgets.QLabel("|  PAR fuente:")
-        deana_lbl.setStyleSheet("color:#a7a7a7;")
+        deana_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         deana_row.addWidget(deana_lbl)
         self._convert_deana_par = _ArrowComboBox()
         self._convert_deana_par.setStyleSheet(self._COMBO_STYLE)
@@ -4676,7 +4726,7 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         flt_row = QtWidgets.QHBoxLayout()
         flt_lbl = QtWidgets.QLabel("Filtro resampling:")
-        flt_lbl.setStyleSheet("color:#a7a7a7;")
+        flt_lbl.setStyleSheet("color:%s;" % Color.TEXT)
         flt_row.addWidget(flt_lbl)
         self._convert_filter = _ArrowComboBox()
         self._convert_filter.setStyleSheet(self._COMBO_STYLE)
@@ -4706,7 +4756,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                 "Los originales no se mueven."
             )
             test_warn.setStyleSheet(
-                "color:#d9a441; font-style:italic; padding:4px 0px;"
+                "color:%s; font-style:italic; padding:4px 0px;" % Color.WARNING_TEXT
             )
             test_warn.setWordWrap(True)
             layout.addWidget(test_warn)
@@ -4726,7 +4776,7 @@ class ImportShotDialog(QtWidgets.QDialog):
         layout.addWidget(_separator())
         self._convert_summary_lbl = QtWidgets.QLabel("")
         self._convert_summary_lbl.setStyleSheet(
-            "color:#cccccc; padding:4px 0px; font-weight:bold;"
+            "color:%s; padding:4px 0px; font-weight:bold;" % Color.TEXT_STRONG
         )
         layout.addWidget(self._convert_summary_lbl)
 
@@ -4738,15 +4788,15 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._convert_log = QtWidgets.QPlainTextEdit()
         self._convert_log.setReadOnly(True)
         self._convert_log.setMaximumHeight(60)
+        # Bloque hundido de detalle tecnico: fondo SUNKEN y texto de metadatos.
         self._convert_log.setStyleSheet(
-            "background:#1e1e1e; border:1px solid #333; color:#888888; padding:3px;"
+            "background:%s; border:1px solid %s; color:%s; padding:3px;"
+            % (Color.SURFACE_SUNKEN, Color.BORDER, Color.TEXT_DIM)
         )
         log_row.addWidget(self._convert_log, 1)
         self._log_expand_btn = QtWidgets.QPushButton("▲")
         self._log_expand_btn.setFixedSize(24, 24)
-        self._log_expand_btn.setStyleSheet(
-            "background:#333; border:1px solid #555; color:#aaa; border-radius:3px;"
-        )
+        self._log_expand_btn.setStyleSheet(Style.BTN_ICON)
         self._log_expand_btn.setToolTip("Expandir log")
         self._log_expand_btn.clicked.connect(self._toggle_convert_log)
         self._log_expanded = False
@@ -6295,7 +6345,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             tw, th = self._apply_even_dims_if_active(tw, th)
 
             # ── Columna 5: Destino ────────────────────────────────────────
-            dest_fg = "#555555" if is_upscale_blocked else "#a7a7a7"
+            dest_fg = "#555555" if is_upscale_blocked else Color.TEXT
             comp = self._target_compression(item.get("compression"))
             bd   = self._fmt_bd(self._target_bitdepth(item.get("bitdepth")))
             ch   = self._target_channels(item.get("channels"))
@@ -6739,22 +6789,28 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._convert_table.setCellWidget(row_i, 7, _cell_html_label(html))
 
     # Estilo de la barra de progreso de transcode
+    # Version compacta (para celda de tabla) de Style.PROGRESS: mismos
+    # tokens de riel/relleno, metricas propias por el alto de fila.
     _PBAR_STYLE = """
         QProgressBar {
-            background-color: #393959;
+            background-color: %(track)s;
             border: none;
             border-radius: 5px;
             text-align: center;
-            color: #cccccc;
+            color: %(text)s;
             font-size: 9px;
             min-height: 16px;
             max-height: 22px;
         }
         QProgressBar::chunk {
-            background-color: #443a91;
+            background-color: %(accent)s;
             border-radius: 5px;
         }
-    """
+    """ % {
+        "track": Color.ACCENT_TRACK,
+        "accent": Color.ACCENT,
+        "text": Color.TEXT_STRONG,
+    }
 
     def _on_sequence_started(self, row_i, dst_dir_str, total_frames):
         """Crea barra de progreso en la columna Estado e inicia polling QTimer."""
@@ -7151,7 +7207,7 @@ class BulkImportDialog(QtWidgets.QDialog):
             "Resultado combinado: desde el vecino anterior al primer shot nuevo "
             "hasta el vecino siguiente al ultimo. Nuevos en color; existentes en gris."
         )
-        note.setStyleSheet("color:#999999; padding:3px;")
+        note.setStyleSheet("color:%s; padding:3px;" % Color.TEXT_DIM)
         layout.addWidget(note)
         self.preview_table = QtWidgets.QTableWidget()
         self.preview_table.setHorizontalHeader(
