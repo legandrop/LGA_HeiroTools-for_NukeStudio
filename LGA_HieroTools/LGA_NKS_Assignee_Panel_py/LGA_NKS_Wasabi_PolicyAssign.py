@@ -1,7 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v1.00 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v1.01 | Lega
+
+  v1.01
+  - La ventana de estado migra al modulo de estilo LGA_UI_Style_HieroTools:
+    tokens de color en el HTML, Style.WINDOW y Close con BTN_SECONDARY a la
+    derecha. Sin hex propios salvo el color de usuario, que es data.
 
   v1.00
   - La carpeta del shot se detecta con is_shot_folder_name() de NamingUtils, que
@@ -34,6 +39,7 @@ import hiero.ui
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_wasabi_user
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
@@ -97,6 +103,9 @@ class WasabiStatusWindow(QDialog):
         # Evitar que la ventana se cierre automáticamente
         self.setAttribute(Qt.WA_DeleteOnClose, False)
 
+        # Estilo del pack: sin esto la ventana hereda el tema del host
+        self.setStyleSheet(Style.WINDOW)
+
         # Layout principal
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -107,10 +116,11 @@ class WasabiStatusWindow(QDialog):
         self.status_label.setTextFormat(Qt.RichText)  # Habilitar formato HTML
 
         # Mensaje inicial - se actualizará con las rutas reales
+        # user_color es DATA (el color de la persona en la DB de PipeSync)
         initial_message = (
             f"<div style='text-align: left;'>"
-            f"<span style='color: #CCCCCC; '>Habilitando rutas en la policy del usuario </span>"
-            f"<span style='color: #CCCCCC; background-color: {user_color}; '>{user_name}</span>"
+            f"<span style='color: {Color.TEXT}; '>Habilitando rutas en la policy del usuario </span>"
+            f"<span style='color: {Color.TEXT_ON_ACCENT}; background-color: {user_color}; '>{user_name}</span>"
             f"</div>"
         )
 
@@ -140,13 +150,17 @@ class WasabiStatusWindow(QDialog):
         # Espaciador
         layout.addStretch()
 
-        # Botón de Close
+        # Botón de Close, secundario y a la derecha como en el resto del pack
         self.close_button = QPushButton("Close")
+        self.close_button.setStyleSheet(Style.BTN_SECONDARY)
         self.close_button.clicked.connect(self.close)
         self.close_button.setEnabled(
             False
         )  # Deshabilitado hasta que termine el procesamiento
-        layout.addWidget(self.close_button)
+        buttons_row = QtWidgets.QHBoxLayout()
+        buttons_row.addStretch()
+        buttons_row.addWidget(self.close_button)
+        layout.addLayout(buttons_row)
 
     def update_paths(self, paths_info):
         """Actualiza la ventana con las rutas reales que se están procesando"""
@@ -154,7 +168,7 @@ class WasabiStatusWindow(QDialog):
 
         for bucket_name, folder_path, subfolder_path in paths_info:
             bucket_path = f"{bucket_name}/{folder_path}/{subfolder_path}"
-            paths_html += f"<span style='color: #6AB5CA; '>{bucket_path}</span><br>"
+            paths_html += f"<span style='color: {Color.INFO}; '>{bucket_path}</span><br>"
 
         paths_html += "</div>"
         self.paths_label.setText(paths_html)
@@ -162,21 +176,21 @@ class WasabiStatusWindow(QDialog):
     def show_processing_message(self):
         """Muestra el mensaje de procesamiento"""
         processing_html = (
-            f"<span style='color: #CCCCCC; '>Procesando clips seleccionados...</span>"
+            f"<span style='color: {Color.TEXT}; '>Procesando clips seleccionados...</span>"
         )
         self.result_label.setText(processing_html)
         self.result_label.setStyleSheet("padding: 10px;")
 
     def show_success(self, message):
         """Muestra mensaje de éxito en verde"""
-        success_html = f"<span style='color: #00ff00; '>{message}</span>"
+        success_html = f"<span style='color: {Color.OK_TEXT}; '>{message}</span>"
         self.result_label.setText(success_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.close_button.setEnabled(True)  # Habilitar botón de Close
 
     def show_error(self, message):
         """Muestra mensaje de error en rojo"""
-        error_html = f"<span style='color: #C05050; '>{message}</span>"
+        error_html = f"<span style='color: {Color.ERROR_TEXT}; '>{message}</span>"
         self.result_label.setText(error_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.close_button.setEnabled(True)  # Habilitar botón de Close
@@ -817,10 +831,10 @@ def get_user_info_from_config(wasabi_user):
         debug_print(
             f"'{wasabi_user}' no esta en la DB de PipeSync; se usa el nombre crudo."
         )
-        return wasabi_user, "#666666"
+        return wasabi_user, Color.TEXT_DIM
     except Exception as e:
         debug_print(f"Error leyendo usuarios de PipeSync: {e}")
-        return wasabi_user, "#666666"
+        return wasabi_user, Color.TEXT_DIM
 
 
 # Variable global para mantener referencia a la ventana

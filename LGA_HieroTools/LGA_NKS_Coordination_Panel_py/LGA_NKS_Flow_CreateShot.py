@@ -1,11 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.47 | Lega
+  LGA_NKS_Flow_CreateShot v1.48 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.48: ShotConfigDialog y FlowStatusWindow migran al modulo de estilo
+         LGA_UI_Style_HieroTools (Style.FORM / Style.WINDOW, BTN_PRIMARY /
+         BTN_SECONDARY, tokens en el HTML). La paleta de estados de Flow del
+         ColoredStatusComboBox es DATA y no se toca; solo el marco del combo y
+         del popup pasa a tokens.
   v1.47: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
 
@@ -103,6 +108,7 @@ from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
 QDialog = QtWidgets.QDialog
@@ -606,13 +612,15 @@ def _contrast_text_color(hex_color):
 
 
 class _StatusItemDelegate(QStyledItemDelegate):
-    """Pinta cada item del popup con fondo oscuro uniforme (#272727), una bolita
-    del color del estado a la izquierda y el nombre en #cccccc. Hover/seleccion
-    aclara la fila."""
+    """Pinta cada item del popup con fondo oscuro uniforme (SURFACE), una bolita
+    del color del estado a la izquierda y el nombre en el gris del pack.
+    Hover/seleccion aclara la fila. Los colores de los ESTADOS son data de Flow
+    y no se tocan; el marco sale de los tokens del pack."""
 
-    _BG = "#272727"
-    _BG_HOVER = "#3a3a3a"
-    _TEXT = "#cccccc"
+    _BG = Color.SURFACE
+    _BG_HOVER = Color.SURFACE_HOVER
+    _TEXT = Color.TEXT
+    _TEXT_HOVER = Color.TEXT_STRONG
     _DOT = 10  # diametro de la bolita
 
     def paint(self, painter, option, index):
@@ -640,8 +648,8 @@ class _StatusItemDelegate(QStyledItemDelegate):
         painter.setBrush(dot_color)
         painter.drawEllipse(dot_x, dot_y, d, d)
 
-        # Nombre del estado
-        painter.setPen(QColor(self._TEXT))
+        # Nombre del estado (destacado en hover, como en Style.COMBO)
+        painter.setPen(QColor(self._TEXT_HOVER if hovered else self._TEXT))
         text = index.data(Qt.DisplayRole) or ""
         text_rect = r.adjusted(8 + d + 8, 0, -8, 0)
         painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
@@ -691,13 +699,14 @@ class ColoredStatusComboBox(QComboBox):
             self._code_to_index[code] = idx
 
         # Ocultar frame/arrow nativos: el combo cerrado lo pintamos en paintEvent.
+        # El fondo y el borde del popup salen de los tokens del pack.
         self.setStyleSheet(
             "QComboBox { border: none; border-radius: 3px; padding: 0px;"
             " min-height: 22px; }"
             " QComboBox::drop-down { width: 0px; border: none; }"
             " QComboBox::down-arrow { image: none; width: 0px; height: 0px; }"
-            " QComboBox QAbstractItemView { background-color: #272727; outline: 0;"
-            " border: 1px solid #555555; }"
+            " QComboBox QAbstractItemView { background-color: %s; outline: 0;"
+            " border: 1px solid %s; }" % (Color.SURFACE, Color.BORDER_HOVER)
         )
 
     def paintEvent(self, event):
@@ -712,8 +721,8 @@ class ColoredStatusComboBox(QComboBox):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         r = self.rect()
 
-        # Fondo redondeado con el color del estado + borde sutil
-        painter.setPen(QColor("#555555"))
+        # Fondo redondeado con el color del estado (data) + borde sutil del pack
+        painter.setPen(QColor(Color.BORDER_HOVER))
         painter.setBrush(QColor(color))
         painter.drawRoundedRect(r.adjusted(0, 0, -1, -1), 3, 3)
 
@@ -800,12 +809,12 @@ class ShotConfigDialog(QDialog):
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("color: #CCCCCC; padding: 5px;")
+        title_label.setStyleSheet(f"color: {Color.TEXT_STRONG}; padding: 5px;")
         layout.addWidget(title_label)
 
-        # Informacion de clips
+        # Informacion de clips (el color del cuerpo lo da Style.FORM)
         clips_label = QLabel(f"Se van a procesar {len(self.clips_info)} clips:")
-        clips_label.setStyleSheet("color: #CCCCCC; padding: 2px 5px 0px 5px;")
+        clips_label.setStyleSheet("padding: 2px 5px 0px 5px;")
         layout.addWidget(clips_label)
 
         # Lista de clips
@@ -817,7 +826,7 @@ class ShotConfigDialog(QDialog):
             clip_layout = QVBoxLayout(clip_frame)
 
             project_shot_label = QLabel(
-                f"<span style='color: #6AB5CA;'>{clip_info['project_name']}</span> / <span style='color: #B56AB5;'>{clip_info['shot_code']}</span>"
+                f"<span style='color: {Color.INFO};'>{clip_info['project_name']}</span> / <span style='color: {Color.ENTITY};'>{clip_info['shot_code']}</span>"
             )
             project_shot_label.setTextFormat(Qt.RichText)
             clip_layout.addWidget(project_shot_label)
@@ -827,11 +836,10 @@ class ShotConfigDialog(QDialog):
         # Espacio pequeño antes del separador
         layout.addSpacing(5)
 
-        # Separador
+        # Separador (lo pinta la regla de QFrame HLine de Style.FORM)
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
-        separator.setStyleSheet("color: #444444; margin: 0px;")
         layout.addWidget(separator)
 
         # Espacio pequeño después del separador
@@ -844,7 +852,7 @@ class ShotConfigDialog(QDialog):
         self.thumbnail_placeholder_layout = QVBoxLayout()
         thumbnail_label = QLabel("Shot Thumbnail:")
         thumbnail_label.setStyleSheet(
-            "color: #CCCCCC; font-weight: bold; padding-top: 5px;"
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 5px;"
         )
         self.thumbnail_placeholder_layout.addWidget(thumbnail_label)
 
@@ -854,14 +862,15 @@ class ShotConfigDialog(QDialog):
         self.thumbnail_placeholder.setStyleSheet(
             """
             QLabel {
-                border: 2px dashed #555555;
+                border: 2px dashed %s;
                 border-radius: 3px;
-                background-color: #1a1a1a;
-                color: #666666;
+                background-color: %s;
+                color: %s;
                 text-align: center;
                 padding: 5px;
             }
         """
+            % (Color.BORDER_HOVER, Color.SURFACE_SUNKEN, Color.TEXT_DIM)
         )
         self.thumbnail_placeholder.setText("Thumbnail\n(120x80)")
         self.thumbnail_placeholder.setAlignment(Qt.AlignCenter)
@@ -876,24 +885,14 @@ class ShotConfigDialog(QDialog):
         description_layout = QVBoxLayout()
         desc_label = QLabel("Shot Description:")
         desc_label.setStyleSheet(
-            "color: #CCCCCC; font-weight: bold; padding-top: 5px;"
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 5px;"
         )
         description_layout.addWidget(desc_label)
 
+        # El QTextEdit lo estila la regla de Style.FORM
         self.description_text = QTextEdit()
         self.description_text.setMaximumHeight(80)  # 3 lineas aproximadamente
         self.description_text.setPlainText("")
-        self.description_text.setStyleSheet(
-            """
-            QTextEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                padding: 5px;
-                border-radius: 3px;
-            }
-        """
-        )
         description_layout.addWidget(self.description_text)
         thumbnail_description_layout.addLayout(description_layout, 3)  # Stretch factor mayor para más espacio horizontal
 
@@ -909,24 +908,15 @@ class ShotConfigDialog(QDialog):
         # Columna 2: Sequence
         sequence_column_layout = QVBoxLayout()
         seq_label = QLabel("Sequence:")
-        seq_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 5px;")
+        seq_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 5px;"
+        )
         sequence_column_layout.addWidget(seq_label)
 
+        # El QLineEdit lo estila la regla de Style.FORM
         self.sequence_line_edit = QLineEdit()
         self.sequence_line_edit.setText(self.sequence_name)
         self.sequence_line_edit.setMaximumWidth(120)  # Limitar ancho máximo
-        self.sequence_line_edit.setStyleSheet(
-            """
-            QLineEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                padding: 5px;
-                border-radius: 3px;
-                height: 20px;
-            }
-        """
-        )
         sequence_column_layout.addWidget(self.sequence_line_edit)
 
         # Espaciador para alinear hacia arriba
@@ -943,7 +933,9 @@ class ShotConfigDialog(QDialog):
         # Shot status (arriba)
         shot_status_layout = QVBoxLayout()
         shot_status_label = QLabel("Shot status:")
-        shot_status_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 5px;")
+        shot_status_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 5px;"
+        )
         shot_status_layout.addWidget(shot_status_label)
 
         self.shot_status_combo = ColoredStatusComboBox(get_shot_states())
@@ -957,12 +949,15 @@ class ShotConfigDialog(QDialog):
         # Priority (abajo)
         priority_layout = QVBoxLayout()
         priority_label = QLabel("Priority:")
-        priority_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 5px;")
+        priority_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 5px;"
+        )
         priority_layout.addWidget(priority_label)
 
+        # El checkbox lo estila Style.FORM; lgaLabeled da aire junto al texto
         self.high_priority_cb = QCheckBox("High")
         self.high_priority_cb.setChecked(False)  # Desactivado por defecto
-        self.high_priority_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        self.high_priority_cb.setProperty("lgaLabeled", True)
         priority_layout.addWidget(self.high_priority_cb)
         status_priority_column_layout.addLayout(priority_layout)
 
@@ -971,22 +966,11 @@ class ShotConfigDialog(QDialog):
         layout.addLayout(main_three_column_layout)
 
         # Campo de tiempo estimado en días (se agrega en el layout de 5 columnas más abajo)
+        # Lo estila la regla de QLineEdit de Style.FORM
         self.estimated_days_line_edit = QLineEdit()
         self.estimated_days_line_edit.setText("0")
         self.estimated_days_line_edit.setMaxLength(5)  # Permitir decimales (ej: 12.5)
         self.estimated_days_line_edit.setFixedWidth(80)  # Ancho mayor para decimales
-        self.estimated_days_line_edit.setStyleSheet(
-            """
-            QLineEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                padding: 5px;
-                border-radius: 3px;
-                height: 20px;
-            }
-        """
-        )
         # Validación para números decimales
         validator = QDoubleValidator(0.0, 99.9, 1)  # Mínimo 0, máximo 99.9, 1 decimal
         validator.setNotation(QDoubleValidator.StandardNotation)
@@ -1004,7 +988,6 @@ class ShotConfigDialog(QDialog):
             task_separator = QFrame()
             task_separator.setFrameShape(QFrame.HLine)
             task_separator.setFrameShadow(QFrame.Sunken)
-            task_separator.setStyleSheet("color: #444444;")
             layout.addWidget(task_separator)
             
             # Espaciado pequeño y consistente después del separador
@@ -1038,22 +1021,12 @@ class ShotConfigDialog(QDialog):
         # Botones
         button_layout = QHBoxLayout()
 
+        # Botones alineados a la derecha, con el de accion ultimo y en violeta
+        button_layout.addStretch()
+
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.handle_cancel)
-        self.cancel_button.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #555555;
-                border: 1px solid #666666;
-                color: #CCCCCC;
-                padding: 8px 15px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #666666;
-            }
-        """
-        )
+        self.cancel_button.setStyleSheet(Style.BTN_SECONDARY)
         button_layout.addWidget(self.cancel_button)
 
         button_layout.addSpacing(10)  # Espacio pequeño entre botones
@@ -1063,34 +1036,13 @@ class ShotConfigDialog(QDialog):
             button_text = "Modify Shot" if dialog_mode == "modify" else "Create Shot"
         self.create_button = QPushButton(button_text)
         self.create_button.clicked.connect(self.accept_config)
-        self.create_button.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #443a91;
-                color: #b2b2b2;
-                padding: 8px 15px;
-                border-radius: 3px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #774dcb;
-                color: #CCCCCC;
-            }
-        """
-        )
+        self.create_button.setStyleSheet(Style.BTN_PRIMARY)
         button_layout.addWidget(self.create_button)
 
         layout.addLayout(button_layout)
 
-        # Estilo general del dialogo
-        self.setStyleSheet(
-            """
-            QDialog {
-                background-color: #2B2B2B;
-                border: 1px solid #555555;
-            }
-        """
-        )
+        # Estilo general del dialogo: la hoja de formulario del pack
+        self.setStyleSheet(Style.FORM)
 
     def create_task_row(self, task_config, task_separator):
         """
@@ -1119,9 +1071,8 @@ class ShotConfigDialog(QDialog):
         name_layout.setSpacing(1)  # Espacio pequeño entre checkbox y nombre
         name_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
         
-        enabled_cb = QCheckBox("")  # Checkbox sin texto
+        enabled_cb = QCheckBox("")  # Checkbox sin texto; lo estila Style.FORM
         enabled_cb.setChecked(enabled_by_default)
-        enabled_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
         name_layout.addWidget(enabled_cb)
         
         name_label = QLabel(task_name.upper())
@@ -1144,25 +1095,16 @@ class ShotConfigDialog(QDialog):
         est_days_layout = QVBoxLayout(est_days_widget)
         est_days_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
         est_days_label = QLabel("Est. Days")
-        est_days_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 3px;")
+        est_days_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 3px;"
+        )
         est_days_layout.addWidget(est_days_label)
 
+        # El QLineEdit lo estila la regla de Style.FORM
         estimated_days_edit = QLineEdit()
         estimated_days_edit.setText("0")
         estimated_days_edit.setMaxLength(5)  # Permitir decimales (ej: 12.5)
         estimated_days_edit.setFixedWidth(80)
-        estimated_days_edit.setStyleSheet(
-            """
-            QLineEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                padding: 2px 5px;
-                border-radius: 3px;
-                height: 20px;
-            }
-        """
-        )
         # Validación para números decimales
         validator = QDoubleValidator(0.0, 99.9, 1)
         validator.setNotation(QDoubleValidator.StandardNotation)
@@ -1184,7 +1126,9 @@ class ShotConfigDialog(QDialog):
         status_layout = QVBoxLayout(status_widget)
         status_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
         status_label = QLabel("Status")
-        status_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 0px;")
+        status_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 0px;"
+        )
         status_layout.addWidget(status_label)
 
         task_status_combo = ColoredStatusComboBox(get_task_states())
@@ -1205,12 +1149,14 @@ class ShotConfigDialog(QDialog):
         desc_layout = QVBoxLayout(desc_widget)
         desc_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
         desc_label = QLabel("Description")
-        desc_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 0px;")
+        desc_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 0px;"
+        )
         desc_layout.addWidget(desc_label)
 
         copy_description_cb = QCheckBox("copy from shot")
         copy_description_cb.setChecked(True)  # Activado por defecto
-        copy_description_cb.setStyleSheet("color: #a7a7a7; padding: 5px;")
+        copy_description_cb.setProperty("lgaLabeled", True)
         desc_layout.addWidget(copy_description_cb)
         task_layout.addWidget(desc_widget, 1)
         
@@ -1227,35 +1173,37 @@ class ShotConfigDialog(QDialog):
         reviewers_layout = QVBoxLayout(reviewers_widget)
         reviewers_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
         reviewers_label = QLabel("Reviewers")
-        reviewers_label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 0px;")
+        reviewers_label.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 0px;"
+        )
         reviewers_layout.addWidget(reviewers_label)
 
-        # Reviewers checkboxes en línea horizontal
+        # Reviewers checkboxes en línea horizontal; los estila Style.FORM
         reviewers_checkboxes_layout = QHBoxLayout()
 
         reviewer_lega_cb = QCheckBox("Lega")
         reviewer_lega_cb.setChecked(True)
-        reviewer_lega_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        reviewer_lega_cb.setProperty("lgaLabeled", True)
         reviewers_checkboxes_layout.addWidget(reviewer_lega_cb)
 
         reviewer_sebas_cb = QCheckBox("Sebas")
         reviewer_sebas_cb.setChecked(True)
-        reviewer_sebas_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        reviewer_sebas_cb.setProperty("lgaLabeled", True)
         reviewers_checkboxes_layout.addWidget(reviewer_sebas_cb)
 
         reviewer_juano_cb = QCheckBox("Juano")
         reviewer_juano_cb.setChecked(True)
-        reviewer_juano_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        reviewer_juano_cb.setProperty("lgaLabeled", True)
         reviewers_checkboxes_layout.addWidget(reviewer_juano_cb)
 
         reviewer_charly_cb = QCheckBox("Charly")
         reviewer_charly_cb.setChecked(True)
-        reviewer_charly_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        reviewer_charly_cb.setProperty("lgaLabeled", True)
         reviewers_checkboxes_layout.addWidget(reviewer_charly_cb)
 
         reviewer_javi_cb = QCheckBox("Javi")
         reviewer_javi_cb.setChecked(True)
-        reviewer_javi_cb.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        reviewer_javi_cb.setProperty("lgaLabeled", True)
         reviewers_checkboxes_layout.addWidget(reviewer_javi_cb)
 
         reviewers_layout.addLayout(reviewers_checkboxes_layout)
@@ -1506,14 +1454,15 @@ class ShotConfigDialog(QDialog):
                     self.thumbnail_placeholder.setStyleSheet(
                         """
                         QLabel {
-                            border: 2px dashed #C05050;
+                            border: 2px dashed %s;
                             border-radius: 3px;
-                            background-color: #1a1a1a;
-                            color: #C05050;
+                            background-color: %s;
+                            color: %s;
                             text-align: center;
                             padding: 5px;
                         }
                     """
+                        % (Color.ERROR, Color.SURFACE_SUNKEN, Color.ERROR_TEXT)
                     )
             else:
                 debug_print("❌ No se pudo crear el thumbnail")
@@ -1522,14 +1471,15 @@ class ShotConfigDialog(QDialog):
                 self.thumbnail_placeholder.setStyleSheet(
                     """
                     QLabel {
-                        border: 2px dashed #C05050;
+                        border: 2px dashed %s;
                         border-radius: 3px;
-                        background-color: #1a1a1a;
-                        color: #C05050;
+                        background-color: %s;
+                        color: %s;
                         text-align: center;
                         padding: 5px;
                     }
                 """
+                    % (Color.ERROR, Color.SURFACE_SUNKEN, Color.ERROR_TEXT)
                 )
         except Exception as e:
             debug_print(f"❌ Error creando thumbnail: {e}")
@@ -1538,14 +1488,15 @@ class ShotConfigDialog(QDialog):
             self.thumbnail_placeholder.setStyleSheet(
                 """
                 QLabel {
-                    border: 2px dashed #C05050;
+                    border: 2px dashed %s;
                     border-radius: 3px;
-                    background-color: #1a1a1a;
-                    color: #C05050;
+                    background-color: %s;
+                    color: %s;
                     text-align: center;
                     padding: 5px;
                 }
             """
+                % (Color.ERROR, Color.SURFACE_SUNKEN, Color.ERROR_TEXT)
             )
 
     def show_existing_thumbnail(self, thumb_path):
@@ -1574,20 +1525,10 @@ class ShotConfigDialog(QDialog):
         viewer. El snapshot NO se sube a Flow hasta confirmar con 'Modify Shot'."""
         self.thumbnail_placeholder.hide()
         self.thumbnail_placeholder.setParent(None)
+        # Va en secundario: el unico violeta de la ventana es el boton de accion
         self.take_snapshot_button = QPushButton("Take\nSnapshot")
         self.take_snapshot_button.setFixedSize(120, 80)
-        self.take_snapshot_button.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #443a91;
-                color: #b2b2b2;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #774dcb; color: #CCCCCC; }
-            """
-        )
+        self.take_snapshot_button.setStyleSheet(Style.BTN_SECONDARY)
         self.take_snapshot_button.clicked.connect(self._on_take_snapshot_clicked)
         self.thumbnail_placeholder_layout.addWidget(self.take_snapshot_button)
 
@@ -1673,6 +1614,9 @@ class FlowStatusWindow(QDialog):
         # Evitar que la ventana se cierre automáticamente
         self.setAttribute(Qt.WA_DeleteOnClose, False)
 
+        # Estilo del pack: sin esto la ventana hereda el tema del host
+        self.setStyleSheet(Style.WINDOW)
+
         # Layout principal
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -1691,7 +1635,7 @@ class FlowStatusWindow(QDialog):
 
         initial_message = (
             f"<div style='text-align: left;'>"
-            f"<span style='color: #CCCCCC; '>{task_text}</span>"
+            f"<span style='color: {Color.TEXT}; '>{task_text}</span>"
             f"</div>"
         )
 
@@ -1721,41 +1665,45 @@ class FlowStatusWindow(QDialog):
         # Espaciador
         # layout.addStretch()
 
-        # Botón de Close
+        # Botón de Close, secundario y a la derecha como en el resto del pack
         self.close_button = QPushButton("Close")
+        self.close_button.setStyleSheet(Style.BTN_SECONDARY)
         self.close_button.clicked.connect(self.close)
         self.close_button.setEnabled(
             False
         )  # Deshabilitado hasta que termine el procesamiento
-        layout.addWidget(self.close_button)
+        buttons_row = QHBoxLayout()
+        buttons_row.addStretch()
+        buttons_row.addWidget(self.close_button)
+        layout.addLayout(buttons_row)
 
     def update_shot_info(self, shot_name, project_name=None):
         """Actualiza la ventana con el shot que se está procesando"""
         shot_html = "<div style='text-align: left;'>"
         if project_name:
-            shot_html += f"<span style='color: #CCCCCC; '>Proyecto:</span> <span style='color: #6AB5CA; '>{project_name}</span><br>"
-        shot_html += f"<span style='color: #CCCCCC; '>Shot:</span> <span style='color: #B56AB5; '>{shot_name}</span>"
+            shot_html += f"<span style='color: {Color.TEXT}; '>Proyecto:</span> <span style='color: {Color.INFO}; '>{project_name}</span><br>"
+        shot_html += f"<span style='color: {Color.TEXT}; '>Shot:</span> <span style='color: {Color.ENTITY}; '>{shot_name}</span>"
         shot_html += "</div>"
         self.shot_label.setText(shot_html)
         self._adjust_window_size()
 
     def show_processing_message(self):
         """Muestra el mensaje de procesamiento"""
-        processing_html = f"<span style='color: #CCCCCC; '>Conectando a Flow Production Tracking...</span>"
+        processing_html = f"<span style='color: {Color.TEXT}; '>Conectando a Flow Production Tracking...</span>"
         self.result_label.setText(processing_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self._adjust_window_size()
 
     def show_step_message(self, message):
         """Muestra mensaje de paso actual"""
-        step_html = f"<span style='color: #CCCCCC; '>{message}</span>"
+        step_html = f"<span style='color: {Color.TEXT}; '>{message}</span>"
         self.result_label.setText(step_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self._adjust_window_size()
 
     def show_success(self, message):
         """Muestra mensaje de éxito en verde"""
-        success_html = f"<span style='color: #00ff00; '>{message}</span>"
+        success_html = f"<span style='color: {Color.OK_TEXT}; '>{message}</span>"
         self.result_label.setText(success_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.close_button.setEnabled(True)  # Habilitar botón de Close
@@ -1763,7 +1711,7 @@ class FlowStatusWindow(QDialog):
 
     def show_error(self, message):
         """Muestra mensaje de error en rojo"""
-        error_html = f"<span style='color: #C05050; '>{message}</span>"
+        error_html = f"<span style='color: {Color.ERROR_TEXT}; '>{message}</span>"
         self.result_label.setText(error_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.close_button.setEnabled(True)  # Habilitar botón de Close

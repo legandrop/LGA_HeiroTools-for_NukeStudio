@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.02 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.03 | Lega
 
   Limpia policies de Wasabi para shots ya entregados.
 
+  v1.03: La ventana migra al modulo de estilo LGA_UI_Style_HieroTools:
+         Style.WINDOW + Style.TABLE, botones de seleccion en BTN_SMALL,
+         "Limpiar policies" en BTN_PRIMARY y tokens en el HTML de estado.
   v1.02: Los nombres visibles de la cola de entrega pasan a "Delivered" (check) y
          "Delivery Apr" (apr), en el titulo de la ventana, en los dos botones de
          seleccion y en el mapa de labels de la tabla.
@@ -21,6 +24,7 @@ import sqlite3
 import sys
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
 QApplication = QtWidgets.QApplication
 QDialog = QtWidgets.QDialog
@@ -355,19 +359,29 @@ class CompletedShotsPolicyWindow(QDialog):
 
         self._matches = []
 
+        # Estilo del pack: sin esto la ventana hereda el tema del host
+        self.setStyleSheet(Style.WINDOW)
+
         layout = QVBoxLayout()
         self.setLayout(layout)
 
         self.status_label = QLabel()
         self.status_label.setTextFormat(Qt.RichText)
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("padding: 8px; color: #CCCCCC;")
+        self.status_label.setStyleSheet(f"padding: 8px; color: {Color.TEXT};")
         font = QFont()
         font.setPointSize(10)
         self.status_label.setFont(font)
         layout.addWidget(self.status_label)
 
         self.table = QTableWidget(0, 4)
+        # Style.TABLE no trae alternate-background-color y la fila alternada
+        # quedaba con la AlternateBase de la paleta del host: se suma con token
+        self.table.setStyleSheet(
+            Style.TABLE
+            + "QTableWidget { alternate-background-color: %s; }"
+            % Color.SURFACE_HEADER
+        )
         self.table.setHorizontalHeaderLabels(
             ["", "Nombre de policy", "Nombre de shot", "Estado del shot"]
         )
@@ -386,46 +400,34 @@ class CompletedShotsPolicyWindow(QDialog):
 
         self.invert_button = QPushButton("Invertir selección")
         self.invert_button.setEnabled(False)
-        self.invert_button.setStyleSheet(
-            "QPushButton { background-color: #555555; color: #DDDDDD; border: none; padding: 6px 10px; }"
-            "QPushButton:hover { background-color: #6b6b6b; }"
-        )
+        self.invert_button.setStyleSheet(Style.BTN_SMALL)
         self.invert_button.clicked.connect(self.invert_selection)
         buttons_layout.addWidget(self.invert_button)
 
         self.select_approved_button = QPushButton("Seleccionar Delivery Apr")
         self.select_approved_button.setEnabled(False)
-        self.select_approved_button.setStyleSheet(
-            "QPushButton { background-color: #555555; color: #DDDDDD; border: none; padding: 6px 10px; }"
-            "QPushButton:hover { background-color: #6b6b6b; }"
-        )
+        self.select_approved_button.setStyleSheet(Style.BTN_SMALL)
         self.select_approved_button.clicked.connect(self.select_approved)
         buttons_layout.addWidget(self.select_approved_button)
 
         self.select_delivery_button = QPushButton("Seleccionar Delivered")
         self.select_delivery_button.setEnabled(False)
-        self.select_delivery_button.setStyleSheet(
-            "QPushButton { background-color: #555555; color: #DDDDDD; border: none; padding: 6px 10px; }"
-            "QPushButton:hover { background-color: #6b6b6b; }"
-        )
+        self.select_delivery_button.setStyleSheet(Style.BTN_SMALL)
         self.select_delivery_button.clicked.connect(self.select_delivery_ok)
         buttons_layout.addWidget(self.select_delivery_button)
 
         buttons_layout.addStretch()
 
+        # Unica accion de la ventana: el unico violeta, ultimo a la derecha
         self.clean_button = QPushButton("Limpiar policies")
         self.clean_button.setEnabled(False)
-        self.clean_button.setStyleSheet(
-            "QPushButton { background-color: #443a91; color: #FFFFFF; border: none; padding: 6px 12px; }"
-            "QPushButton:hover { background-color: #774dcb; }"
-            "QPushButton:disabled { background-color: #2d2950; color: #999999; }"
-        )
+        self.clean_button.setStyleSheet(Style.BTN_PRIMARY)
         self.clean_button.clicked.connect(self.clean_selected)
         buttons_layout.addWidget(self.clean_button)
 
     def show_scanning_message(self):
         self.status_label.setText(
-            "<span style='color:#CCCCCC;'>Escaneando shots ya entregados en pipesync.db y buscando coincidencias en policies de Wasabi...</span>"
+            f"<span style='color:{Color.TEXT};'>Escaneando shots ya entregados en pipesync.db y buscando coincidencias en policies de Wasabi...</span>"
         )
 
     def _display_status_label(self, internal_status):
@@ -443,7 +445,7 @@ class CompletedShotsPolicyWindow(QDialog):
 
         if not matches:
             self.status_label.setText(
-                "<span style='color:#CCCCCC;'>No se encontraron coincidencias entre shots completados y policies de Wasabi.</span>"
+                f"<span style='color:{Color.TEXT};'>No se encontraron coincidencias entre shots completados y policies de Wasabi.</span>"
             )
             self.clean_button.setEnabled(False)
             self.invert_button.setEnabled(False)
@@ -456,6 +458,9 @@ class CompletedShotsPolicyWindow(QDialog):
             checkbox = QCheckBox()
             checkbox.setChecked(True)
             checkbox_container = QWidget()
+            # Sin esto la regla QWidget de Style.WINDOW pinta el contenedor con
+            # el fondo de ventana encima de la celda de la tabla
+            checkbox_container.setStyleSheet("background: transparent;")
             checkbox_layout = QHBoxLayout(checkbox_container)
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
             checkbox_layout.setAlignment(Qt.AlignCenter)
@@ -472,7 +477,7 @@ class CompletedShotsPolicyWindow(QDialog):
             self.table.setItem(row, 3, status_item)
 
         self.status_label.setText(
-            f"<span style='color:#6AB5CA;'>Coincidencias encontradas: {len(matches)}. Seleccioná los items a limpiar y presioná \"Limpiar policies\".</span>"
+            f"<span style='color:{Color.INFO};'>Coincidencias encontradas: {len(matches)}. Seleccioná los items a limpiar y presioná \"Limpiar policies\".</span>"
         )
         self.clean_button.setEnabled(True)
         self.invert_button.setEnabled(True)
@@ -515,13 +520,13 @@ class CompletedShotsPolicyWindow(QDialog):
         selected = self.get_selected_matches()
         if not selected:
             self.status_label.setText(
-                "<span style='color:#C05050;'>No hay filas seleccionadas para limpiar.</span>"
+                f"<span style='color:{Color.ERROR_TEXT};'>No hay filas seleccionadas para limpiar.</span>"
             )
             return
 
         self.clean_button.setEnabled(False)
         self.status_label.setText(
-            f"<span style='color:#CCCCCC;'>Limpiando líneas de policies para {len(selected)} coincidencias seleccionadas...</span>"
+            f"<span style='color:{Color.TEXT};'>Limpiando líneas de policies para {len(selected)} coincidencias seleccionadas...</span>"
         )
 
         worker = CleanWorker(selected)
@@ -531,15 +536,21 @@ class CompletedShotsPolicyWindow(QDialog):
 
     def on_clean_finished(self, success, message):
         if success:
-            self.status_label.setText(f"<span style='color:#00ff00;'>{message}</span>")
+            self.status_label.setText(
+                f"<span style='color:{Color.OK_TEXT};'>{message}</span>"
+            )
             # Refrescar resultados para mostrar estado real actual
             self.start_scan()
         else:
-            self.status_label.setText(f"<span style='color:#C05050;'>{message}</span>")
+            self.status_label.setText(
+                f"<span style='color:{Color.ERROR_TEXT};'>{message}</span>"
+            )
             self.clean_button.setEnabled(True)
 
     def on_error(self, message):
-        self.status_label.setText(f"<span style='color:#C05050;'>Error: {message}</span>")
+        self.status_label.setText(
+            f"<span style='color:{Color.ERROR_TEXT};'>Error: {message}</span>"
+        )
         self.clean_button.setEnabled(True)
 
     def start_scan(self):

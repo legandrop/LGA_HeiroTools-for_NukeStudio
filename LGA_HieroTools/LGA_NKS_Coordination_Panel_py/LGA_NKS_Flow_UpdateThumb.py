@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_UpdateThumb v1.02 | Lega
+  LGA_NKS_Flow_UpdateThumb v1.03 | Lega
 
   Reemplaza el thumbnail de un shot existente en Flow (ShotGrid) con un snapshot
   del viewer actual de Hiero. Pensado para el Shift+Click del boton "Thumbnail"
   del Coordination Panel.
 
+  v1.03: ThumbReplaceDialog migra al modulo de estilo LGA_UI_Style_HieroTools:
+         Style.WINDOW, Replace en BTN_PRIMARY, Cancel en BTN_SECONDARY y
+         tokens en el HTML y en los pozos de imagen.
   v1.02: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.01: La ventana se auto-cierra tras un reemplazo exitoso, con cuenta regresiva
@@ -42,6 +45,7 @@ import hiero.ui
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
 QApplication = QtWidgets.QApplication
 QDialog = QtWidgets.QDialog
@@ -387,13 +391,13 @@ class ThumbReplaceDialog(QDialog):
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("color: #CCCCCC; padding: 5px;")
+        title_label.setStyleSheet(f"color: {Color.TEXT_STRONG}; padding: 5px;")
         layout.addWidget(title_label)
 
         # Subtitulo: proyecto / shot
         subtitle = QLabel(
-            f"<span style='color: #6AB5CA;'>{project_name}</span> / "
-            f"<span style='color: #B56AB5;'>{shot_code}</span>"
+            f"<span style='color: {Color.INFO};'>{project_name}</span> / "
+            f"<span style='color: {Color.ENTITY};'>{shot_code}</span>"
         )
         subtitle.setTextFormat(Qt.RichText)
         subtitle.setAlignment(Qt.AlignCenter)
@@ -411,7 +415,7 @@ class ThumbReplaceDialog(QDialog):
         arrow_font.setPointSize(22)
         arrow_font.setBold(True)
         arrow.setFont(arrow_font)
-        arrow.setStyleSheet("color: #CCCCCC; padding: 0px 12px;")
+        arrow.setStyleSheet(f"color: {Color.TEXT}; padding: 0px 12px;")
         arrow.setAlignment(Qt.AlignCenter)
         images_layout.addWidget(arrow)
 
@@ -428,62 +432,35 @@ class ThumbReplaceDialog(QDialog):
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setWordWrap(True)
         self.status_label.setTextFormat(Qt.RichText)
-        self.status_label.setStyleSheet("color: #CCCCCC; padding: 8px;")
+        self.status_label.setStyleSheet(f"color: {Color.TEXT}; padding: 8px;")
         layout.addWidget(self.status_label)
 
-        # Botones
+        # Botones alineados a la derecha, con el de accion ultimo y en violeta
         button_layout = QHBoxLayout()
+        button_layout.addStretch()
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.close)
-        self.cancel_button.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #555555;
-                border: 1px solid #666666;
-                color: #CCCCCC;
-                padding: 8px 15px;
-                border-radius: 3px;
-            }
-            QPushButton:hover { background-color: #666666; }
-            """
-        )
+        self.cancel_button.setStyleSheet(Style.BTN_SECONDARY)
         button_layout.addWidget(self.cancel_button)
         button_layout.addSpacing(10)
 
         self.replace_button = QPushButton("Replace")
         self.replace_button.setEnabled(False)
         self.replace_button.clicked.connect(self._on_replace_clicked)
-        self.replace_button.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #443a91;
-                color: #b2b2b2;
-                padding: 8px 15px;
-                border-radius: 3px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #774dcb; color: #CCCCCC; }
-            QPushButton:disabled { background-color: #3a3a3a; color: #777777; }
-            """
-        )
+        self.replace_button.setStyleSheet(Style.BTN_PRIMARY)
         button_layout.addWidget(self.replace_button)
         layout.addLayout(button_layout)
 
-        # Estilo general
-        self.setStyleSheet(
-            """
-            QDialog {
-                background-color: #2B2B2B;
-                border: 1px solid #555555;
-            }
-            """
-        )
+        # Estilo general: la hoja de ventana del pack
+        self.setStyleSheet(Style.WINDOW)
 
     def _build_image_column(self, header_text, is_current):
         col = QVBoxLayout()
         header = QLabel(header_text)
         header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("color: #CCCCCC; font-weight: bold; padding: 2px;")
+        header.setStyleSheet(
+            f"color: {Color.TEXT_STRONG}; font-weight: bold; padding: 2px;"
+        )
         col.addWidget(header)
 
         image_label = QLabel("Cargando..." if is_current else "")
@@ -491,7 +468,8 @@ class ThumbReplaceDialog(QDialog):
         image_label.setFixedWidth(THUMB_W)
         image_label.setMinimumHeight(int(THUMB_W * 9 / 16))
         image_label.setStyleSheet(
-            "background-color: #1e1e1e; border: 1px solid #444444; color: #888888;"
+            "background-color: %s; border: 1px solid %s; color: %s;"
+            % (Color.SURFACE_SUNKEN, Color.BORDER_STRONG, Color.TEXT_DIM)
         )
         col.addWidget(image_label)
 
@@ -523,15 +501,15 @@ class ThumbReplaceDialog(QDialog):
     def show_ready(self):
         self.replace_button.setEnabled(True)
         self.status_label.setText(
-            "<span style='color: #CCCCCC;'>Se reemplazara el thumbnail actual por el nuevo snapshot.</span>"
+            f"<span style='color: {Color.TEXT};'>Se reemplazara el thumbnail actual por el nuevo snapshot.</span>"
         )
 
     def show_step(self, message):
-        self.status_label.setText(f"<span style='color: #CCCCCC;'>{message}</span>")
+        self.status_label.setText(f"<span style='color: {Color.TEXT};'>{message}</span>")
 
     def show_success(self, message):
         self._uploading = False
-        self.status_label.setText(f"<span style='color: #00ff00;'>{message}</span>")
+        self.status_label.setText(f"<span style='color: {Color.OK_TEXT};'>{message}</span>")
         self.replace_button.setEnabled(False)
         self.cancel_button.setText("Close")
         self._start_auto_close()
@@ -558,7 +536,7 @@ class ThumbReplaceDialog(QDialog):
 
     def show_error(self, message):
         self._uploading = False
-        self.status_label.setText(f"<span style='color: #C05050;'>{message}</span>")
+        self.status_label.setText(f"<span style='color: {Color.ERROR_TEXT};'>{message}</span>")
         self.replace_button.setEnabled(False)
         self.cancel_button.setText("Close")
 

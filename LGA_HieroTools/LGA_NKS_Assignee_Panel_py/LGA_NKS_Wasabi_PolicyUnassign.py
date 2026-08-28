@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign v0.61 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign v0.62 | Lega
 
   Muestra y gestiona shots asignados en políticas IAM de Wasabi
 
+  v0.62: La ventana de shots migra al modulo de estilo LGA_UI_Style_HieroTools:
+         Style.WINDOW, tokens en el HTML, filas sobre SURFACE y el boton de
+         quitar por fila pasa de violeta a BTN_ICON (el violeta queda reservado
+         a una accion global unica, que esta ventana no tiene).
   v0.61: El nombre y el color del usuario se resuelven por wasabi_user contra la
          DB de PipeSync (tabla flow_users), en vez del JSON local.
 ____________________________________________________________________
@@ -18,6 +22,7 @@ import hiero.ui
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_wasabi_user
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
@@ -90,6 +95,9 @@ class WasabiShotsWindow(QDialog):
         # Evitar que la ventana se cierre automáticamente
         self.setAttribute(Qt.WA_DeleteOnClose, False)
 
+        # Estilo del pack: sin esto la ventana hereda el tema del host
+        self.setStyleSheet(Style.WINDOW)
+
         # Layout principal
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -100,10 +108,11 @@ class WasabiShotsWindow(QDialog):
         self.status_label.setTextFormat(Qt.RichText)
 
         # Mensaje inicial
+        # user_color es DATA (el color de la persona en la DB de PipeSync)
         initial_message = (
             f"<div style='text-align: center;'>"
-            f"<span style='color: #CCCCCC; '>Shots asignados en la policy del usuario </span>"
-            f"<span style='color: #CCCCCC; background-color: {user_color}; padding: 2px 6px; '>{user_name}</span>"
+            f"<span style='color: {Color.TEXT}; '>Shots asignados en la policy del usuario </span>"
+            f"<span style='color: {Color.TEXT_ON_ACCENT}; background-color: {user_color}; padding: 2px 6px; '>{user_name}</span>"
             f"</div>"
         )
 
@@ -131,13 +140,17 @@ class WasabiShotsWindow(QDialog):
         self.scroll_area.setWidgetResizable(True)
         layout.addWidget(self.scroll_area)
 
-        # Botón de Close
+        # Botón de Close, secundario y a la derecha como en el resto del pack
         self.close_button = QPushButton("Close")
+        self.close_button.setStyleSheet(Style.BTN_SECONDARY)
         self.close_button.clicked.connect(self.close)
         self.close_button.setEnabled(
             False
         )  # Deshabilitado hasta que termine el procesamiento
-        layout.addWidget(self.close_button)
+        buttons_row = QHBoxLayout()
+        buttons_row.addStretch()
+        buttons_row.addWidget(self.close_button)
+        layout.addLayout(buttons_row)
 
         # Diccionario para mantener referencia a los widgets de shots
         self.shot_widgets = {}
@@ -154,14 +167,14 @@ class WasabiShotsWindow(QDialog):
     def show_processing_message(self):
         """Muestra el mensaje de procesamiento"""
         processing_html = (
-            f"<span style='color: #CCCCCC; '>Leyendo policy del usuario...</span>"
+            f"<span style='color: {Color.TEXT}; '>Leyendo policy del usuario...</span>"
         )
         self.result_label.setText(processing_html)
         self.result_label.setStyleSheet("padding: 10px;")
 
     def show_removing_shot_message(self, shot_name):
         """Muestra el mensaje de eliminación de shot"""
-        removing_html = f"<span style='color: #CCCCCC; '>Borrando shot {shot_name} de la policy...</span>"
+        removing_html = f"<span style='color: {Color.TEXT}; '>Borrando shot {shot_name} de la policy...</span>"
         self.result_label.setText(removing_html)
         self.result_label.setStyleSheet("padding: 10px;")
 
@@ -170,7 +183,7 @@ class WasabiShotsWindow(QDialog):
         self.current_shots_list = shots_list  # Guardar la lista para redimensionamiento
         if not shots_list:
             self.result_label.setText(
-                "<span style='color: #CCCCCC; '>No se encontraron shots asignados en la policy.</span>"
+                f"<span style='color: {Color.TEXT}; '>No se encontraron shots asignados en la policy.</span>"
             )
             self.close_button.setEnabled(True)
             return
@@ -206,7 +219,8 @@ class WasabiShotsWindow(QDialog):
             shot_frame.setFixedWidth(button_width)
             shot_frame.setFixedHeight(40)  # Altura fija para evitar flex
             shot_frame.setStyleSheet(
-                "QFrame { background-color: #2a2a2a; padding: 2px; margin: 1px; }"
+                "QFrame { background-color: %s; padding: 2px; margin: 1px; }"
+                % Color.SURFACE
             )
 
             shot_layout = QHBoxLayout()
@@ -216,7 +230,7 @@ class WasabiShotsWindow(QDialog):
 
             # Label con el nombre del shot
             shot_label = QLabel(shot_name)
-            shot_label.setStyleSheet("color: #CCCCCC; font-size: 12px;")
+            shot_label.setStyleSheet(f"color: {Color.TEXT}; font-size: 12px;")
             shot_label.setAlignment(
                 Qt.AlignVCenter | Qt.AlignLeft
             )  # Centrar verticalmente y alinear a la izquierda
@@ -225,13 +239,12 @@ class WasabiShotsWindow(QDialog):
             # Espaciador
             shot_layout.addStretch()
 
-            # Botón X para eliminar
+            # Botón X para eliminar. Va en BTN_ICON y no en violeta: hay uno
+            # por fila y el violeta del pack se reserva para una accion global
+            # unica, que esta ventana no tiene.
             remove_button = QPushButton("✕")
             remove_button.setFixedSize(25, 25)
-            remove_button.setStyleSheet(
-                "QPushButton { background-color: #443a91; color: white; border: none; font-weight: bold; }"
-                "QPushButton:hover { background-color: #774dcb; }"
-            )
+            remove_button.setStyleSheet(Style.BTN_ICON)
             remove_button.clicked.connect(
                 lambda checked=False, shot=shot_name: self.remove_shot(shot)
             )
@@ -276,9 +289,8 @@ class WasabiShotsWindow(QDialog):
             remove_button = shot_layout.itemAt(shot_layout.count() - 1).widget()
             remove_button.setEnabled(False)
             remove_button.setText("...")
-            remove_button.setStyleSheet(
-                "QPushButton { background-color: #666666; color: white; border: none; font-weight: bold; }"
-            )
+            # El estado apagado lo dibuja la propia hoja BTN_ICON (:disabled)
+            remove_button.setStyleSheet(Style.BTN_ICON)
 
         # Crear worker para eliminar el shot en hilo separado
         worker = WasabiRemoveShotWorker(self.wasabi_user, shot_name, self)
@@ -311,21 +323,23 @@ class WasabiShotsWindow(QDialog):
             remove_button = shot_layout.itemAt(shot_layout.count() - 1).widget()
             remove_button.setEnabled(True)
             remove_button.setText("✕")
+            # Boton en rojo de error, armado con los tokens del pack
             remove_button.setStyleSheet(
-                "QPushButton { background-color: #C05050; color: white; border: none; font-weight: bold; }"
-                "QPushButton:hover { background-color: #E06060; }"
+                "QPushButton { background-color: %s; color: %s; border: none; font-weight: bold; }"
+                "QPushButton:hover { background-color: %s; }"
+                % (Color.ERROR, Color.TEXT_ON_ACCENT, Color.DOT_ERROR)
             )
 
     def show_success(self, message):
         """Muestra mensaje de éxito en verde"""
-        success_html = f"<span style='color: #00ff00; '>{message}</span>"
+        success_html = f"<span style='color: {Color.OK_TEXT}; '>{message}</span>"
         self.result_label.setText(success_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.close_button.setEnabled(True)
 
     def show_error(self, message):
         """Muestra mensaje de error en rojo"""
-        error_html = f"<span style='color: #C05050; '>{message}</span>"
+        error_html = f"<span style='color: {Color.ERROR_TEXT}; '>{message}</span>"
         self.result_label.setText(error_html)
         self.result_label.setStyleSheet("padding: 10px;")
         self.close_button.setEnabled(True)
@@ -451,10 +465,10 @@ def get_user_info_from_config(wasabi_user):
         debug_print(
             f"'{wasabi_user}' no esta en la DB de PipeSync; se usa el nombre crudo."
         )
-        return wasabi_user, "#666666"
+        return wasabi_user, Color.TEXT_DIM
     except Exception as e:
         debug_print(f"Error leyendo usuarios de PipeSync: {e}")
-        return wasabi_user, "#666666"
+        return wasabi_user, Color.TEXT_DIM
 
 
 # Variable global para mantener referencia a la ventana
