@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.03 | Lega
+  LGA_EditToolsPanel v3.04 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.04: Nuevo boton Create NK v000, que llama a LGA_NKS_CreateNKScript.py.
+         El boton Create v000 pasa a llamarse Create EXR v000.
   v3.03: Nuevo boton Apply AMF, que llama a LGA_NKS_ApplyAMF.py
   v3.02: Movido boton Self ReplaceClip desde el Review Panel, debajo de Reconnect Media.
   v3.01: Nuevo boton de import shot
@@ -43,6 +45,12 @@ import queue
 import time
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+
+# Tooltips fuera del widget (capa intermedia para la futura migracion bilingue)
+TOOLTIP_CREATE_NK_SCRIPT = (
+    "Crea el script de comp de Nuke del shot activo desde el template del proyecto "
+    "(ASSETS), con los plates y denoised reales, el CDL/CLF del shot y el EditRef centrado"
+)
 import importlib.util
 import importlib.machinery
 from pathlib import Path
@@ -313,7 +321,8 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Apply AMF", self.apply_amf, "#434c41", None, "Crea los soft effects de color en los clips seleccionados siguiendo el .amf del shot (.cdl y .clf de _input/Look_Files)"),
             ("Import shot", self.import_shot, "#2a4d3a", None, "Importa shots al proyecto"),
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
-            ("Create v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar una secuencia negra v000 del shot activo"),
+            ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar una secuencia negra v000 del shot activo"),
+            ("Create NK v000", self.create_nk_script, "#2a4d3a", None, TOOLTIP_CREATE_NK_SCRIPT),
             ("New Video Track", self.create_new_track, "#3a2a4d", None, "Crea un nuevo track de video encima del track seleccionado"),
             ("Extend &Edit", self.extend_edit_to_playhead, "#453434", "Alt+E", "Alt+E\nExtiende el punto de salida del clip hasta el playhead (cambiando su velocidad)"),
             ("Trim &In", self.trim_in, "#453434", "Alt+[", "Alt+[\nTrimea el IN del clip a la posicion del playhead"),
@@ -773,6 +782,22 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 debug_print_b(">>> Error al ejecutar Create v000 dialog")
         except Exception as e:
             debug_print_b(f"Error durante la ejecucion de Create v000: {e}")
+            import traceback
+            debug_print_b(traceback.format_exc())
+
+    ###### Create NK Script
+    def create_nk_script(self):
+        """Abre el dialogo Create NK Script para armar el comp del shot activo."""
+        debug_print_b("\n>>> Ejecutando Create NK Script...")
+
+        try:
+            result = self.execute_external_script("LGA_NKS_CreateNKScript.py")
+            if result:
+                debug_print_b(">>> Create NK Script completado")
+            else:
+                debug_print_b(">>> Error al ejecutar Create NK Script")
+        except Exception as e:
+            debug_print_b(f"Error durante la ejecucion de Create NK Script: {e}")
             import traceback
             debug_print_b(traceback.format_exc())
 
