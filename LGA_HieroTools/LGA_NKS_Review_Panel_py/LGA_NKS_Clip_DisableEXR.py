@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Clip_DisableEXR v1.32 | Lega
+  LGA_NKS_Clip_DisableEXR v1.33 | Lega
 
   Habilita o deshabilita el clip en el track especificado (por defecto usa TRACK_comp_EXR del módulo LGA_NKS_GetClip).
 
@@ -20,6 +20,7 @@ ____________________________________________________________________
   Modo `enable_rev_fallback=False` (wrappers de otras tasks, ej: roto):
   - Comportamiento original: usa `get_clip_to_process` (playhead con fallback a selección).
 
+  v1.33: El debug por consola queda apagado por default.
   v1.32: El diálogo de renombrado de track pasa a ask_question del helper
          LGA_NKS_MessageBox (estilo del pack), adaptando el retorno a bool.
   v1.31: Default `enable_rev_fallback=True` para que el botón ON OFF _comp_ herede el nuevo
@@ -42,7 +43,7 @@ import re
 from pathlib import Path
 import sys
 
-DEBUG = True
+DEBUG = False
 
 def debug_print(*message):
     if DEBUG:

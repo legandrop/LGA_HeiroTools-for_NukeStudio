@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Timeline_Refresh v1.21 | Lega
+  LGA_NKS_Timeline_Refresh v1.22 | Lega
 
   Refresca el timeline cerrándolo y volviéndolo a abrir,
   manteniendo los ajustes del viewer:
@@ -10,6 +10,8 @@ ____________________________________________________________________
   3. Reabre la misma secuencia en un nuevo timeline viewer.
   4. Restaura los ajustes del viewer.
 
+  v1.22: El aspecto que se restaura despues del refresh pasa de 2.35:1 a 3:2,
+         acompanando al boton del panel.
   v1.21: Sistema A de logging — solo archivo, sin consola.
 ____________________________________________________________________
 """
@@ -148,10 +150,10 @@ def restore_viewer_state(viewer, state):
         debug_print(f"- Estableciendo estilo de máscara a: {state['mask_style']}")
         viewer.setMaskOverlayStyle(state['mask_style'])
 
-        # Si había un aspecto 2.35:1, lo restauramos
+        # Si había un aspecto 3:2, lo restauramos
         if state['mask_style'] != hiero.ui.Player.MaskOverlayStyle.eMaskOverlayNone:
-            debug_print("- Estableciendo aspecto 2.35:1")
-            viewer.setMaskOverlayFromRemote("2.35:1")
+            debug_print("- Estableciendo aspecto 3:2")
+            viewer.setMaskOverlayFromRemote("3:2")
 
         debug_print(f"- Estableciendo LUT a: {state['lut']}")
         viewer.player().setLUT(state['lut'])

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.09 | Lega
+  LGA_NKS_Flow_Push_connector v1.10 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,7 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.10: El debug por consola queda apagado por default.
   v1.09: La Version destino se desempata por NOMBRE. El filtro por token y por
          numero puede matchear mas de una Version cuando conviven dos
          convenciones de naming que solo difieren en el orden del vendor code
@@ -99,7 +100,7 @@ import shotgun_api3
 # y no habia forma de saber a que entidad se habia linkeado nada.
 # debug_print escribe a stderr, y Flow_Push lo recoge y lo vuelca al .log
 # prefijado con [Conector] (ver call_flow_connector).
-DEBUG = True
+DEBUG = False
 
 
 def debug_print(message):

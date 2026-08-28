@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.04 | Lega
+  LGA_EditToolsPanel v3.05 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.05: Nuevo boton Toggle AMF (Shift+L), debajo de Apply AMF
   v3.04: Nuevo boton Create NK v000, que llama a LGA_NKS_CreateNKScript.py.
          El boton Create v000 pasa a llamarse Create EXR v000.
   v3.03: Nuevo boton Apply AMF, que llama a LGA_NKS_ApplyAMF.py
@@ -319,6 +320,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Compositing Log | Clip", self.set_compositing_log, "#434c41", None, "Cambia el color transform a compositing_log en los clips seleccionados"),
             ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Detecta y corrige clips con colorspace rec709 o gamma2.2"),
             ("Apply AMF", self.apply_amf, "#434c41", None, "Crea los soft effects de color en los clips seleccionados siguiendo el .amf del shot (.cdl y .clf de _input/Look_Files)"),
+            ("Togg&le AMF", self.toggle_amf, "#434c41", "Shift+L", "Shift+L\nHabilita o deshabilita los soft effects de Apply AMF que esten bajo el playhead, en todos los tracks"),
             ("Import shot", self.import_shot, "#2a4d3a", None, "Importa shots al proyecto"),
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
             ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar una secuencia negra v000 del shot activo"),
@@ -684,6 +686,24 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 debug_print_b(">>> Error al ejecutar Apply AMF script")
         except Exception as e:
             debug_print_b(f"Error durante la ejecución de Apply AMF: {e}")
+            import traceback
+
+            debug_print_b(traceback.format_exc())
+
+    ###### Toggle AMF
+    def toggle_amf(self):
+        """Ejecuta LGA_NKS_ToggleAMF.py para habilitar/deshabilitar los efectos de Apply AMF."""
+        debug_print_b("\n>>> Ejecutando Toggle AMF script...")
+
+        try:
+            # El undo lo maneja el propio script, para no anidar bloques
+            result = self.execute_external_script("LGA_NKS_ToggleAMF.py")
+            if result:
+                debug_print_b(">>> Toggle AMF script completado")
+            else:
+                debug_print_b(">>> Error al ejecutar Toggle AMF script")
+        except Exception as e:
+            debug_print_b(f"Error durante la ejecución de Toggle AMF: {e}")
             import traceback
 
             debug_print_b(traceback.format_exc())

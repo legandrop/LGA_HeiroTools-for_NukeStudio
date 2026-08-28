@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ReviewPic v1.22 | Lega
+  LGA_NKS_ReviewPic v1.23 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo guarda en ReviewPic_Cache
   organizando por clips del track EXR de la task activa con numeracion de frames.
@@ -9,6 +9,7 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.23: El debug por consola queda apagado por default.
   v1.22: Se tiene en cuenta el pixel aspect ratio (PAR) del formato. El viewer.image()
          ya entrega la imagen con el PAR aplicado (proporciones de display), por lo que
          el crop ahora se hace contra el DISPLAY aspect (storage * PAR) en lugar del
@@ -41,7 +42,7 @@ QRect = QtCore.QRect
 import subprocess
 import sys
 
-DEBUG = True
+DEBUG = False
 
 def debug_print(*message):
     if DEBUG:

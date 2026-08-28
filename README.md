@@ -122,10 +122,8 @@ Viewer and timeline utilities focused on framing, navigation, review navigation,
 - **Viewer | Rec709**  
   Changes the viewer LUT to ACES / Rec.709.  
   Shortcut: `Shift+V`.
-- **Viewer | 2.35:1**  
-  Sets the viewer overlay to 2.35:1 and cycles mask styles `(None, Half, Full)` by adjusting the Frame effect on the BurnIn track.
-- **Viewer | 2:1**  
-  Sets the viewer overlay to 2:1 and cycles mask styles `(None, Half, Full)` by adjusting the Frame effect on the BurnIn track.
+- **Viewer | 3:2**  
+  Sets the viewer overlay to 3:2 and cycles mask styles `(None, Half, Full)`, insetting the BurnIn track burn-ins so the side bars do not cover them.
 - **Refresh Timeline**  
   Refreshes the timeline while preserving the current zoom level. Useful when the timeline starts behaving incorrectly.
 - **Top Track**  

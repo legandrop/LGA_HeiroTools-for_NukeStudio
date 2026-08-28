@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.72 | Lega
+  LGA_ViewerPanel v1.74 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.74: Se saca del panel el boton Viewer | 2:1. viewer_21 y viewer_235 quedan
+         sin llamar para poder volver atras.
+  v1.73: El boton Viewer | 2.35:1 pasa a ser Viewer | 3:2. El metodo viewer_235
+         queda sin llamar para poder volver atras.
   v1.72: El login del reviewer local sale del helper memoizado de contexto en vez
          de repetir el desencriptado de config.secure en el arranque.
 
@@ -267,18 +271,11 @@ class ViewerPanel(QtWidgets.QWidget):
                 "Shift+V\nCambia el LUT del viewer a ACES/Rec.709",
             ),
             (
-                "Viewer | 2.35:1 ",
-                self.viewer_235,
+                "Viewer | 3:2 ",
+                self.viewer_32,
                 "#311840",
                 None,
-                "Ajusta el overlay del viewer a 2.35:1 y alterna los estilos de máscara\n(None, Half, Full) ajustando el efecto Frame del track BurnIn",
-            ),
-            (
-                "Viewer | 2:1 ",
-                self.viewer_21,
-                "#311840",
-                None,
-                "Ajusta el overlay del viewer a 2:1 y alterna los estilos de máscara\n(None, Half, Full) ajustando el efecto Frame del track BurnIn",
+                "Ajusta el overlay del viewer a 3:2 y alterna los estilos de máscara\n(None, Half, Full)",
             ),
             (
                 "Refresh Timeline",
@@ -560,6 +557,12 @@ class ViewerPanel(QtWidgets.QWidget):
         except Exception as e:
             debug_print(f"Error setting Rec.709 LUT: {e}")
 
+    def viewer_32(self):
+        self.run_viewer_mask_script("3:2")
+
+    # Las dos de abajo se conservan aunque ningun boton las llame: el 2.35:1 se
+    # reemplazo por el de 3:2 y el 2:1 se saco del panel porque no se usa.
+    # Quedan para poder volver atras sin reescribirlas.
     def viewer_235(self):
         self.run_viewer_mask_script("2.35:1")
 
@@ -571,7 +574,7 @@ class ViewerPanel(QtWidgets.QWidget):
         Ejecuta el script genérico de máscara del viewer con el aspect ratio especificado.
 
         Args:
-            aspect_ratio (str): El aspect ratio a aplicar (ej: "2.35:1", "2:1")
+            aspect_ratio (str): El aspect ratio a aplicar (ej: "3:2", "2:1")
         """
         try:
             script_path = os.path.join(

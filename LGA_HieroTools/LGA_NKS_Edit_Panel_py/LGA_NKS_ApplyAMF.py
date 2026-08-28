@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.50 | Lega
+  LGA_NKS_ApplyAMF v0.70 | Lega
 
   Crea los soft effects de color sobre los clips seleccionados del timeline,
   siguiendo lo que declara el .amf que viene con el shot.
@@ -49,10 +49,23 @@ ____________________________________________________________________
     timing. Sin trackItem hay que dar timelineIn/timelineOut, y el efecto
     queda suelto en el track (es lo que hace LGA_NKS_FrameNumber_Create).
 
-  PENDIENTE (manejo de errores, se trabaja al final):
-    - Cartel de aviso cuando hay mas de un archivo de la misma extension.
-      Hoy solo avisa por consola y usa el primero.
+  PENDIENTE: cartel cuando hay mas de un archivo de la misma extension
+  en Look_Files. Hoy eso solo avisa por log y usa el primero.
 
+  v0.70: Avisa por cartel cuando no puede resolver un shot, en vez de
+         terminar en silencio. UN solo cartel por corrida y agrupado
+         por SHOT, no por clip: un shot suele tener clips en aPlate,
+         bPlate y _comp_, y repetir el mismo nombre tres veces hace
+         el aviso ilegible.
+  v0.62: Cada corrida escribe su log a logs/DebugPy_LGA_NKS_ApplyAMF.log,
+         prendido o no el debug por consola. Sin eso la tool era
+         una caja negra cuando no hacia nada.
+  v0.61: El debug por consola queda apagado por default.
+  v0.60: Los efectos van a un subtrack FIJO (el indice de la cadena)
+         y no a uno nuevo por llamada. Sin pasar subTrackIndex, cada
+         createEffect abria un subtrack propio: el segundo clip del
+         track quedaba con sus efectos en s1/s2 y un s0 vacio debajo,
+         que se veia como una franja muerta entre el clip y su cadena.
   v0.50: No vuelve a crear un efecto que el clip ya tiene: se saltea y se
          crea solo el que falta. La deteccion no se queda con linkedItems():
          tambien barre los subtracks del track, porque un efecto creado a
@@ -85,7 +98,7 @@ import hiero.ui
 # Configuracion
 # ============================
 
-DEBUG = True
+DEBUG = False
 
 # Nombres de carpeta donde viven los archivos de look, colgando del shot.
 INPUT_DIR_NAME = "_input"
@@ -103,10 +116,34 @@ FALLBACK_EFFECTS = (
 # pisa un archivo que alguien haya cambiado a mano.
 SKIP_IF_EXISTS = True
 
+# La corrida SIEMPRE deja su log, este o no prendido el debug por consola. Sin
+# esto la tool era una caja negra: si no hacia nada, no habia donde mirar por
+# que -y justamente el caso mas comun, "el clip ya tenia los efectos y se
+# saltearon", es silencioso-.
+LOG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "logs", "DebugPy_LGA_NKS_ApplyAMF.log"
+)
+
+_LOG_LINES = []
+
 
 def debug_print(*message):
+    """Acumula para el .log y, si DEBUG, ademas escribe en la consola."""
+    linea = " ".join(str(m) for m in message)
+    _LOG_LINES.append(linea)
     if DEBUG:
-        print(*message)
+        print(linea)
+
+
+def _volcar_log():
+    """Escribe el log de la corrida, pisando el anterior. Nunca rompe la tool."""
+    try:
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        with open(LOG_PATH, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join(_LOG_LINES) + "\n")
+    except Exception:
+        pass
+    del _LOG_LINES[:]
 
 
 # ============================
@@ -643,8 +680,23 @@ def find_existing_effect(efectos, effect_type):
     return None
 
 
-def create_effect_on_track_item(track_item, effect_type):
-    """Crea un soft effect linkeado al TrackItem. Devuelve el EffectTrackItem o None."""
+def create_effect_on_track_item(track_item, effect_type, sub_track_index):
+    """Crea un soft effect linkeado al TrackItem. Devuelve el EffectTrackItem o None.
+
+    `sub_track_index` NO es opcional a proposito. La doc de createEffect dice:
+    "subTrackIndex - if specified, will be placed on the appropriate sub-track,
+    otherwise will be placed on a NEW sub-track". O sea que sin pasarlo, CADA
+    llamada abre un subtrack nuevo en vez de reusar el que ya esta.
+
+    Eso dejaba un hueco VERTICAL en el track: el primer clip con AMF ocupaba
+    los subtracks 0 y 1, y el segundo clip -que en s0 y s1 tiene lugar libre,
+    porque los del primero estan en otro rango de tiempo- se iba igual a s1 y
+    s2, dejando s0 vacio debajo de sus efectos. Se veia como una franja muerta
+    entre el clip y sus propios efectos, y crecia con cada clip.
+
+    Pasando el indice, todos los clips del track usan los MISMOS dos subtracks
+    y la cadena queda pegada al clip en todos.
+    """
     track = track_item.parent()
     if not track:
         debug_print("    [ERROR] El clip no tiene track padre.")
@@ -656,9 +708,15 @@ def create_effect_on_track_item(track_item, effect_type):
 
     # Intento 1: linkeado al trackItem (hereda el timing del clip).
     try:
-        effect = track.createEffect(effectType=effect_type, trackItem=track_item)
+        effect = track.createEffect(
+            effectType=effect_type,
+            trackItem=track_item,
+            subTrackIndex=sub_track_index,
+        )
         if effect:
-            debug_print(f"    [OK] Creado y linkeado: {_safe_name(effect)}")
+            debug_print(
+                f"    [OK] Creado y linkeado: {_safe_name(effect)} (subtrack {sub_track_index})"
+            )
             return effect
         debug_print("    [WARN] createEffect() devolvio None con trackItem.")
     except Exception as e:
@@ -673,6 +731,7 @@ def create_effect_on_track_item(track_item, effect_type):
             effectType=effect_type,
             timelineIn=timeline_in,
             timelineOut=timeline_out,
+            subTrackIndex=sub_track_index,
         )
         if effect:
             debug_print(f"    [OK] Creado (sin linkear): {_safe_name(effect)}")
@@ -804,8 +863,13 @@ def verify_node(node, effect_type):
             debug_print(f"      {knob_name:<16} = <no legible: {e}>")
 
 
-def apply_effect(track_item, spec, efectos_existentes):
-    """Crea el soft effect si falta. Devuelve 'creado', 'salteado' o 'error'."""
+def apply_effect(track_item, spec, efectos_existentes, sub_track_index):
+    """Crea el soft effect si falta. Devuelve 'creado', 'salteado' o 'error'.
+
+    `sub_track_index` es la posicion del efecto en la cadena del .amf, y se
+    usa tal cual como subtrack: asi el mismo eslabon cae siempre en el mismo
+    subtrack en todos los clips del track.
+    """
     effect_type = spec["type"]
     debug_print(f"\n  --- {effect_type} ---")
 
@@ -825,7 +889,7 @@ def apply_effect(track_item, spec, efectos_existentes):
     if spec.get("cccid"):
         debug_print(f"    cccid     : {spec['cccid']}")
 
-    effect = create_effect_on_track_item(track_item, effect_type)
+    effect = create_effect_on_track_item(track_item, effect_type, sub_track_index)
     if not effect:
         return "error"
 
@@ -853,10 +917,62 @@ def apply_effect(track_item, spec, efectos_existentes):
 # ============================
 
 
-def process_track_item(track_item):
+def _anotar_fallo(fallos, shot, motivo):
+    """Registra el motivo por el que un shot no se pudo resolver.
+
+    Se queda con el PRIMER motivo de cada shot: si el shot no tiene
+    Look_Files, todos sus clips van a fallar por lo mismo y no aporta
+    nada repetirlo.
+    """
+    if shot not in fallos:
+        fallos[shot] = motivo
+
+
+def _avisar_fallos(fallos, total_clips):
+    """UN cartel al final con los shots que no se pudieron resolver.
+
+    Uno solo y por shot, no por clip: con una seleccion de veinte clips de
+    cinco shots, veinte carteles -o veinte lineas repetidas- no se leen.
+    """
+    if not fallos:
+        return
+
+    # El texto va en ingles, como todo lo visible del pack.
+    plural = "s" if len(fallos) > 1 else ""
+    lineas = [
+        "Apply AMF could not run on %d shot%s:" % (len(fallos), plural),
+        "",
+    ]
+    MAX = 12
+    for shot in sorted(fallos)[:MAX]:
+        lineas.append("    %s  -  %s" % (shot, fallos[shot]))
+    if len(fallos) > MAX:
+        lineas.append("    ... and %d more" % (len(fallos) - MAX))
+    lineas.append("")
+    lineas.append(
+        "The look files live in <shot>/%s/%s (.amf, .cdl and .clf)."
+        % (INPUT_DIR_NAME, LOOK_DIR_NAME)
+    )
+
+    mensaje = "\n".join(lineas)
+    debug_print("\n[AVISO AL USUARIO]\n" + mensaje)
+    try:
+        from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+
+        show_warning(hiero.ui.mainWindow(), "Apply AMF", mensaje)
+    except Exception as e:
+        debug_print("[WARN] No se pudo mostrar el cartel: %s" % e)
+
+
+def process_track_item(track_item, fallos):
     """Resuelve el look del clip y le crea los efectos que le falten.
 
     Devuelve un dict con cuantos quedaron creados, salteados y con error.
+
+    Los motivos por los que un clip no se pudo resolver se anotan en
+    `fallos`, indexados por SHOT y no por clip: un mismo shot suele tener
+    clips en aPlate, bPlate y _comp_, y al usuario le sirve saber que le
+    falta el look a ESE shot, no verlo repetido tres veces.
     """
     debug_print("\n" + "-" * 70)
     debug_print(f"[CLIP] {_safe_name(track_item)}")
@@ -875,6 +991,7 @@ def process_track_item(track_item):
     media_path = get_media_path(track_item)
     debug_print(f"  media                : {media_path}")
     if not media_path:
+        _anotar_fallo(fallos, _safe_name(track_item), "the clip has no media on disk")
         resumen["error"] += 1
         return resumen
 
@@ -882,12 +999,17 @@ def process_track_item(track_item):
     debug_print(f"  shot dir             : {shot_dir}")
     if not shot_dir:
         debug_print("  [ERROR] No se pudo resolver la carpeta del shot.")
+        _anotar_fallo(fallos, _safe_name(track_item), "could not resolve the shot folder")
         resumen["error"] += 1
         return resumen
+
+    # De aca en adelante el fallo es DEL SHOT, no del clip.
+    shot = os.path.basename(shot_dir.rstrip("/"))
 
     look_dir = resolve_look_dir(shot_dir)
     debug_print(f"  look dir             : {look_dir}")
     if not look_dir:
+        _anotar_fallo(fallos, shot, f"no {LOOK_DIR_NAME} folder in {INPUT_DIR_NAME}")
         resumen["error"] += 1
         return resumen
 
@@ -895,13 +1017,17 @@ def process_track_item(track_item):
     plan = build_effect_plan(look_dir)
     if not plan:
         debug_print("  [ERROR] No quedo ningun efecto por aplicar en este clip.")
+        _anotar_fallo(fallos, shot, f"no .cdl in {LOOK_DIR_NAME}")
         resumen["error"] += 1
         return resumen
 
     # Los efectos se crean en el orden del plan: el primero queda en el
-    # subtrack de abajo, o sea que se aplica antes.
-    for spec in plan:
-        resumen[apply_effect(track_item, spec, efectos_existentes)] += 1
+    # subtrack de abajo, o sea que se aplica antes. El indice del plan ES el
+    # subtrack, y va explicito: sin eso cada llamada abre un subtrack nuevo y
+    # los clips terminan con sus efectos a distinta altura, con subtracks
+    # vacios en el medio.
+    for indice, spec in enumerate(plan):
+        resumen[apply_effect(track_item, spec, efectos_existentes, indice)] += 1
 
     debug_print("")
     debug_print(
@@ -939,7 +1065,7 @@ def get_selected_track_items():
     return seq, track_items
 
 
-def main():
+def _main_interno():
     debug_print("\n" + "=" * 70)
     debug_print("  LGA_NKS_ApplyAMF - soft effects de color segun el .amf del shot")
     debug_print(f"  desde {INPUT_DIR_NAME}/{LOOK_DIR_NAME}")
@@ -950,22 +1076,35 @@ def main():
         return
 
     if not track_items:
+        mensaje = (
+            "No clips selected.\n\n"
+            "Select the clips you want to apply the AMF chain to."
+        )
         debug_print("[ERROR] No hay clips seleccionados en el timeline.")
+        try:
+            from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+
+            show_warning(hiero.ui.mainWindow(), "Apply AMF", mensaje)
+        except Exception as e:
+            debug_print("[WARN] No se pudo mostrar el cartel: %s" % e)
         return
 
     project = seq.project()
     total = {"creado": 0, "salteado": 0, "error": 0}
+    # shot -> motivo. Se llena en process_track_item y se avisa UNA vez al final.
+    fallos = {}
 
     if project:
         project.beginUndo("Apply AMF")
     try:
         for track_item in track_items:
             try:
-                for clave, cantidad in process_track_item(track_item).items():
+                for clave, cantidad in process_track_item(track_item, fallos).items():
                     total[clave] += cantidad
             except Exception as e:
                 debug_print(f"[ERROR] Fallo procesando '{_safe_name(track_item)}': {e}")
                 debug_print(traceback.format_exc())
+                _anotar_fallo(fallos, _safe_name(track_item), "unexpected error (see the log)")
                 total["error"] += 1
     finally:
         if project:
@@ -977,6 +1116,28 @@ def main():
     debug_print(f"    ya estaban      : {total['salteado']}")
     debug_print(f"    con error       : {total['error']}")
     debug_print("=" * 70 + "\n")
+
+    # El cartel va DESPUES del endUndo y del resumen: primero se termina el
+    # trabajo sobre el timeline, despues se le habla al usuario.
+    _avisar_fallos(fallos, len(track_items))
+
+
+def main():
+    """Envoltorio: corra bien o falle, la corrida SIEMPRE deja su log.
+
+    El try/finally cubre tambien los return tempranos de _main_interno
+    (sin secuencia activa, sin clips seleccionados, sin .cdl), que son
+    justo los casos en los que la tool "no hace nada" y hay que poder
+    ver por que.
+    """
+    try:
+        _main_interno()
+    except Exception:
+        debug_print("[ERROR] Excepcion no atrapada:")
+        debug_print(traceback.format_exc())
+        raise
+    finally:
+        _volcar_log()
 
 
 if __name__ == "__main__":
