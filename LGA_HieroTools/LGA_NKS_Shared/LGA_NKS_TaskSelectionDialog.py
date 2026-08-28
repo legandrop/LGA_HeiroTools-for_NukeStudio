@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskSelectionDialog v1.43 | Lega
+  LGA_NKS_TaskSelectionDialog v1.44 | Lega
 
   Detección y selección de task entre los tracks EXR del playhead.
 
@@ -22,6 +22,10 @@ ____________________________________________________________________
 
   Convención de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.44: El dialogo usa las hojas del modulo (Style.FORM y Style.BTN_SECONDARY)
+         en vez de rehacerlas con tokens, y llama a apply_ui_font: iba con la
+         fuente del host y con tres font-size propios. El color de la task y
+         el borde de hover, que son DATA, quedan.
   v1.43: _TASK_TO_TRACK se deriva de TASK_EXR_TRACKS (suma cg sin hardcodear).
          El chequeo de mismatch normaliza la task del filename, asi un clip de
          disciplina (layout, lighting, ...) en el track _cg_ no es mismatch.
@@ -48,7 +52,12 @@ ____________________________________________________________________
 """
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore, PYSIDE_VER
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Metric
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
+    Style,
+    Color,
+    Metric,
+    apply_ui_font,
+)
 from LGA_NKS_Shared.LGA_NKS_GetClip import (
     TASK_EXR_TRACKS,
     find_clip_at_playhead_in_track,
@@ -164,12 +173,9 @@ def prompt_task_selection(task_names, title="Select task"):
     dialog.setWindowTitle("Select Task")
     dialog.setModal(True)
     dialog.setMinimumWidth(240)
-    # La ventana va al fondo de la app, como el resto de las tools. Iba en
-    # #2B2B2B, mas claro que los botones que contiene.
-    dialog.setStyleSheet(
-        "QDialog { background-color: %s; border: 1px solid %s; }"
-        % (Color.WINDOW, Color.BORDER_STRONG)
-    )
+    # Hoja de form del modulo: fondo de ventana, textos y separadores salen de
+    # ahi. Antes la hoja se rehacia a mano con los tokens.
+    dialog.setStyleSheet(Style.FORM)
 
     layout = QtWidgets.QVBoxLayout(dialog)
     layout.setSpacing(8)
@@ -177,20 +183,22 @@ def prompt_task_selection(task_names, title="Select task"):
 
     label = QtWidgets.QLabel(title)
     label.setAlignment(QtCore.Qt.AlignCenter)
-    label.setStyleSheet(
-        "color: %s; font-weight: bold; font-size: 12px; padding: 2px 0px;"
-        % Color.TEXT_STRONG
-    )
+    # El titulo lo pinta la regla QLabel[lgaTitle] de Style.FORM.
+    label.setProperty("lgaTitle", True)
     layout.addWidget(label)
 
     sep = QtWidgets.QFrame()
     # Sin el shadow Sunken y con alto fijo: con el, Qt le dibuja encima su
-    # doble linea clara y el separador salia como una barra blanca.
+    # doble linea clara y el separador salia como una barra blanca. El color
+    # lo pone la regla de QFrame de Style.FORM.
     sep.setFrameShape(QtWidgets.QFrame.HLine)
     sep.setFrameShadow(QtWidgets.QFrame.Plain)
     sep.setFixedHeight(1)
-    sep.setStyleSheet("background-color: %s; border: none;" % Color.BORDER)
     layout.addWidget(sep)
+
+    # Los cuadraditos de atajo se guardan para achicarles la letra DESPUES del
+    # apply_ui_font de la ventana, que si no se las pisa con la del cuerpo.
+    shortcut_labels = []
 
     def make_handler(task):
         def handler():
@@ -201,32 +209,22 @@ def prompt_task_selection(task_names, title="Select task"):
         task_color = get_task_color(task)
         shortcut = index + 1
 
+        # Todas las tasks son opciones equivalentes: ninguna es la recomendada,
+        # asi que van en secundario y no hay boton violeta. Encima de la hoja
+        # solo se agrega el borde de hover en el color de la task, que es DATA.
         btn = QtWidgets.QPushButton()
         btn.setMinimumHeight(32)
         btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: %(surface)s;
-                border: 1px solid %(border)s;
-                border-radius: %(radius)dpx;
-            }
-            QPushButton:hover {
-                background-color: %(hover)s;
-                border: 1px solid %(color)s;
-            }
-            QPushButton:pressed {
-                background-color: %(pressed)s;
-            }
+            Style.BTN_SECONDARY
+            + """
+            QPushButton:hover { border-color: %(color)s; }
+            QPushButton:pressed { background-color: %(pressed)s; }
             """
             % {
                 "color": task_color,
-                "surface": Color.SURFACE,
-                "border": Color.BORDER_STRONG,
-                "hover": Color.SURFACE_HOVER,
                 # No hay token propio de pressed: se usa el de fila
                 # seleccionada, que es el escalon justo debajo del hover.
                 "pressed": Color.SURFACE_SELECTED,
-                "radius": Metric.RADIUS_SMALL,
             }
         )
 
@@ -241,23 +239,30 @@ def prompt_task_selection(task_names, title="Select task"):
         shortcut_label.setAlignment(QtCore.Qt.AlignCenter)
         # Transparente al mouse para que el click/hover llegue al boton.
         shortcut_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        # El tamanio del numero NO va en la hoja (lo prohibe el contrato): se
+        # aplica por QFont mas abajo, despues del apply_ui_font de la ventana.
         shortcut_label.setStyleSheet(
             "background: transparent; border: 1px solid %s; "
-            "border-radius: 2px; color: %s; font-size: 10px; font-weight: normal;"
-            % (Color.BORDER_HOVER, Color.TEXT_HEADER)
+            "border-radius: %dpx; color: %s;"
+            % (Color.BORDER_HOVER, Metric.RADIUS_SMALL, Color.TEXT_HEADER)
         )
+        shortcut_labels.append(shortcut_label)
 
         # Nombre de la task, centrado en el ancho total del boton.
         name_label = QtWidgets.QLabel(task.capitalize())
         name_label.setAlignment(QtCore.Qt.AlignCenter)
         name_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        # task_color es DATA (el color de la task): se queda. El tamanio lo da
+        # la fuente de la ventana.
         name_label.setStyleSheet(
-            "background: transparent; color: %s; font-weight: bold; font-size: 12px;"
-            % task_color
+            "background: transparent; color: %s; font-weight: bold;" % task_color
         )
 
         # Spacer del mismo ancho que el cuadradito para centrar el nombre.
         spacer = QtWidgets.QWidget()
+        # Transparente explicito: la regla QWidget de Style.FORM le pintaria el
+        # fondo de la ventana y el hueco saldria como un cuadrado oscuro.
+        spacer.setStyleSheet("background: transparent;")
         spacer.setFixedSize(18, 18)
         spacer.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
 
@@ -267,6 +272,12 @@ def prompt_task_selection(task_names, title="Select task"):
 
         btn.clicked.connect(make_handler(task))
         layout.addWidget(btn)
+
+    apply_ui_font(dialog)
+    # El numero del atajo va un par de escalones abajo del cuerpo: entra en el
+    # cuadradito de 18 px sin tocarle los bordes.
+    for shortcut_label in shortcut_labels:
+        apply_ui_font(shortcut_label, size=10)
 
     dialog.exec_()
     return dialog.selected_task

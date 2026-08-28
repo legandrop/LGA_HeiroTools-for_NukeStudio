@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.03 | Lega
+  LGA_NKS_CreateNKScript v1.04 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,11 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.04: Las dos ventanas usan las hojas del modulo de estilo en vez de
+         rehacerlas con tokens: Style.FORM, BTN_SECONDARY para las opciones
+         de template y Cancel, BTN_PRIMARY para Create (unico violeta, ultimo
+         a la derecha) y apply_ui_font. Se van los siete font-size propios y
+         el spinbox del handle vuelve a ser nativo, como manda la hoja.
   v1.03: Rango siempre desde 1001. El publish comp_v000 (si existe) aparece
          como opcion default de rango; la duracion de cada plate sale del
          timeline cuando difiere del disco (retimes/trims), y la ventana
@@ -1038,7 +1043,7 @@ def prompt_template_selection(template_paths):
         return template_paths[0]
 
     from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
-    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Metric
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Metric, apply_ui_font
 
     if QtWidgets.QApplication.instance() is None:
         return None
@@ -1048,10 +1053,8 @@ def prompt_template_selection(template_paths):
     dialog.setWindowTitle("Create NK v000")
     dialog.setModal(True)
     dialog.setMinimumWidth(340)
-    dialog.setStyleSheet(
-        "QDialog { background-color: %s; border: 1px solid %s; }"
-        % (Color.WINDOW, Color.BORDER_STRONG)
-    )
+    # Hoja de form del modulo: fondo, textos, separadores y campos salen de ahi.
+    dialog.setStyleSheet(Style.FORM)
     chosen = {"path": None}
 
     layout = QtWidgets.QVBoxLayout(dialog)
@@ -1060,17 +1063,15 @@ def prompt_template_selection(template_paths):
 
     label = QtWidgets.QLabel("Select template")
     label.setAlignment(QtCore.Qt.AlignCenter)
-    label.setStyleSheet(
-        "color: %s; font-weight: bold; font-size: 12px; padding: 2px 0px;"
-        % Color.TEXT_STRONG
-    )
+    # El titulo lo pinta la regla QLabel[lgaTitle] de Style.FORM.
+    label.setProperty("lgaTitle", True)
     layout.addWidget(label)
 
     sep = QtWidgets.QFrame()
+    # Sin hoja propia: Style.FORM ya trae la regla de QFrame HLine/VLine.
     sep.setFrameShape(QtWidgets.QFrame.HLine)
     sep.setFrameShadow(QtWidgets.QFrame.Plain)
     sep.setFixedHeight(1)
-    sep.setStyleSheet("background-color: %s; border: none;" % Color.BORDER)
     layout.addWidget(sep)
 
     def make_handler(path):
@@ -1080,22 +1081,15 @@ def prompt_template_selection(template_paths):
         return handler
 
     for path in template_paths:
+        # Cada template es una opcion equivalente: ninguna es la recomendada,
+        # asi que van todas en secundario y no hay boton violeta.
         btn = QtWidgets.QPushButton(os.path.basename(path))
         btn.setMinimumHeight(32)
-        btn.setStyleSheet(
-            "QPushButton { background-color: %s; border: 1px solid %s;"
-            " border-radius: %dpx; color: %s; font-size: 12px; }"
-            "QPushButton:hover { background-color: %s; border: 1px solid %s; }"
-            "QPushButton:pressed { background-color: %s; }"
-            % (
-                Color.SURFACE, Color.BORDER_STRONG, Metric.RADIUS_SMALL,
-                Color.TEXT_STRONG, Color.SURFACE_HOVER, Color.BORDER_HOVER,
-                Color.SURFACE_SELECTED,
-            )
-        )
+        btn.setStyleSheet(Style.BTN_SECONDARY)
         btn.clicked.connect(make_handler(path))
         layout.addWidget(btn)
 
+    apply_ui_font(dialog)
     dialog.exec_()
     return chosen["path"]
 
@@ -1114,7 +1108,14 @@ class RangeDialog(object):
         timeline_counts=None,
     ):
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
-        from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Metric, colorize_path
+        from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
+            Style,
+            Color,
+            Metric,
+            colorize_path,
+            apply_ui_font,
+            semibold_css,
+        )
 
         self.QtWidgets = QtWidgets
         self.result = None
@@ -1125,18 +1126,10 @@ class RangeDialog(object):
         dialog.setWindowTitle("Create NK v000")
         dialog.setModal(True)
         dialog.setMinimumWidth(430)
-        dialog.setStyleSheet(
-            "QDialog { background-color: %s; border: 1px solid %s; }"
-            "QLabel { color: %s; font-size: 12px; }"
-            "QRadioButton { color: %s; font-size: 12px; padding: 2px; }"
-            "QSpinBox { background-color: %s; color: %s; border: 1px solid %s;"
-            " border-radius: %dpx; padding: 2px 6px; }"
-            % (
-                Color.WINDOW, Color.BORDER_STRONG, Color.TEXT_STRONG,
-                Color.TEXT_STRONG, Color.SURFACE, Color.TEXT_STRONG,
-                Color.BORDER_STRONG, Metric.RADIUS_SMALL,
-            )
-        )
+        # Hoja de form del modulo. El QSpinBox del handle queda NATIVO a
+        # proposito: Style.FORM le saca de encima la regla de QLineEdit y deja
+        # que Qt siga dibujando las flechitas (ver el comentario del modulo).
+        dialog.setStyleSheet(Style.FORM)
 
         layout = QtWidgets.QVBoxLayout(dialog)
         layout.setSpacing(8)
@@ -1144,9 +1137,8 @@ class RangeDialog(object):
 
         title = QtWidgets.QLabel("%s" % shot_name)
         title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setStyleSheet(
-            "color: %s; font-weight: bold; font-size: 13px;" % Color.TEXT_STRONG
-        )
+        # El titulo lo pinta la regla QLabel[lgaTitle] de Style.FORM.
+        title.setProperty("lgaTitle", True)
         layout.addWidget(title)
 
         dest = QtWidgets.QLabel("Saving to:<br>%s" % colorize_path(out_path.replace("\\", "/")))
@@ -1155,14 +1147,49 @@ class RangeDialog(object):
         layout.addWidget(dest)
 
         sep = QtWidgets.QFrame()
+        # Sin hoja propia: Style.FORM ya trae la regla de QFrame HLine/VLine.
         sep.setFrameShape(QtWidgets.QFrame.HLine)
         sep.setFrameShadow(QtWidgets.QFrame.Plain)
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: %s; border: none;" % Color.BORDER)
         layout.addWidget(sep)
 
         range_label = QtWidgets.QLabel("Project frame range:")
         layout.addWidget(range_label)
+
+        # El modulo no trae Style.RADIO y la regla QWidget{background} de
+        # Style.FORM deja el indicador nativo ilegible: se dibuja aca con los
+        # tokens del checkbox del pack, igual que en Create v000.
+        radio_style = """
+QRadioButton { color: %(text)s; padding: 2px; background: transparent; }
+QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+    border-radius: 8px;
+    background-color: %(off)s;
+    border: 1px solid %(border)s;
+}
+QRadioButton::indicator:unchecked:hover { background-color: %(off_hover)s; }
+QRadioButton::indicator:checked {
+    width: 8px;
+    height: 8px;
+    border: 4px solid %(off)s;
+    background-color: %(accent)s;
+}
+QRadioButton:disabled { color: %(dim)s; }
+QRadioButton::indicator:disabled {
+    background-color: %(surface)s;
+    border-color: %(border_dis)s;
+}
+""" % {
+            "text": Color.TEXT,
+            "off": Color.CHECKBOX_OFF,
+            "off_hover": Color.CHECKBOX_OFF_HOVER,
+            "border": Color.CHECKBOX_BORDER,
+            "accent": Color.ACCENT_HOVER,
+            "dim": Color.TEXT_DIM,
+            "surface": Color.SURFACE,
+            "border_dis": Color.BORDER_STRONG,
+        }
 
         self.radio_group = QtWidgets.QButtonGroup(dialog)
         self.options = []  # (radio, cantidad de frames)
@@ -1170,6 +1197,7 @@ class RangeDialog(object):
 
         def add_option(label, count, checked=False):
             radio = QtWidgets.QRadioButton(label)
+            radio.setStyleSheet(radio_style)
             radio.setChecked(checked)
             self.radio_group.addButton(radio)
             layout.addWidget(radio)
@@ -1208,6 +1236,7 @@ class RangeDialog(object):
             radio = QtWidgets.QRadioButton(
                 "EditRef (%d frames) + handle" % editref_frames
             )
+            radio.setStyleSheet(radio_style)
             self.radio_group.addButton(radio)
             self.editref_radio = radio
             spin = QtWidgets.QSpinBox()
@@ -1221,9 +1250,10 @@ class RangeDialog(object):
 
         # rango resultante en vivo (los .nk arrancan siempre en 1001)
         self.range_label = QtWidgets.QLabel("")
+        # El tamanio lo da la hoja; aca solo el peso 600 (que necesita nombrar
+        # la familia, ver semibold_css) y el color de lo destacado.
         self.range_label.setStyleSheet(
-            "color: %s; font-weight: bold; font-size: 12px; padding-top: 4px;"
-            % Color.TEXT_STRONG
+            "color: %s; padding-top: 4px; %s" % (Color.TEXT_STRONG, semibold_css())
         )
         layout.addWidget(self.range_label)
         for radio, _count in self.options:
@@ -1236,26 +1266,22 @@ class RangeDialog(object):
         layout.addSpacing(4)
         buttons = QtWidgets.QHBoxLayout()
         buttons.addStretch(1)
+        # Create es la accion: unico violeta y ultimo a la derecha.
         cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.setStyleSheet(Style.BTN_SECONDARY)
         create_btn = QtWidgets.QPushButton("Create")
-        for btn, strong in ((cancel_btn, False), (create_btn, True)):
+        create_btn.setStyleSheet(Style.BTN_PRIMARY)
+        for btn in (cancel_btn, create_btn):
             btn.setMinimumHeight(28)
             btn.setMinimumWidth(90)
-            btn.setStyleSheet(
-                "QPushButton { background-color: %s; border: 1px solid %s;"
-                " border-radius: %dpx; color: %s; font-size: 12px;%s }"
-                "QPushButton:hover { background-color: %s; }"
-                % (
-                    Color.SURFACE, Color.BORDER_STRONG, Metric.RADIUS_SMALL,
-                    Color.TEXT_STRONG, " font-weight: bold;" if strong else "",
-                    Color.SURFACE_HOVER,
-                )
-            )
         cancel_btn.clicked.connect(dialog.reject)
         create_btn.clicked.connect(self._accept)
         buttons.addWidget(cancel_btn)
+        buttons.addSpacing(8)
         buttons.addWidget(create_btn)
         layout.addLayout(buttons)
+
+        apply_ui_font(dialog)
 
     def _selected_count(self):
         """Cantidad de frames del proyecto segun la opcion elegida."""
