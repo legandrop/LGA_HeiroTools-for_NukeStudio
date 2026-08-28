@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.04 | Lega
+  LGA_NKS_CreateNKScript v1.05 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,13 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.05: Las ventanas dejan de bloquear Hiero (no-modales, como Create
+         EXR v000). La caja del handle se agranda y muestra al lado el
+         total que da la cuenta. El cartel final trae la ruta coloreada y
+         un boton para abrirla en el explorador. En el script generado:
+         se borra el StickyNote SCRIPT BASE_v del template y ya no se
+         arrastran los stamps de aPlate/aDenoised que viven fuera de la
+         columna de input.
   v1.04: Las dos ventanas usan las hojas del modulo de estilo en vez de
          rehacerlas con tokens: Style.FORM, BTN_SECONDARY para las opciones
          de template y Cancel, BTN_PRIMARY para Create (unico violeta, ultimo
@@ -104,6 +111,13 @@ ASSETS_DIR_NAME = "ASSETS"
 PROJECTS_SUBPATH = ("Comp", "1_projects")
 DEFAULT_HANDLE = 8
 START_FRAME = 1001  # los .nk arrancan siempre en 1001
+
+# Tamanio de la caja del handle en la ventana de rango. Se ajusta A MANO
+# desde aca: el spinbox va NATIVO a proposito (Style.FORM no lo pinta, ver
+# su comentario), asi que lo unico que agranda las flechitas es la
+# geometria del widget.
+HANDLE_SPIN_WIDTH = 78
+HANDLE_SPIN_HEIGHT = 28
 
 # Nombre de shot tipo PROJ_1234_5678_VND (vendor al final)
 SHOT_NAME_RE = re.compile(r"^[A-Za-z0-9]+_\d{3,4}_\d{3,4}_[A-Za-z0-9]{2,4}$")
@@ -495,8 +509,17 @@ def fill_read(chunk, info):
 
 
 def set_trio_xpos(chunks_of_trio, x):
+    """Mueve la columna del trio a la x nueva.
+
+    Solo se mueven los nodos que estaban en la MISMA x que el Read: el
+    Stamp adyacente de aPlate y aDenoised no vive en la columna de input
+    sino en otra zona del graph (junto al CopyMetaData y adentro del
+    backdrop Regrain), y arrastrarlo ahi descolocaba el comp.
+    """
+    origin = chunk_knob(chunks_of_trio[0], "xpos")
     for chunk in chunks_of_trio:
-        set_chunk_knob(chunk, "xpos", str(x))
+        if chunk_knob(chunk, "xpos") == origin:
+            set_chunk_knob(chunk, "xpos", str(x))
 
 
 def clone_trio(trio_chunks, new_key, new_read_name, new_anchor_name, new_stamp_name):
@@ -657,6 +680,15 @@ def build_script(
     orphans = check_anchor_orphans(chunks, set(to_delete))
     if orphans:
         raise CreateNKError("Referencias a anchors borrados: %s" % orphans)
+
+    # 1b. El StickyNote que versiona el template (SCRIPT BASE_vNNN) habla
+    # del template, no del shot: no viaja al script nuevo.
+    for index, chunk in enumerate(chunks):
+        if chunk_class(chunk) != "StickyNote":
+            continue
+        if (normalized_label(chunk) or "").startswith("SCRIPT BASE_v"):
+            to_delete.append(index)
+            log.append("  BORRAR StickyNote de version del template")
 
     # 2. clonar trios para columnas extra (gPlate, cbPlate2, gDenoised, ...)
     next_read = max_numbered_name(chunks, "Read") + 1
@@ -1034,13 +1066,18 @@ def _get_hiero_main_window():
     return None
 
 
-def prompt_template_selection(template_paths):
-    """Dialogo con un boton por template (estilo del pack). Devuelve la ruta
-    elegida o None. Con un solo template lo devuelve sin UI."""
+def prompt_template_selection(template_paths, on_choice):
+    """Pide elegir template y llama on_choice(ruta) con la elegida.
+
+    Con un solo template llama directo, sin UI. La ventana es NO-MODAL:
+    Hiero sigue usable mientras esta abierta, igual que Create EXR v000.
+    Devuelve el dialogo (o None) para que el llamador lo mantenga vivo.
+    """
     if not template_paths:
         return None
     if len(template_paths) == 1:
-        return template_paths[0]
+        on_choice(template_paths[0])
+        return None
 
     from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
     from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Metric, apply_ui_font
@@ -1051,7 +1088,7 @@ def prompt_template_selection(template_paths):
     parent = _get_hiero_main_window()
     dialog = QtWidgets.QDialog(parent) if parent is not None else QtWidgets.QDialog()
     dialog.setWindowTitle("Create NK v000")
-    dialog.setModal(True)
+    dialog.setModal(False)
     dialog.setMinimumWidth(340)
     # Hoja de form del modulo: fondo, textos, separadores y campos salen de ahi.
     dialog.setStyleSheet(Style.FORM)
@@ -1078,6 +1115,7 @@ def prompt_template_selection(template_paths):
         def handler():
             chosen["path"] = path
             dialog.accept()
+            on_choice(path)
         return handler
 
     for path in template_paths:
@@ -1090,8 +1128,94 @@ def prompt_template_selection(template_paths):
         layout.addWidget(btn)
 
     apply_ui_font(dialog)
-    dialog.exec_()
-    return chosen["path"]
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
+    return dialog
+
+
+def reveal_in_file_manager(path):
+    """Abre el explorador del sistema con el archivo seleccionado."""
+    try:
+        normalized = os.path.normpath(path)
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", normalized])
+        elif os.name == "nt":
+            subprocess.Popen(["explorer", "/select,", normalized])
+        else:
+            subprocess.Popen(["xdg-open", os.path.dirname(normalized)])
+    except (OSError, subprocess.SubprocessError) as error:
+        debug_print("  [WARN] No se pudo abrir el explorador:", error)
+
+
+def reveal_button_text():
+    """Nombre del explorador segun la plataforma (texto de UI, en ingles)."""
+    return "Show in Finder" if sys.platform == "darwin" else "Show in Explorer"
+
+
+def show_created_dialog(parent, out_path, warnings):
+    """Cartel final: ruta coloreada, boton para abrirla en el explorador y OK.
+
+    Se arma a mano en vez de con show_info porque lleva un boton de mas: un
+    QMessageBox en Windows pone el boton de accion a la izquierda, y la regla
+    del pack lo quiere ultimo a la derecha (mismo motivo por el que
+    ask_question del helper de carteles tampoco usa QMessageBox). NO-MODAL,
+    como el resto de las ventanas de la tool.
+    """
+    from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
+        Style,
+        colorize_path,
+        apply_ui_font,
+    )
+
+    if QtWidgets.QApplication.instance() is None:
+        return None
+
+    dialog = QtWidgets.QDialog(parent) if parent is not None else QtWidgets.QDialog()
+    dialog.setWindowTitle("Create NK v000")
+    dialog.setModal(False)
+    dialog.setMinimumWidth(430)
+    dialog.setStyleSheet(Style.FORM)
+
+    layout = QtWidgets.QVBoxLayout(dialog)
+    layout.setContentsMargins(18, 16, 18, 14)
+    layout.setSpacing(10)
+
+    layout.addWidget(QtWidgets.QLabel("Script created:"))
+
+    path_label = QtWidgets.QLabel(colorize_path(out_path.replace("\\", "/")))
+    path_label.setTextFormat(QtCore.Qt.RichText)
+    path_label.setWordWrap(True)
+    path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+    layout.addWidget(path_label)
+
+    if warnings:
+        notes = QtWidgets.QLabel("Warnings:\n- " + "\n- ".join(warnings))
+        notes.setWordWrap(True)
+        layout.addWidget(notes)
+
+    row = QtWidgets.QHBoxLayout()
+    reveal_btn = QtWidgets.QPushButton(reveal_button_text())
+    reveal_btn.setStyleSheet(Style.BTN_SECONDARY)
+    ok_btn = QtWidgets.QPushButton("OK")
+    ok_btn.setStyleSheet(Style.BTN_PRIMARY)
+    ok_btn.setDefault(True)
+    for btn in (reveal_btn, ok_btn):
+        btn.setMinimumHeight(28)
+        btn.setMinimumWidth(90)
+    reveal_btn.clicked.connect(lambda: reveal_in_file_manager(out_path))
+    ok_btn.clicked.connect(dialog.accept)
+    row.addWidget(reveal_btn)
+    row.addStretch(1)
+    row.addWidget(ok_btn)
+    layout.addLayout(row)
+
+    apply_ui_font(dialog)
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
+    return dialog
 
 
 class RangeDialog(object):
@@ -1119,12 +1243,15 @@ class RangeDialog(object):
 
         self.QtWidgets = QtWidgets
         self.result = None
+        self._on_accept = None
+        self.editref_total_label = None
+        self.create_btn = None
 
         parent = _get_hiero_main_window()
         dialog = QtWidgets.QDialog(parent) if parent is not None else QtWidgets.QDialog()
         self.dialog = dialog
         dialog.setWindowTitle("Create NK v000")
-        dialog.setModal(True)
+        dialog.setModal(False)
         dialog.setMinimumWidth(430)
         # Hoja de form del modulo. El QSpinBox del handle queda NATIVO a
         # proposito: Style.FORM le saca de encima la regla de QLineEdit y deja
@@ -1242,9 +1369,15 @@ QRadioButton::indicator:disabled {
             spin = QtWidgets.QSpinBox()
             spin.setRange(0, 99)
             spin.setValue(DEFAULT_HANDLE)
+            # Geometria, no QSS: el spinbox va nativo (ver HANDLE_SPIN_WIDTH).
+            spin.setFixedWidth(HANDLE_SPIN_WIDTH)
+            spin.setFixedHeight(HANDLE_SPIN_HEIGHT)
             self.handle_spin = spin
+            # Total que da la cuenta: el EditRef mas el handle de cada lado.
+            self.editref_total_label = QtWidgets.QLabel("")
             row.addWidget(radio)
             row.addWidget(spin)
+            row.addWidget(self.editref_total_label)
             row.addStretch(1)
             layout.addLayout(row)
 
@@ -1276,6 +1409,9 @@ QRadioButton::indicator:disabled {
             btn.setMinimumWidth(90)
         cancel_btn.clicked.connect(dialog.reject)
         create_btn.clicked.connect(self._accept)
+        # Se guarda para poder apagarlo al aceptar: dos clicks rapidos
+        # lanzarian dos veces el worker sobre el mismo .nk.
+        self.create_btn = create_btn
         buttons.addWidget(cancel_btn)
         buttons.addSpacing(8)
         buttons.addWidget(create_btn)
@@ -1294,6 +1430,11 @@ QRadioButton::indicator:disabled {
 
     def _update_range_label(self, *_args):
         count = self._selected_count()
+        if self.editref_total_label is not None:
+            self.editref_total_label.setText(
+                "(%d frames)"
+                % (self.editref_frames + 2 * self.handle_spin.value())
+            )
         if count:
             self.range_label.setText(
                 "Project range: %d-%d  (%d frames)"
@@ -1303,14 +1444,22 @@ QRadioButton::indicator:disabled {
             self.range_label.setText("")
 
     def _accept(self):
+        if self.create_btn is not None:
+            self.create_btn.setEnabled(False)
         count = self._selected_count()
         if count:
             self.result = (START_FRAME, START_FRAME + count - 1)
         self.dialog.accept()
+        if self.result is not None and self._on_accept is not None:
+            self._on_accept(self.result[0], self.result[1])
 
-    def exec_(self):
-        self.dialog.exec_()
-        return self.result
+    def open(self, on_accept):
+        """Muestra la ventana SIN bloquear Hiero y llama on_accept(first,
+        last) cuando el usuario aprieta Create. Si cancela no llama a nadie."""
+        self._on_accept = on_accept
+        self.dialog.show()
+        self.dialog.raise_()
+        self.dialog.activateWindow()
 
 
 # ============================
@@ -1404,6 +1553,12 @@ def _make_controller():
             self.template_path = None
             self.editref_offset = None
             self.scan_data = None
+            self.out_path = None
+            # los dialogos no-modales se guardan para que Qt no los
+            # recolecte mientras estan abiertos
+            self.template_dialog = None
+            self.range_dialog = None
+            self.created_dialog = None
 
         def start(self):
             seq, item = get_selected_track_item()
@@ -1424,14 +1579,17 @@ def _make_controller():
                     "No hay templates .nk en %s"
                     % os.path.join(project_root, ASSETS_DIR_NAME).replace("\\", "/")
                 )
-            self.template_path = prompt_template_selection(templates)
-            if not self.template_path:
-                return  # cancelado por el usuario
-
             # lo que sale del timeline se lee ANTES de ir a los hilos
             self.editref_offset = timeline_editref_offset(seq, item)
             self.timeline_counts = timeline_plate_counts(seq, item)
 
+            # el selector es NO-MODAL: sigue por callback, no por retorno
+            self.template_dialog = prompt_template_selection(
+                templates, self._on_template_chosen
+            )
+
+        def _on_template_chosen(self, template_path):
+            self.template_path = template_path
             self.scan_worker = ScanWorker(self.shot_root, self.shot_name)
             self.scan_worker.done.connect(self._on_scan_done)
             self.scan_worker.failed.connect(self._on_failed)
@@ -1459,7 +1617,9 @@ def _make_controller():
                     % out_path.replace("\\", "/"),
                 )
                 return
-            dialog = RangeDialog(
+            # NO-MODAL: Hiero queda usable y el flujo sigue por callback
+            self.out_path = out_path
+            self.range_dialog = RangeDialog(
                 self.shot_name,
                 columns,
                 data["editref_frames"],
@@ -1467,10 +1627,12 @@ def _make_controller():
                 publish_v000=data.get("publish_v000"),
                 timeline_counts=getattr(self, "timeline_counts", None),
             )
-            rng = dialog.exec_()
-            if rng is None:
-                return  # cancelado
-            range_first, range_last = rng
+            self.range_dialog.open(self._on_range_chosen)
+
+        def _on_range_chosen(self, range_first, range_last):
+            data = self.scan_data
+            columns = data["columns"]
+            out_path = self.out_path
 
             editref_start = None
             if self.editref_offset is not None and data["editref_frames"]:
@@ -1503,13 +1665,10 @@ def _make_controller():
             self.build_worker.start()
 
         def _on_build_done(self, out_path):
-            from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info
-
-            message = "Script creado:\n%s" % out_path.replace("\\", "/")
             warnings = (self.scan_data or {}).get("unknown") or []
-            if warnings:
-                message += "\n\nAvisos:\n- " + "\n- ".join(warnings)
-            show_info(_get_hiero_main_window(), "Create NK v000", message)
+            self.created_dialog = show_created_dialog(
+                _get_hiero_main_window(), out_path, warnings
+            )
 
         def _on_failed(self, message):
             from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
