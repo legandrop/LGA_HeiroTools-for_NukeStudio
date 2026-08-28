@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.15 | Lega
+  LGA_NKS_CreateV000 v1.16 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,12 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.16: Las pestanas usan Style.TABS del modulo en vez de la hoja
+         propia: la pestana activa deja de salir en SURFACE_HEADER, dos
+         tonos mas clara que su panel, y pasa a WINDOW. Los QColor del
+         separador y del gap se repuntan a BORDER_STRONG y WINDOW para
+         no quedar desalineados del QSS. El shell de tabs llama
+         apply_ui_font.
   v1.15: Migracion al modulo de estilo LGA_UI_Style_HieroTools: la
          ventana, el shell de tabs y los dos confirms usan Style.FORM y
          los botones del modulo; la hoja de tabs se arma con tokens.
@@ -161,7 +167,12 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     safe_widget_call,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, PATH_PALETTE
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
+    Style,
+    Color,
+    PATH_PALETTE,
+    apply_ui_font,
+)
 from LGA_NKS_Flow_NamingUtils import (
     clean_base_name,
     extract_project_name,
@@ -358,58 +369,29 @@ QRadioButton::indicator:disabled {
     "border_dis": Color.BORDER_STRONG,
 }
 
-_TAB_H_PAD_EXTRA = 14
-# Hoja de tabs armada con tokens del modulo de estilo: el pack no tiene
-# Style.TABS, asi que se construye aca con la paleta (FIELD_BG para el
-# header, SURFACE_HEADER para el tab activo, ACCENT_HOVER para su texto).
-# Mismo bloque que en LGA_import_shots.
-_TAB_STYLE = (
+# Las pestanas salen de Style.TABS (modulo de estilo). Antes esta hoja se
+# armaba aca a mano y la pestana ACTIVA usaba SURFACE_HEADER, dos tonos mas
+# clara que el panel que abre: se leia como una caja apoyada encima en vez de
+# como su continuacion. En Style.TABS la activa es WINDOW, igual que el body.
+# Lo unico que queda local es el fondo del contenedor del header, que es un
+# QWidget propio de esta ventana y no un control con hoja.
+_TAB_STYLE = Style.TABS + (
     """
-    QWidget#LGA_ImportShotHeader {
-        background: %(field)s;
-    }
-    QTabBar {
-        background: %(field)s;
-        qproperty-drawBase: 0;
-    }
-    QTabBar::tab {
-        background: %(field)s;
-        color: %(dim)s;
-        padding: 16px %(pad)dpx;
-        border: 1px solid transparent;
-        font-weight: bold;
-        font-size: 12px;
-        letter-spacing: 1px;
-    }
-    QTabBar::tab:selected {
-        background: %(header)s;
-        color: %(accent_hover)s;
-        border-top-color: %(border)s;
-        border-left-color: %(border)s;
-        border-right-color: %(border)s;
-    }
-    QTabBar::tab:hover:!selected { color: %(text)s; background: %(surface)s; }
-    QTabBar::tab:disabled { color: %(disabled)s; background: %(field)s; }
+QWidget#LGA_ImportShotHeader { background: %(field)s; }
 """
-    % {
-        "field": Color.FIELD_BG,
-        "dim": Color.TEXT_DIM,
-        "pad": _TAB_H_PAD_EXTRA,
-        "header": Color.SURFACE_HEADER,
-        "accent_hover": Color.ACCENT_HOVER,
-        "border": Color.BORDER_STRONG,
-        "text": Color.TEXT,
-        "surface": Color.SURFACE,
-        "disabled": Color.TEXT_DISABLED,
-    }
+    % {"field": Color.FIELD_BG}
 )
 
 
 class _HeaderSeparator(QtWidgets.QWidget):
     """Línea de 1px debajo del tab header."""
 
-    LINE_COLOR = QtGui.QColor("#4a4a4a")
-    GAP_COLOR = QtGui.QColor("#2b2b2b")
+    # Estos dos colores replican a mano lo que pinta Style.TABS y tienen que
+    # seguirlo: LINE_COLOR es el borde del tab activo (BORDER_STRONG) y
+    # GAP_COLOR es su fondo, que en Style.TABS es WINDOW -el mismo del panel
+    # de abajo-. Si el QSS cambia y estas no, el hueco queda desalineado.
+    LINE_COLOR = QtGui.QColor(Color.BORDER_STRONG)
+    GAP_COLOR = QtGui.QColor(Color.WINDOW)
 
     def __init__(self, tab_bar, parent=None):
         super(_HeaderSeparator, self).__init__(parent)
@@ -451,7 +433,9 @@ class _ImportShotTabBar(QtWidgets.QTabBar):
 
     EXTRA_WIDTH = 24
     MIN_HEIGHT = 48
-    INACTIVE_SEPARATOR_COLOR = QtGui.QColor("#424242")
+    # Separador vertical entre dos tabs INACTIVOS: cumple el rol de borde,
+    # asi que sale del mismo token que el borde del tab activo en Style.TABS.
+    INACTIVE_SEPARATOR_COLOR = QtGui.QColor(Color.BORDER_STRONG)
 
     def tabSizeHint(self, index):
         size = super(_ImportShotTabBar, self).tabSizeHint(index)
@@ -3070,6 +3054,9 @@ class CreateV000TabsDialog(QtWidgets.QDialog):
         if self._tab_bar.count() > 0:
             self._tab_bar.setCurrentIndex(0)
             self._tab_widget.setCurrentIndex(0)
+
+        # Fuente del pack: sin esto la ventana se dibuja con la del host.
+        apply_ui_font(self)
 
     def _update_create_all_label(self, *args):
         shot_count = sum(1 for panel in self.panels if panel.has_selected_tasks())

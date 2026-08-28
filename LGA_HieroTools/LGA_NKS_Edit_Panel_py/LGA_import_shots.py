@@ -1,13 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.38 | Lega
+  LGA_import_shots v1.39 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.39: Las pestanas usan Style.TABS del modulo en vez de la hoja
+         propia: la pestana activa deja de salir en SURFACE_HEADER, dos
+         tonos mas clara que su panel, y pasa a WINDOW. Los QColor del
+         separador y del gap se repuntan a BORDER_STRONG y WINDOW para
+         no quedar desalineados del QSS. ImportShotDialog y
+         BulkImportDialog llaman apply_ui_font.
   v1.38: Fin de la migracion de estilo: el QSS suelto que quedaba
          (spinboxes, combos con flecha propia, QSS de rename/transcode,
          labels, log, barra de progreso y header de preview) pasa a
@@ -206,7 +212,7 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import (
     ask_question,
     styled_message_box,
 )
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
@@ -1813,8 +1819,12 @@ class _HeaderSeparator(QtWidgets.QWidget):
     visualmente con la página debajo.
     """
 
-    LINE_COLOR = QtGui.QColor("#4a4a4a")
-    GAP_COLOR  = QtGui.QColor("#2b2b2b")  # = QTabBar::tab:selected background
+    # Replican a mano lo que pinta Style.TABS y tienen que seguirlo:
+    # LINE_COLOR es el borde del tab activo (BORDER_STRONG) y GAP_COLOR es su
+    # fondo, que en Style.TABS es WINDOW -el mismo del panel de abajo-. Si el
+    # QSS cambia y estas no, el hueco queda desalineado del tab.
+    LINE_COLOR = QtGui.QColor(Color.BORDER_STRONG)
+    GAP_COLOR = QtGui.QColor(Color.WINDOW)  # = QTabBar::tab:selected background
 
     def __init__(self, tab_bar, parent=None):
         super(_HeaderSeparator, self).__init__(parent)
@@ -1916,7 +1926,9 @@ class _ImportShotTabBar(QtWidgets.QTabBar):
     """
     EXTRA_WIDTH = 24  # px adicionales por tab — cubre letter-spacing + aire
     MIN_HEIGHT = 48   # 12px fuente + 16px arriba/abajo + bordes
-    INACTIVE_SEPARATOR_COLOR = QtGui.QColor("#424242")
+    # Separador vertical entre dos tabs INACTIVOS: cumple el rol de borde, asi
+    # que sale del mismo token que el borde del tab activo en Style.TABS.
+    INACTIVE_SEPARATOR_COLOR = QtGui.QColor(Color.BORDER_STRONG)
 
     def tabSizeHint(self, index):
         s = super(_ImportShotTabBar, self).tabSizeHint(index)
@@ -1967,55 +1979,17 @@ class ImportShotDialog(QtWidgets.QDialog):
     TAB_IMPORT    = 2
     TAB_PREVIEW   = 3
 
-    _TAB_H_PAD_EXTRA = 14  # px adicionales a cada lado de todos los tabs — ajustar a mano
-
-    # Hoja de tabs armada con tokens del modulo de estilo: el pack no tiene
-    # Style.TABS, asi que se construye aca con la paleta (FIELD_BG para el
-    # header, SURFACE_HEADER para el tab activo, ACCENT_HOVER para su texto).
-    _TAB_STYLE = (
+    # Las pestanas salen de Style.TABS (modulo de estilo). Antes esta hoja se
+    # armaba aca a mano y la pestana ACTIVA usaba SURFACE_HEADER, dos tonos mas
+    # clara que el panel que abre: se leia como una caja apoyada encima en vez
+    # de como su continuacion. En Style.TABS la activa es WINDOW, igual que el
+    # body. Lo unico que queda local es el fondo del contenedor del header, que
+    # es un QWidget propio de esta ventana y no un control con hoja.
+    _TAB_STYLE = Style.TABS + (
         """
-        QWidget#LGA_ImportShotHeader {
-            background: %(field)s;
-        }
-        QTabBar {
-            background: %(field)s;
-            qproperty-drawBase: 0;
-        }
-        QTabBar::tab {
-            background: %(field)s;
-            color: %(dim)s;
-            padding: 16px %(pad)dpx;
-            /* border 1px transparent en todos los tabs para que el geometry
-               sea idéntico entre seleccionado y no seleccionado. El
-               seleccionado sólo overridea los colores de top/left/right. */
-            border: 1px solid transparent;
-            font-weight: bold;
-            font-size: 12px;
-            letter-spacing: 1px;
-        }
-        QTabBar::tab:selected {
-            background: %(header)s;
-            color: %(accent_hover)s;
-            border-top-color: %(border)s;
-            border-left-color: %(border)s;
-            border-right-color: %(border)s;
-            /* border-bottom queda transparent → no reaparece la línea
-               que el separador "abre" debajo del tab activo. */
-        }
-        QTabBar::tab:hover:!selected { color: %(text)s; background: %(surface)s; }
-        QTabBar::tab:disabled { color: %(disabled)s; background: %(field)s; }
-    """
-        % {
-            "field": Color.FIELD_BG,
-            "dim": Color.TEXT_DIM,
-            "pad": _TAB_H_PAD_EXTRA,
-            "header": Color.SURFACE_HEADER,
-            "accent_hover": Color.ACCENT_HOVER,
-            "border": Color.BORDER_STRONG,
-            "text": Color.TEXT,
-            "surface": Color.SURFACE,
-            "disabled": Color.TEXT_DISABLED,
-        }
+QWidget#LGA_ImportShotHeader { background: %(field)s; }
+"""
+        % {"field": Color.FIELD_BG}
     )
 
     def __init__(self, shot_root, shot_name, seq, insert_frame, frames_to_push,
@@ -2178,6 +2152,9 @@ class ImportShotDialog(QtWidgets.QDialog):
         debug_print("ImportShotDialog init: set current tab Import")
         self._tab_bar.setCurrentIndex(self.TAB_IMPORT)
         self._tab_widget.setCurrentIndex(self.TAB_IMPORT)
+
+        # Fuente del pack: sin esto la ventana se dibuja con la del host.
+        apply_ui_font(self)
         debug_print("ImportShotDialog init complete window_id=%s" % self._window_id)
 
     # ── header ───────────────────────────────────────────────────
@@ -7128,6 +7105,9 @@ class BulkImportDialog(QtWidgets.QDialog):
             self._tab_bar.setCurrentIndex(0)
             self._tab_widget.setCurrentIndex(0)
             self._on_tab_changed(0)
+
+        # Fuente del pack: sin esto la ventana se dibuja con la del host.
+        apply_ui_font(self)
         self._log_bulk_tab_metrics("init")
 
     def showEvent(self, event):
