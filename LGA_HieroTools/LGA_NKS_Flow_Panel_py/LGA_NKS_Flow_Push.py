@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.11 | Lega
+  LGA_NKS_Flow_Push v4.13 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,11 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.13: "Delete all saved review images from disk" lleva lgaLabeled:
+         sin la propiedad la hoja del pack deja el texto pegado al
+         cuadrito (spacing 0).
+  v4.12: El cartel de verificacion de version ya no responde a Enter:
+         Cancelar era el default pero sin marca visual. ESC cancela.
   v4.11: Migracion al modulo de estilo LGA_UI_Style_HieroTools: InputDialog,
          PushVersionDialog, el selector de version de Shift+Click y el dialogo
          multi-clip usan Style.FORM/BTN_PRIMARY y tokens de Color en el HTML;
@@ -1161,6 +1166,9 @@ class InputDialog(QDialog):
         self.delete_images_checkbox = QCheckBox(
             "Delete all saved review images from disk"
         )
+        # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
+        # etiqueta (el default de la hoja del pack es spacing 0)
+        self.delete_images_checkbox.setProperty("lgaLabeled", True)
         self.delete_images_checkbox.setChecked(True)  # Tildado por defecto
         self.delete_images_checkbox.setStyleSheet("margin-top: 5px;")
         self._insert_above_ok_button(self.delete_images_checkbox)
@@ -2631,8 +2639,11 @@ class PushVersionDialog(QDialog):
         button_layout.addWidget(self.no_button)
         layout.addLayout(button_layout)
 
-        # Hacer que "Cancelar" sea el botón por defecto
-        self.no_button.setDefault(True)
+        # Ningun boton responde a Enter: la recomendada es Cancelar pero no
+        # se marca (Cancel nunca va en violeta), y un default invisible es un
+        # cartel que miente. ESC cancela, el click decide.
+        self.no_button.setAutoDefault(False)
+        self.yes_button.setAutoDefault(False)
 
     def accept_continue(self):
         debug_print("Usuario eligió continuar con versión actual")

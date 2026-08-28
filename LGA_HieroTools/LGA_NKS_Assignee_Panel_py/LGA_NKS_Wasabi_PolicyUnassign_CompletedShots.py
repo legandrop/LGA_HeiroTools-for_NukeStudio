@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.03 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.04 | Lega
 
   Limpia policies de Wasabi para shots ya entregados.
 
+  v1.04: La columna del checkbox pasa a ancho fijo de 34 px: con
+         ResizeToContents quedaba mas angosta que el checkbox del pack
+         y el cuadrito salia recortado a ambos lados.
   v1.03: La ventana migra al modulo de estilo LGA_UI_Style_HieroTools:
          Style.WINDOW + Style.TABLE, botones de seleccion en BTN_SMALL,
          "Limpiar policies" en BTN_PRIMARY y tokens en el HTML de estado.
@@ -389,7 +392,11 @@ class CompletedShotsPolicyWindow(QDialog):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        # Columna del checkbox fija en 34 px: con ResizeToContents quedaba mas
+        # angosta que el checkbox (el padding de item de Style.TABLE, 6px por
+        # lado, achica el rect del cell widget) y el cuadrito salia recortado
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 34)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)

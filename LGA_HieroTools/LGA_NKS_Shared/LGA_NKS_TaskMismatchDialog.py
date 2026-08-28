@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskMismatchDialog v1.03 | Lega
+  LGA_NKS_TaskMismatchDialog v1.04 | Lega
 
   Ventana de advertencia compartida para cuando la task detectada en
   el filename de un clip NO coincide con el nombre del track donde
@@ -14,6 +14,8 @@ ____________________________________________________________________
 
   Convencion de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.04: "Keep this window on top" lleva lgaLabeled: sin la propiedad la
+         hoja del pack deja el texto pegado al cuadrito (spacing 0).
   v1.03: La tabla usa la hoja del pack. La fila seleccionada iba en gris
          claro con texto negro, el unico lugar de las tools donde una
          seleccion se pinta MAS clara que el fondo.
@@ -251,6 +253,9 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
 
         bottom_row = QtWidgets.QHBoxLayout()
         self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
+        # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
+        # etiqueta (el default de la hoja del pack es spacing 0)
+        self.keep_on_top_chk.setProperty("lgaLabeled", True)
         self.keep_on_top_chk.setChecked(bool(self._keep_on_top))
         self.keep_on_top_chk.stateChanged.connect(
             lambda _state: self._set_keep_on_top(self.keep_on_top_chk.isChecked())

@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.60 | Lega
+  LGA_NKS_Flow_Pull v3.61 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.61: "Keep this window on top" lleva lgaLabeled: sin la propiedad la
+         hoja del pack deja el texto pegado al cuadrito (spacing 0).
   v3.60: La ventana de resultados (GUI_Table) migra al modulo de estilo
          LGA_UI_Style_HieroTools: fondo Style.WINDOW, titulo con tokens
          (INFO / PATH_SEPARATOR / ENTITY) y marco/header/scrollbars de la
@@ -1195,6 +1197,9 @@ class GUI_Table(QtWidgets.QDialog):
         header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
         header_row.addStretch(1)
         self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
+        # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
+        # etiqueta (el default de la hoja del pack es spacing 0)
+        self.keep_on_top_chk.setProperty("lgaLabeled", True)
         self.keep_on_top_chk.setChecked(bool(self._keep_on_top))
         self.keep_on_top_chk.stateChanged.connect(
             lambda _state: self._set_keep_on_top(self.keep_on_top_chk.isChecked())
