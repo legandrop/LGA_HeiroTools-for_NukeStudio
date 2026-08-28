@@ -1,11 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.96 | Lega
+  LGA_NKS_Flow_Shot_info v1.97 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.97: SHOT_INFO_QSS migra al modulo de estilo LGA_UI_Style_HieroTools:
+         fondos WINDOW/SURFACE, textos TEXT/TEXT_STRONG/TEXT_DIM, bordes y
+         scrollbars con tokens, y el header morado de version pasa al violeta
+         de la marca (ACCENT). Los colores semanticos de notas (playlist,
+         pastilla de attachment, colores de usuario) son data y quedan.
   v1.96: El header interno (shot | task | artistas) se elimina. El titulo de la
          ventana pasa a ser "shot | task"; los artistas quedan solo en Task history.
   v1.95: Task history colapsable (chips + grafico), Assigned then en notas,
@@ -68,6 +73,7 @@ from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QShortcut, QApplication
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color as UIColor
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import load_flow_users
 from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
@@ -240,21 +246,41 @@ VERSION_DUPLICATE_NOTE_WINDOW_SECONDS = 600
 
 
 # --------------------------------------------------------------------------- #
-# Paleta y QSS (port directo de PipeSync 2: mainwindow.cpp + flow_notes.qss)
-# --------------------------------------------------------------------------- #
+# Paleta y QSS. Era un port directo de PipeSync 2 (mainwindow.cpp +
+# flow_notes.qss); ahora los valores salen del modulo de estilo compartido
+# (LGA_UI_Style_HieroTools) para que la ventana se lea como el resto del pack.
+# Fondos con la jerarquia del pack (WINDOW abajo, SURFACE para las cajas, sin
+# invertirla como hacia el port) y el header de version en el violeta de la
+# marca (ACCENT). Los colores SEMANTICOS de notas quedan a mano: el amarillo
+# de playlist y la pastilla ambar de attachment son informacion, no estilo.
 COLORS = {
-    "bg_principal": "#161616",
-    "bg_popover": "#232323",
-    "bg_version_container": "#1e1e1e",
-    "bg_version_header": "#3C3764",
-    "border_principal": "#303030",
-    "txt_principal": "#B2B2B2",
-    "txt_principal_strong": "#dddddd",
-    "txt_secundario": "#929292",
-    "txt_subtle": "#cccccc",
-    "txt_desc_title": "#d8d8d8",
-    "txt_desc_meta": "#b8b8b8",
-    "txt_body": "#909090",
+    "bg_principal": UIColor.WINDOW,  # sin uso en el QSS; se conserva la clave
+    "bg_popover": UIColor.WINDOW,
+    "bg_version_container": UIColor.SURFACE,
+    "bg_version_header": UIColor.ACCENT,
+    "bg_task_history": UIColor.SURFACE,
+    "border_principal": UIColor.BORDER,
+    "border_strong": UIColor.BORDER_STRONG,
+    "border_hover": UIColor.BORDER_HOVER,
+    "hover_bg": UIColor.SURFACE_HOVER,
+    # Scrollbars: mismo mapa que Style.SCROLLBAR (track al fondo de la
+    # ventana, manija en BORDER_STRONG). Las del Task history van sobre la
+    # caja SURFACE, asi que su track usa ese fondo.
+    "scroll_track": UIColor.WINDOW,
+    "scroll_handle": UIColor.BORDER_STRONG,
+    "scroll_handle_hover": UIColor.BORDER_HOVER,
+    "chip_scroll_track": UIColor.SURFACE,
+    "txt_principal": UIColor.TEXT,
+    # Los tres siguientes viven SOLO en el header de version, que ahora es
+    # ACCENT: el numero fuerte va en el blanco sobre acento.
+    "txt_principal_strong": UIColor.TEXT_ON_ACCENT,
+    "txt_secundario": UIColor.TEXT,
+    "txt_subtle": UIColor.TEXT_STRONG,
+    "txt_desc_title": UIColor.TEXT_STRONG,
+    "txt_desc_meta": UIColor.TEXT,
+    "txt_body": UIColor.TEXT,
+    "txt_dim": UIColor.TEXT_DIM,
+    # --- data semantica: NO migrar -----------------------------------------
     "txt_playlist": "#ffcc33",
     "attachment_label_bg": "#2D2A26",
     "attachment_label_fg": "#8B7355",
@@ -266,7 +292,7 @@ QWidget#flowNotesContentWidget {
 }
 QWidget#flowNotesHeaderWidget {
     background-color: %(bg_popover)s;
-    border-bottom: 1px solid rgba(48, 48, 48, 0.7);
+    border-bottom: 1px solid %(border_principal)s;
 }
 QLabel#flowNotesTitle {
     color: %(txt_principal)s;
@@ -290,13 +316,13 @@ QWidget#flowNotesScrollContent {
     background-color: transparent;
 }
 QScrollArea#flowNotesScrollArea QScrollBar:vertical {
-    background-color: #252525; width: 8px; margin: 0px; border-radius: 4px;
+    background-color: %(scroll_track)s; width: 8px; margin: 0px; border-radius: 4px;
 }
 QScrollArea#flowNotesScrollArea QScrollBar::handle:vertical {
-    background-color: #2E2E2E; min-height: 30px; border-radius: 4px;
+    background-color: %(scroll_handle)s; min-height: 30px; border-radius: 4px;
 }
 QScrollArea#flowNotesScrollArea QScrollBar::handle:vertical:hover {
-    background-color: #3D3D3D;
+    background-color: %(scroll_handle_hover)s;
 }
 QScrollArea#flowNotesScrollArea QScrollBar::add-line:vertical,
 QScrollArea#flowNotesScrollArea QScrollBar::sub-line:vertical {
@@ -304,7 +330,7 @@ QScrollArea#flowNotesScrollArea QScrollBar::sub-line:vertical {
 }
 QWidget#flowVersionContainer {
     background-color: %(bg_version_container)s;
-    border: 1px solid rgba(48, 48, 48, 0.6);
+    border: 1px solid %(border_principal)s;
     border-radius: 6px;
 }
 QWidget#flowVersionHeader {
@@ -327,7 +353,7 @@ QWidget#flowVersionCommentsContainer {
 }
 QWidget#flowVersionComment { background-color: transparent; }
 QWidget#flowVersionCommentReply {
-    border-left: 2px solid #555555;
+    border-left: 2px solid %(border_hover)s;
     background-color: transparent;
 }
 QFrame#flowCommentSeparator {
@@ -340,7 +366,7 @@ QLabel#flowVersionCommentHeader {
     font-size: 14px; font-weight: 400;
 }
 QLabel#flowVersionCommentContent {
-    background-color: transparent; color: #909090; font-size: 14px;
+    background-color: transparent; color: %(txt_body)s; font-size: 14px;
     border: none; padding: 0; margin: 0;
 }
 QLabel#flowVersionCommentAttachment {
@@ -349,15 +375,15 @@ QLabel#flowVersionCommentAttachment {
     border-radius: 0px; font-size: 13px;
 }
 QPushButton#flowVersionCommentThumbnail {
-    border: 2px solid #404040; border-radius: 8px;
+    border: 2px solid %(border_strong)s; border-radius: 8px;
     background-color: transparent; padding: 2px;
 }
 QPushButton#flowVersionCommentThumbnail:hover {
-    border-color: #606060; background-color: rgba(255, 255, 255, 0.05);
+    border-color: %(border_hover)s; background-color: %(hover_bg)s;
 }
 QWidget#flowTaskHistory {
-    background-color: #1e1e1e;
-    border: 1px solid rgba(48, 48, 48, 0.6);
+    background-color: %(bg_task_history)s;
+    border: 1px solid %(border_principal)s;
     border-radius: 6px;
 }
 QLabel#flowTaskHistoryTitle {
@@ -382,12 +408,12 @@ QLabel#flowTaskHistoryChipDot {
 }
 QWidget#flowTaskHistoryChipsBarRow { background-color: transparent; }
 QScrollBar#flowTaskHistoryChipsBar {
-    background-color: #1e1e1e; height: 10px; margin: 0px; border: none;
+    background-color: %(chip_scroll_track)s; height: 10px; margin: 0px; border: none;
 }
 QScrollBar#flowTaskHistoryChipsBar::handle {
-    background-color: #3a3a3a; border-radius: 3px; min-width: 20px; margin: 2px;
+    background-color: %(scroll_handle)s; border-radius: 3px; min-width: 20px; margin: 2px;
 }
-QScrollBar#flowTaskHistoryChipsBar::handle:hover { background-color: #4a4a4a; }
+QScrollBar#flowTaskHistoryChipsBar::handle:hover { background-color: %(scroll_handle_hover)s; }
 QScrollBar#flowTaskHistoryChipsBar::add-line,
 QScrollBar#flowTaskHistoryChipsBar::sub-line {
     width: 0px; height: 0px; background: none; border: none;
@@ -401,13 +427,13 @@ QScrollArea#flowTaskHistoryScroll > QWidget#qt_scrollarea_viewport {
     background: transparent; border: none;
 }
 QScrollArea#flowTaskHistoryScroll QScrollBar:horizontal {
-    background-color: #1e1e1e; height: 10px; margin: 0px; border: none;
+    background-color: %(chip_scroll_track)s; height: 10px; margin: 0px; border: none;
 }
 QScrollArea#flowTaskHistoryScroll QScrollBar::handle:horizontal {
-    background-color: #3a3a3a; border-radius: 3px; min-width: 20px; margin: 2px;
+    background-color: %(scroll_handle)s; border-radius: 3px; min-width: 20px; margin: 2px;
 }
 QScrollArea#flowTaskHistoryScroll QScrollBar::handle:horizontal:hover {
-    background-color: #4a4a4a;
+    background-color: %(scroll_handle_hover)s;
 }
 QScrollArea#flowTaskHistoryScroll QScrollBar::add-line,
 QScrollArea#flowTaskHistoryScroll QScrollBar::sub-line {
@@ -419,10 +445,10 @@ QLabel#flowTaskHistoryName {
     background-color: transparent; font-size: 12px; font-weight: 600; border: none;
 }
 QLabel#flowTaskHistoryRange {
-    background-color: transparent; color: #8a8a8a; font-size: 11px; border: none;
+    background-color: transparent; color: %(txt_dim)s; font-size: 11px; border: none;
 }
 QLabel#flowTaskHistoryDays {
-    background-color: transparent; color: #6a6a6a; font-size: 11px; border: none;
+    background-color: transparent; color: %(txt_dim)s; font-size: 11px; border: none;
 }
 QLabel#flowAssignedThen {
     background-color: transparent; border: none; padding: 0px; margin: 0px;
@@ -628,9 +654,9 @@ def _assigned_then_html(spans, moment):
     shown = [_user_name_span(n) for n in then[:k_max]]
     names = ", ".join(shown)
     if len(then) > k_max:
-        names += f"<span style='color: #8a8a8a;'> +{len(then) - k_max}</span>"
+        names += f"<span style='color: {UIColor.TEXT_DIM};'> +{len(then) - k_max}</span>"
     return (
-        "<span style='color: #8a8a8a; font-size: 12px;'>Assigned then:&nbsp;</span>"
+        f"<span style='color: {UIColor.TEXT_DIM}; font-size: 12px;'>Assigned then:&nbsp;</span>"
         f"<span style='font-size: 12px;'>{names}</span>"
     )
 
@@ -744,16 +770,16 @@ class ThumbnailWidget(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setStyleSheet(
-            """
-            QLabel {
-                border: 0px solid #444444;
-                background-color: #2a2a2a;
+            f"""
+            QLabel {{
+                border: 0px solid {UIColor.BORDER_STRONG};
+                background-color: {UIColor.SURFACE_RAISED};
                 margin: 2px;
                 padding: 2px;
-            }
-            QLabel:hover {
-                border: 0px solid #007ACC;
-            }
+            }}
+            QLabel:hover {{
+                border: 0px solid {UIColor.ACCENT_HOVER};
+            }}
         """
         )
 
@@ -830,7 +856,7 @@ class ThumbnailContainerWidget(QWidget):
         frame_number = extract_frame_from_filename(self.image_path)
         self.frame_label = QLabel(f"f{frame_number}")
         self.frame_label.setStyleSheet(
-            "color: #cccccc; font-size: 10px; background-color: transparent;"
+            f"color: {UIColor.TEXT}; font-size: 10px; background-color: transparent;"
         )
         self.frame_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.frame_label, alignment=Qt.AlignCenter)
@@ -849,7 +875,7 @@ class ThumbnailButton(QPushButton):
         pix = QPixmap(image_path)
         if pix.isNull():
             pix = QPixmap(150, 80)
-            pix.fill(QColor("#3a3a3a"))
+            pix.fill(QColor(UIColor.SURFACE_RAISED))
         else:
             pix = pix.scaledToWidth(150, Qt.SmoothTransformation)
         self.setIcon(QIcon(pix))
@@ -1751,7 +1777,9 @@ class GUIWindow(QWidget):
         if not results:
             no_results_label = QLabel("No se encontraron resultados")
             no_results_label.setAlignment(Qt.AlignCenter)
-            no_results_label.setStyleSheet("color: #888888; font-size: 14px;")
+            no_results_label.setStyleSheet(
+                f"color: {UIColor.TEXT_DIM}; font-size: 14px;"
+            )
             self.scroll_layout.addWidget(no_results_label)
             self.show()
             return

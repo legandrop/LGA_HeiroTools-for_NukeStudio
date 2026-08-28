@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.10 | Lega
+  LGA_NKS_Flow_Push v4.11 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,11 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.11: Migracion al modulo de estilo LGA_UI_Style_HieroTools: InputDialog,
+         PushVersionDialog, el selector de version de Shift+Click y el dialogo
+         multi-clip usan Style.FORM/BTN_PRIMARY y tokens de Color en el HTML;
+         las preguntas pasan a ask_question() y los carteles sueltos a
+         styled_message_box()/show_warning(). Sin cambios de logica.
   v4.10: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v4.09: Los estados que piden nota salen de NOTE_CAPABLE_CODES
@@ -160,7 +165,14 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_task_status_dict,
     is_note_capable,
 )
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning, show_error
+from LGA_NKS_Shared.LGA_NKS_MessageBox import (
+    show_info,
+    show_warning,
+    show_error,
+    ask_question,
+    styled_message_box,
+)
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric
 
 # Reasignar clases para compatibilidad con código existente
 QRunnable = QtCore.QRunnable
@@ -898,6 +910,8 @@ class InputDialog(QDialog):
     def __init__(self, base_name, original_file_name=None, task_name=None, file_path=None):
         super(InputDialog, self).__init__()
         self.setWindowTitle("Input Dialog")
+        # Estilo del pack: fondo, labels, campos de texto y checkbox
+        self.setStyleSheet(Style.FORM)
         self.base_name = base_name
         self.original_file_name = original_file_name
         self.file_path = file_path
@@ -928,15 +942,17 @@ class InputDialog(QDialog):
         # Obtener información del shot y assignee desde la DB
         assignee = self.get_shot_assignee(base_name, file_path=file_path)
 
-        # Label para el mensaje con formato HTML usando los mismos colores que Shot_info
-        task_label = f"<span style='color:#AA88FF; font-weight:bold;'>[{self.task_name}]</span>"
+        # Label para el mensaje con formato HTML usando tokens del modulo de
+        # estilo: el shot es lo destacado (TEXT_STRONG), la task es una entidad
+        # del pipeline (ENTITY) y el assignee es informativo (INFO).
+        task_label = f"<span style='color:{Color.ENTITY}; font-weight:bold;'>[{self.task_name}]</span>"
         if assignee:
             label_text = (
-                f"Message for <b style='color:#CCCC00;'>{base_name}</b> {task_label} | "
-                f"<span style='color:#007ACC; font-weight:bold;'>{assignee}</span>:"
+                f"Message for <b style='color:{Color.TEXT_STRONG};'>{base_name}</b> {task_label} | "
+                f"<span style='color:{Color.INFO}; font-weight:bold;'>{assignee}</span>:"
             )
         else:
-            label_text = f"Message for <b style='color:#CCCC00;'>{base_name}</b> {task_label}:"
+            label_text = f"Message for <b style='color:{Color.TEXT_STRONG};'>{base_name}</b> {task_label}:"
 
         self.label = QLabel(label_text)
         self.label.setTextFormat(Qt.RichText)  # Permitir formato HTML
@@ -977,10 +993,18 @@ class InputDialog(QDialog):
         else:
             debug_print(f"InputDialog: No se encontraron imágenes para mostrar")
 
-        # Boton OK
+        # Boton OK: el unico violeta, ultimo y a la derecha como en el resto
+        # del pack. Va adentro de un contenedor (ok_row_widget) para poder
+        # alinearlo; _insert_above_ok_button referencia ese contenedor.
         self.ok_button = QPushButton("OK", self)
+        self.ok_button.setStyleSheet(Style.BTN_PRIMARY)
         self.ok_button.clicked.connect(self.accept)
-        self.layout.addWidget(self.ok_button)
+        self.ok_row_widget = QWidget(self)
+        ok_row = QHBoxLayout(self.ok_row_widget)
+        ok_row.setContentsMargins(0, 0, 0, 0)
+        ok_row.addStretch()
+        ok_row.addWidget(self.ok_button)
+        self.layout.addWidget(self.ok_row_widget)
 
         # Conectar Ctrl+Enter al metodo accept
         shortcut = QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Return), self)
@@ -1084,7 +1108,9 @@ class InputDialog(QDialog):
         indices = []
         for reference in (
             getattr(self, "delete_images_checkbox", None),
-            getattr(self, "ok_button", None),
+            # El OK vive adentro de ok_row_widget: indexOf() solo encuentra
+            # hijos directos del layout, asi que se mira el contenedor.
+            getattr(self, "ok_row_widget", None),
         ):
             if reference is None:
                 continue
@@ -1173,7 +1199,9 @@ class InputDialog(QDialog):
                     f"border: 1px solid {DROP_ACCENT_COLOR}; padding: 2px;"
                 )
             else:
-                image_label.setStyleSheet("border: 1px solid #ccc; padding: 2px;")
+                image_label.setStyleSheet(
+                    f"border: 1px solid {Color.BORDER_STRONG}; padding: 2px;"
+                )
 
             # Clic en el thumbnail: abrir con el visor del sistema
             image_label.mousePressEvent = (
@@ -1188,19 +1216,22 @@ class InputDialog(QDialog):
 
             delete_button = QPushButton()
             delete_button.setFixedSize(16, 16)
+            # Accion destructiva chica: los tokens DANGER_* del modulo de
+            # estilo (icono rojo apagado, hover con caja apenas rojiza).
             delete_button.setStyleSheet(
-                """
-                QPushButton {
+                f"""
+                QPushButton {{
                     background-color: transparent;
                     border: none;
-                    color: #ff4444;
+                    color: {Color.DANGER_ICON};
                     font-size: 12px;
                     font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #ffcccc;
+                }}
+                QPushButton:hover {{
+                    background-color: {Color.DANGER_BG_HOVER};
+                    color: {Color.DANGER_ICON_HOVER};
                     border-radius: 2px;
-                }
+                }}
                 """
             )
             delete_button.setText("×")  # simbolo de tachito
@@ -1246,7 +1277,7 @@ class InputDialog(QDialog):
             else:
                 frame_number = self.extract_frame_number_from_filename(image_path)
                 info_label.setText(f"Frame: {frame_number}")
-            info_label.setStyleSheet("color: #9c9c9c; font-size: 11px;")
+            info_label.setStyleSheet(f"color: {Color.TEXT_DIM}; font-size: 11px;")
             info_label.setAlignment(Qt.AlignLeft)
             footer_layout.addWidget(info_label)
             footer_layout.addStretch()  # Empujar contenido a la izquierda
@@ -1287,10 +1318,16 @@ class InputDialog(QDialog):
             # El cartel queda justo abajo del cursor mientras se arrastra: si
             # participara del hit test podria quedarse con el drop.
             overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            # El fondo casi opaco del overlay se deriva del violeta profundo de
+            # la marca (ACCENT_DISABLED) en vez de un rgba propio: si cambia la
+            # paleta, el overlay acompania.
+            _r, _g, _b = (
+                int(Color.ACCENT_DISABLED[i : i + 2], 16) for i in (1, 3, 5)
+            )
             overlay.setStyleSheet(
                 f"""
                 QWidget#DropOverlay {{
-                    background-color: rgba(28, 24, 40, 235);
+                    background-color: rgba({_r}, {_g}, {_b}, 235);
                     border: 2px dashed {DROP_ACCENT_COLOR};
                     border-radius: 8px;
                 }}
@@ -1596,16 +1633,16 @@ class InputDialog(QDialog):
             container_widget: Widget contenedor del thumbnail a remover
         """
         try:
-            # Confirmar borrado
-            reply = QMessageBox.question(
+            # Confirmar borrado. recommended=False: es destructivo y el default
+            # original era No, asi que ningun boton queda empujado.
+            reply = ask_question(
                 self,
                 "Confirmar borrado",
                 f"¿Estás seguro de que quieres borrar esta imagen?\n{os.path.basename(image_path)}",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                recommended=False,
             )
 
-            if reply == QMessageBox.Yes:
+            if reply:
                 # Borrar archivo del disco
                 if os.path.exists(image_path):
                     os.remove(image_path)
@@ -2426,10 +2463,12 @@ class MessageBoxManager:
         app = QApplication.instance()
         if app is None:
             app = QApplication([])
-        msg_box = QMessageBox()
+        # Cartel con el estilo del pack; sigue siendo no modal y vive en la
+        # lista para que no lo recoja el garbage collector.
+        msg_box = styled_message_box(None, "ShotGrid Version Warning", "")
         msg_box.setTextFormat(Qt.RichText)  # Permite el formato HTML
         msg_box.setText(info)
-        msg_box.setWindowTitle("ShotGrid Version Warning")
+        msg_box.setStandardButtons(QMessageBox.Ok)
         msg_box.setWindowModality(Qt.NonModal)
         msg_box.show()
         self.message_boxes.append(msg_box)
@@ -2545,6 +2584,7 @@ class PushVersionDialog(QDialog):
 
         self.setWindowTitle("Verificación de Versión")
         self.setModal(True)
+        self.setStyleSheet(Style.FORM)
 
         layout = QVBoxLayout(self)
 
@@ -2554,7 +2594,9 @@ class PushVersionDialog(QDialog):
 
         # Formatear el nombre base con la versión resaltada
         base_version_highlighted = re.sub(
-            r"(_)(v\d+)", r'\1<span style="color: #ff9900;">\2</span>', base_name
+            r"(_)(v\d+)",
+            r'\1<span style="color: %s;">\2</span>' % Color.WARNING_TEXT,
+            base_name,
         )
 
         # Lista de versiones disponibles
@@ -2562,25 +2604,29 @@ class PushVersionDialog(QDialog):
 
         message_label.setText(
             f"<div style='text-align: center;'>"
-            f"<span style='color: #ff9900;'><b>¡Atención!</b></span><br><br>"
+            f"<span style='color: {Color.WARNING_TEXT};'><b>¡Atención!</b></span><br><br>"
             f"La versión que intentas actualizar no es la más reciente:<br><br>"
             f"<span style='font-weight: bold;'>{base_version_highlighted}</span><br><br>"
-            f"Versión actual en timeline: <span style='color: #ff9900;'>v{current_version:02d}</span><br>"
-            f"Última versión disponible: <span style='color: #00ff00;'>v{highest_version:02d}</span><br>"
-            f"Versiones disponibles: <span style='color: #9c9c9c; font-size: 0.9em;'>{versions_list}</span><br><br>"
+            f"Versión actual en timeline: <span style='color: {Color.WARNING_TEXT};'>v{current_version:02d}</span><br>"
+            f"Última versión disponible: <span style='color: {Color.OK_TEXT};'>v{highest_version:02d}</span><br>"
+            f"Versiones disponibles: <span style='color: {Color.TEXT_DIM}; font-size: 0.9em;'>{versions_list}</span><br><br>"
             f"¿Deseas continuar con el push de la versión actual de todos modos?</div>"
         )
         layout.addWidget(message_label)
 
-        # Botones
+        # Botones. Los dos van en secundario a proposito: la opcion recomendada
+        # es Cancelar, asi que ninguno lleva el violeta de accion.
         button_layout = QHBoxLayout()
 
         self.yes_button = QPushButton("Continuar con versión actual")
         self.no_button = QPushButton("Cancelar")
+        self.yes_button.setStyleSheet(Style.BTN_SECONDARY)
+        self.no_button.setStyleSheet(Style.BTN_SECONDARY)
 
         self.yes_button.clicked.connect(self.accept_continue)
         self.no_button.clicked.connect(self.reject)
 
+        button_layout.addStretch()
         button_layout.addWidget(self.yes_button)
         button_layout.addWidget(self.no_button)
         layout.addLayout(button_layout)
@@ -2608,22 +2654,24 @@ def show_version_dialog(base_name, local_version, flow_version):
     if app is None:
         app = QApplication([])
 
-    msgBox = QMessageBox()
-    msgBox.setWindowTitle("Verificación de Versión")
+    # Cartel a medida con el estilo del pack (dos botones con texto propio)
+    msgBox = styled_message_box(None, "Verificación de Versión", "")
     msgBox.setTextFormat(Qt.RichText)
 
     # Formatear el nombre base con la versión resaltada
     base_version_highlighted = re.sub(
-        r"(_)(v\d+)", r'\1<span style="color: #ff9900;">\2</span>', base_name
+        r"(_)(v\d+)",
+        r'\1<span style="color: %s;">\2</span>' % Color.WARNING_TEXT,
+        base_name,
     )
 
     msgBox.setText(
         f"<div style='text-align: center;'>"
-        f"<span style='color: #ff9900;'><b>¡Atención!</b></span><br><br>"
+        f"<span style='color: {Color.WARNING_TEXT};'><b>¡Atención!</b></span><br><br>"
         f"La versión que intentas actualizar no es la más reciente:<br><br>"
         f"<span style='font-weight: bold;'>{base_version_highlighted}</span><br><br>"
-        f"Versión local: <span style='color: #ff9900;'>v{local_version}</span><br>"
-        f"Última versión en Flow: <span style='color: #00ff00;'>v{flow_version}</span><br><br>"
+        f"Versión local: <span style='color: {Color.WARNING_TEXT};'>v{local_version}</span><br>"
+        f"Última versión en Flow: <span style='color: {Color.OK_TEXT};'>v{flow_version}</span><br><br>"
         f"¿Deseas continuar de todos modos?</div>"
     )
 
@@ -2647,17 +2695,34 @@ def show_flow_version_selection_dialog(base_name, versions):
 
     dialog = QDialog()
     dialog.setWindowTitle("Seleccionar versión de Flow")
+    dialog.setStyleSheet(Style.FORM)
     layout = QVBoxLayout(dialog)
 
     title = QLabel(
         f"Elegí la versión destino para <b>{base_name}</b><br/>"
-        f"<span style='color:#9a9a9a'>Shift+Click: la nota se enviará a esta versión.</span>"
+        f"<span style='color:{Color.TEXT_DIM}'>Shift+Click: la nota se enviará a esta versión.</span>"
     )
     title.setTextFormat(Qt.RichText)
     layout.addWidget(title)
 
     list_widget = QtWidgets.QListWidget(dialog)
     list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+    # Style.FORM no cubre QListWidget: caja y seleccion con los tokens del pack
+    list_widget.setStyleSheet(
+        "QListWidget { background-color: %s; color: %s; border: 1px solid %s;"
+        " border-radius: %dpx; }"
+        " QListWidget::item { padding: 2px 6px; }"
+        " QListWidget::item:selected { background-color: %s; color: %s; }"
+        % (
+            Color.SURFACE,
+            Color.TEXT,
+            Color.BORDER,
+            Metric.RADIUS_SMALL,
+            Color.SURFACE_SELECTED,
+            Color.TEXT_STRONG,
+        )
+        + Style.SCROLLBAR
+    )
     for version in versions:
         version_number = version.get("version_number")
         if version_number is None:
@@ -2690,8 +2755,11 @@ def show_flow_version_selection_dialog(base_name, versions):
     buttons_layout = QHBoxLayout()
     cancel_button = QPushButton("Cancelar", dialog)
     ok_button = QPushButton("OK", dialog)
+    cancel_button.setStyleSheet(Style.BTN_SECONDARY)
+    ok_button.setStyleSheet(Style.BTN_PRIMARY)
     cancel_button.clicked.connect(dialog.reject)
     ok_button.clicked.connect(dialog.accept)
+    buttons_layout.addStretch()
     buttons_layout.addWidget(cancel_button)
     buttons_layout.addWidget(ok_button)
     layout.addLayout(buttons_layout)
@@ -2716,11 +2784,7 @@ def show_push_warning_message(warning_text):
     Avisos de un push que Flow acepto a medias. No es un error -el estado se
     aplico- pero el usuario tiene que enterarse de lo que no se escribio.
     """
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Warning)
-    msg.setWindowTitle("Flow Push - Advertencia")
-    msg.setText(warning_text)
-    msg.exec_()
+    show_warning(None, "Flow Push - Advertencia", warning_text)
 
 
 def show_push_error_message(error_text):
@@ -2748,14 +2812,14 @@ def handle_task_only_confirmation(context, worker):
         + "\n\nNo se puede enviar mensaje ni adjuntar imagenes porque no existe Version.\n"
         "Queres cambiar igualmente el estado de la Task?"
     )
-    response = QMessageBox.question(
+    # recommended=False: el default original era No, ningun boton empujado
+    response = ask_question(
         None,
         "Flow Push - Version no encontrada",
         message,
-        QMessageBox.Yes | QMessageBox.No,
-        QMessageBox.No,
+        recommended=False,
     )
-    if response == QMessageBox.Yes:
+    if response:
         worker.continue_task_only()
     else:
         debug_print("Usuario cancelo Push task-only sin Version en Flow")
@@ -3172,13 +3236,11 @@ def push_from_selected_clips(
         debug_print(f"  [candidato {idx}] {_describe_clip_for_log(clip)}")
 
     if not clips:
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("Push to Flow - Error")
-        msg.setText(
-            "No se pudo obtener ningún clip. Verifique que haya un clip en los tracks de task bajo el playhead o que haya seleccionado clips válidos."
+        show_warning(
+            None,
+            "Push to Flow - Error",
+            "No se pudo obtener ningún clip. Verifique que haya un clip en los tracks de task bajo el playhead o que haya seleccionado clips válidos.",
         )
-        msg.exec_()
         return False
 
     # Patrones válidos de task: nombres de TASK_EXR_TRACKS + alias _cmp_ + aliases de naming
@@ -3229,13 +3291,11 @@ def push_from_selected_clips(
 
     if not valid_clips:
         task_names_str = ", ".join(f"_{n}_" for n in task_name_patterns if n != "cmp")
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("Push to Flow - Error")
-        msg.setText(
-            f"No se encontraron clips válidos de task tracks ({task_names_str})."
+        show_warning(
+            None,
+            "Push to Flow - Error",
+            f"No se encontraron clips válidos de task tracks ({task_names_str}).",
         )
-        msg.exec_()
         return False
 
     debug_print(f"Task resuelta '{resolved_task}': clips finales a procesar: {len(valid_clips)}")
@@ -3333,15 +3393,11 @@ def push_from_selected_clips(
 
     # Confirmar si hay más de 4 clips (igual que en el panel)
     if len(valid_clips) > 4:
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Question)
-        msg.setWindowTitle("Confirm Status Application")
-        msg.setText(
-            f"¿Estás seguro de que quieres aplicar el estado '{button_name}' a {len(valid_clips)} clips?"
-        )
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        result = msg.exec_()
-        if result != QMessageBox.Yes:
+        if not ask_question(
+            None,
+            "Confirm Status Application",
+            f"¿Estás seguro de que quieres aplicar el estado '{button_name}' a {len(valid_clips)} clips?",
+        ):
             debug_print("Usuario canceló la operación (más de 4 clips)")
             return False
 
@@ -3356,9 +3412,10 @@ def push_from_selected_clips(
         if app is None:
             app = QApplication([])
 
-        # Crear un diálogo simple sin imágenes
+        # Crear un diálogo simple sin imágenes, con el estilo del pack
         dialog = QDialog()
         dialog.setWindowTitle("Input Dialog")
+        dialog.setStyleSheet(Style.FORM)
         layout = QVBoxLayout(dialog)
 
         # Label con información de cuántos clips se procesarán
@@ -3372,10 +3429,14 @@ def push_from_selected_clips(
         text_edit.setFixedHeight(120)
         layout.addWidget(text_edit)
 
-        # Botón OK
+        # Botón OK: violeta de accion, ultimo y a la derecha
         ok_button = QPushButton("OK", dialog)
+        ok_button.setStyleSheet(Style.BTN_PRIMARY)
         ok_button.clicked.connect(dialog.accept)
-        layout.addWidget(ok_button)
+        ok_row = QHBoxLayout()
+        ok_row.addStretch()
+        ok_row.addWidget(ok_button)
+        layout.addLayout(ok_row)
 
         # Conectar Ctrl+Enter
         shortcut = QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Return), dialog)

@@ -1,12 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.59 | Lega
+  LGA_NKS_Flow_Pull v3.60 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.60: La ventana de resultados (GUI_Table) migra al modulo de estilo
+         LGA_UI_Style_HieroTools: fondo Style.WINDOW, titulo con tokens
+         (INFO / PATH_SEPARATOR / ENTITY) y marco/header/scrollbars de la
+         tabla con tokens. Los colores de FILA por estado son data y no se
+         tocan; por eso NO se aplica Style.TABLE y se conserva la regla
+         item:selected transparente que deja pintar al ColorMixDelegate.
   v3.59: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v3.58: Soporte de la task CG (contexto client). Los clips del track _cg_ se
@@ -446,6 +452,7 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_task_status_dict,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color as UIColor
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -887,11 +894,13 @@ _FLOWPULL_CONFIG_SUBDIR_NAME = "HieroTools"
 _FLOWPULL_CONFIG_FILE_NAME = "FlowPull.ini"
 _FLOWPULL_SECTION = "FlowPullWindow"
 
-# Colores del titulo (mismos que el header de Import Shot: seq=cyan / shot=magenta).
-# Aca: ProjectName usa el cyan y SeqNumber usa el magenta.
-_TITLE_PROJECT_COLOR = "#6AB5CA"
-_TITLE_SEP_COLOR = "#888888"
-_TITLE_SEQ_COLOR = "#B56AB5"
+# Colores del titulo, ahora tokens del modulo de estilo: el proyecto va en el
+# celeste informativo (INFO), la barra en el gris de separador de paths
+# (PATH_SEPARATOR) y la secuencia en el lavanda de entidad (ENTITY). Antes eran
+# el cyan/magenta del header de Import Shot (#6AB5CA / #888888 / #B56AB5).
+_TITLE_PROJECT_COLOR = UIColor.INFO
+_TITLE_SEP_COLOR = UIColor.PATH_SEPARATOR
+_TITLE_SEQ_COLOR = UIColor.ENTITY
 
 
 def _escape_html(text):
@@ -1168,6 +1177,9 @@ class GUI_Table(QtWidgets.QDialog):
 
     def initUI(self):
         self.setWindowTitle("Read Nodes EXR Info")
+        # Fondo y checkbox del pack (Style.WINDOW arrastra el estilo del
+        # checkbox "Keep this window on top")
+        self.setStyleSheet(Style.WINDOW)
         layout = QVBoxLayout(self)
 
         # Header: titulo a la izquierda y checkbox "Keep this window on top" a la derecha.
@@ -1208,13 +1220,31 @@ class GUI_Table(QtWidgets.QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.cellClicked.connect(self.navigate_to_table_row)
+        # NO se aplica Style.TABLE: los fondos de las celdas son DATA (colores
+        # de estado de Flow) y los pinta el ColorMixDelegate; una regla
+        # item:selected con fondo del tema los pisaria justo al seleccionar.
+        # Se estila solo el marco, la cabecera y las scrollbars con tokens, y
+        # se conserva la seleccion transparente (misma tecnica que el CopyCat
+        # Cleaner del ToolPack).
         self.table.setStyleSheet(
-            """
-            QTableView::item:selected {
-                color: black;
-                background-color: transparent;  // Hacer transparente el fondo de los items seleccionados
+            "QTableWidget { background-color: %(surface)s;"
+            " border: 1px solid %(border)s;"
+            " gridline-color: %(border)s;"
+            " color: %(text)s; }"
+            " QHeaderView::section { background-color: %(header_bg)s;"
+            " color: %(header_fg)s; padding: 4px 8px; border: 0px;"
+            " border-bottom: 1px solid %(border_strong)s; font-weight: bold; }"
+            " QTableView::item:selected { color: black;"
+            " background-color: transparent; }"
+            % {
+                "surface": UIColor.SURFACE,
+                "border": UIColor.BORDER,
+                "border_strong": UIColor.BORDER_STRONG,
+                "text": UIColor.TEXT,
+                "header_bg": UIColor.SURFACE_HEADER,
+                "header_fg": UIColor.TEXT_HEADER,
             }
-        """
+            + Style.SCROLLBAR
         )
         # Asigna el delegado personalizado
         delegate = ColorMixDelegate(self.table, self.row_background_colors)

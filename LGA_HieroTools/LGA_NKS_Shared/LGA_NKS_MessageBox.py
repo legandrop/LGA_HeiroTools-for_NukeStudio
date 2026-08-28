@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_MessageBox v1.00 | Lega
+  LGA_NKS_MessageBox v1.01 | Lega
 
   Carteles estandar de HieroTools: info, warning, error y pregunta,
   estilados con LGA_UI_Style_HieroTools. Reemplazan a los QMessageBox
@@ -31,12 +31,15 @@ ____________________________________________________________________
   Sin icono de sistema: los carteles del pack no usan los iconos del
   host, la jerarquia la dan el titulo de la ventana y el texto.
 
+  v1.01: Los carteles llevan las fuentes del pack (apply_ui_font);
+         sin eso salian con la fuente del host y el peso 600 de las
+         hojas caia en una negrita sintetizada.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, apply_ui_font
 
 
 def styled_message_box(parent=None, title="", text=""):
@@ -50,12 +53,14 @@ def styled_message_box(parent=None, title="", text=""):
     box.setText(text)
     box.setIcon(QtWidgets.QMessageBox.NoIcon)
     box.setStyleSheet(Style.FORM)
+    apply_ui_font(box)
     return box
 
 
 def _show(parent, title, text):
     box = styled_message_box(parent, title, text)
     box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    apply_ui_font(box)  # de nuevo: el boton Ok recien existe ahora
     box.exec_()
 
 
@@ -118,4 +123,5 @@ def ask_question(parent, title, text, yes_text="Yes", no_text="No", recommended=
     no_button.clicked.connect(dialog.reject)
     yes_button.clicked.connect(dialog.accept)
 
+    apply_ui_font(dialog)  # al final: recorre hijos, que recien ahora existen
     return dialog.exec_() == QtWidgets.QDialog.Accepted
