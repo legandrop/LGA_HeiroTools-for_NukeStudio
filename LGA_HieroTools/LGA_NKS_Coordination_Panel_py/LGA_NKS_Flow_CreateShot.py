@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.48 | Lega
+  LGA_NKS_Flow_CreateShot v1.49 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.49: Las dos ventanas (config de shot y estado) llevan la
+         fuente del pack (apply_ui_font); sin eso salian con la
+         fuente del host.
   v1.48: ShotConfigDialog y FlowStatusWindow migran al modulo de estilo
          LGA_UI_Style_HieroTools (Style.FORM / Style.WINDOW, BTN_PRIMARY /
          BTN_SECONDARY, tokens en el HTML). La paleta de estados de Flow del
@@ -108,7 +111,7 @@ from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
 QDialog = QtWidgets.QDialog
@@ -1043,6 +1046,8 @@ class ShotConfigDialog(QDialog):
 
         # Estilo general del dialogo: la hoja de formulario del pack
         self.setStyleSheet(Style.FORM)
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
     def create_task_row(self, task_config, task_separator):
         """
@@ -1676,6 +1681,9 @@ class FlowStatusWindow(QDialog):
         buttons_row.addStretch()
         buttons_row.addWidget(self.close_button)
         layout.addLayout(buttons_row)
+
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
     def update_shot_info(self, shot_name, project_name=None):
         """Actualiza la ventana con el shot que se está procesando"""

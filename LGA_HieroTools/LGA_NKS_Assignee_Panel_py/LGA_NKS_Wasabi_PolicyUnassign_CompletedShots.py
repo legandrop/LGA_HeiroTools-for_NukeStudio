@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.04 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.05 | Lega
 
   Limpia policies de Wasabi para shots ya entregados.
 
+  v1.05: La ventana lleva la fuente del pack (apply_ui_font), al
+         armarla y de nuevo al llenar la tabla; sin eso salia con
+         la fuente del host.
   v1.04: La columna del checkbox pasa a ancho fijo de 34 px: con
          ResizeToContents quedaba mas angosta que el checkbox del pack
          y el cuadrito salia recortado a ambos lados.
@@ -27,7 +30,7 @@ import sqlite3
 import sys
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 
 QApplication = QtWidgets.QApplication
 QDialog = QtWidgets.QDialog
@@ -432,6 +435,9 @@ class CompletedShotsPolicyWindow(QDialog):
         self.clean_button.clicked.connect(self.clean_selected)
         buttons_layout.addWidget(self.clean_button)
 
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
+
     def show_scanning_message(self):
         self.status_label.setText(
             f"<span style='color:{Color.TEXT};'>Escaneando shots ya entregados en pipesync.db y buscando coincidencias en policies de Wasabi...</span>"
@@ -482,6 +488,10 @@ class CompletedShotsPolicyWindow(QDialog):
             self.table.setItem(row, 1, policy_item)
             self.table.setItem(row, 2, shot_item)
             self.table.setItem(row, 3, status_item)
+
+        # Los checkbox de celda se crean recien aca: hay que volver a pasar la
+        # fuente del pack para que no salgan con la del host.
+        apply_ui_font(self)
 
         self.status_label.setText(
             f"<span style='color:{Color.INFO};'>Coincidencias encontradas: {len(matches)}. Seleccioná los items a limpiar y presioná \"Limpiar policies\".</span>"

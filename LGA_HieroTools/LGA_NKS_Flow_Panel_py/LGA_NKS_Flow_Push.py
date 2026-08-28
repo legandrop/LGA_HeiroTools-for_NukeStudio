@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.13 | Lega
+  LGA_NKS_Flow_Push v4.14 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.14: Los dialogos y carteles llevan la fuente del pack
+         (apply_ui_font), tambien al sumar thumbnails arrastrados;
+         sin eso salian con la fuente del host.
   v4.13: "Delete all saved review images from disk" lleva lgaLabeled:
          sin la propiedad la hoja del pack deja el texto pegado al
          cuadrito (spacing 0).
@@ -177,7 +180,7 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import (
     ask_question,
     styled_message_box,
 )
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric, apply_ui_font
 
 # Reasignar clases para compatibilidad con código existente
 QRunnable = QtCore.QRunnable
@@ -1018,6 +1021,11 @@ class InputDialog(QDialog):
         # Cartel de drop, siempre por encima del resto del dialogo
         self._create_drop_overlay()
 
+        # Fuente del pack al final del armado y ANTES del adjustSize: el alto
+        # sale de la metrica de la fuente, y con la del host quedaba calculado
+        # sobre otra.
+        apply_ui_font(self)
+
         # Ajustar el tamaño del diálogo para que se ajuste a su contenido (ahora solo ajusta la altura)
         self.adjustSize()
 
@@ -1467,6 +1475,9 @@ class InputDialog(QDialog):
                     continue
                 self.dropped_images.append(path)
                 added.append(path)
+            # Los thumbnails arrastrados se crean recien aca: hay que volver a
+            # pasar la fuente del pack para que no salgan con la del host.
+            apply_ui_font(self)
             self._refresh_window_size()
             debug_print(
                 f"Media arrastrada agregada: {len(added)} "
@@ -2645,6 +2656,9 @@ class PushVersionDialog(QDialog):
         self.no_button.setAutoDefault(False)
         self.yes_button.setAutoDefault(False)
 
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
+
     def accept_continue(self):
         debug_print("Usuario eligió continuar con versión actual")
         self.result_value = True
@@ -2690,6 +2704,7 @@ def show_version_dialog(base_name, local_version, flow_version):
     msgBox.setDefaultButton(QMessageBox.No)
     msgBox.button(QMessageBox.Yes).setText("Continuar de todos modos")
     msgBox.button(QMessageBox.No).setText("Cancelar")
+    apply_ui_font(msgBox)  # de nuevo: los botones recien existen ahora
 
     response = msgBox.exec_()
     return response == QMessageBox.Yes
@@ -2774,6 +2789,9 @@ def show_flow_version_selection_dialog(base_name, versions):
     buttons_layout.addWidget(cancel_button)
     buttons_layout.addWidget(ok_button)
     layout.addLayout(buttons_layout)
+
+    # Fuente del pack al final del armado: recorre los hijos ya creados.
+    apply_ui_font(dialog)
 
     dialog.resize(760, 380)
     if dialog.exec_() != QDialog.Accepted:

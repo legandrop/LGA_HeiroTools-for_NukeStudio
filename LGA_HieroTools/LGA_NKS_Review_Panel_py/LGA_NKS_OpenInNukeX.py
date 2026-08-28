@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_OpenInNukeX v1.32 | Lega
+  LGA_NKS_OpenInNukeX v1.33 | Lega
 
   Abre el script asociado al clip seleccionado en NukeX
   Verifica si hay una version mas reciente y pregunta si desea abrirla
 
 
+  v1.33 - Los dialogos y carteles llevan la fuente del pack
+          (apply_ui_font); sin eso salian con la fuente del host
   v1.32 - Dialogos y carteles migrados al modulo de estilo del pack
           (LGA_UI_Style_HieroTools + LGA_NKS_MessageBox)
   v1.31 - Si la version pedida no existe, permite seleccionar otra version disponible
@@ -22,7 +24,7 @@ import re
 import subprocess
 import socket
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric, apply_ui_font
 from LGA_NKS_Shared.LGA_NKS_MessageBox import styled_message_box
 
 DEBUG = False
@@ -45,6 +47,7 @@ def show_message(title, message, duration=None):
         )  # Interpretar como texto normal
     msgBox.setText(message)
     msgBox.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    apply_ui_font(msgBox)  # de nuevo: el boton Ok recien existe ahora
     if duration:
         QtCore.QTimer.singleShot(duration, msgBox.close)
     msgBox.exec_()
@@ -109,6 +112,9 @@ class CustomVersionDialog(QtWidgets.QDialog):
 
         # Hacer que el boton "Abrir ultima version" sea el por defecto
         self.no_button.setDefault(True)
+
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
     def accept_current(self):
         debug_print("Usuario eligio 'Abrir version actual'")
@@ -190,6 +196,9 @@ class VersionSelectionDialog(QtWidgets.QDialog):
         layout.addLayout(button_layout)
 
         self.open_button.setDefault(True)
+
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
     def accept_selection(self):
         self.selected_path = self.combo.currentData()
@@ -287,6 +296,8 @@ class TimedMessageBox(QtWidgets.QMessageBox):
         self.timer.start(1000)  # Update every second
 
         self.updateButton()  # Initialize the button text
+        # Fuente del pack con el boton OK ya creado por setStandardButtons.
+        apply_ui_font(self)
 
     def updateButton(self):
         if self.timeLeft > 0:

@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_UpdateThumb v1.03 | Lega
+  LGA_NKS_Flow_UpdateThumb v1.04 | Lega
 
   Reemplaza el thumbnail de un shot existente en Flow (ShotGrid) con un snapshot
   del viewer actual de Hiero. Pensado para el Shift+Click del boton "Thumbnail"
   del Coordination Panel.
 
+  v1.04: La ventana lleva la fuente del pack (apply_ui_font); sin
+         eso salia con la fuente del host.
   v1.03: ThumbReplaceDialog migra al modulo de estilo LGA_UI_Style_HieroTools:
          Style.WINDOW, Replace en BTN_PRIMARY, Cancel en BTN_SECONDARY y
          tokens en el HTML y en los pozos de imagen.
@@ -45,7 +47,7 @@ import hiero.ui
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 
 QApplication = QtWidgets.QApplication
 QDialog = QtWidgets.QDialog
@@ -453,6 +455,8 @@ class ThumbReplaceDialog(QDialog):
 
         # Estilo general: la hoja de ventana del pack
         self.setStyleSheet(Style.WINDOW)
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
     def _build_image_column(self, header_text, is_current):
         col = QVBoxLayout()

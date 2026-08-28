@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskHistoryBand v1.00 | Lega
+  LGA_NKS_TaskHistoryBand v1.01 | Lega
 
   Franja colapsable "Task history" del panel Show Flow Info.
   Port de `FlowNotesPopover::buildAssignmentHistoryBand` (PipeSync).
@@ -12,6 +12,11 @@ ____________________________________________________________________
 
   Usado por:
   - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py
+
+  v1.01: Los chips y los nodos llevan la fuente del pack (apply_ui_font);
+         sin eso salian con la del host. El elidido del nombre se mide
+         despues de aplicarla, no antes.
+  v1.00: Version inicial.
 ____________________________________________________________________
 
 """
@@ -22,6 +27,7 @@ from datetime import datetime
 from typing import Callable, List, Optional
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import apply_ui_font
 from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
     PersonHistory,
     Span,
@@ -112,13 +118,18 @@ class TaskHistoryChip(QWidget):
 
         name_label = QLabel(self)
         name_label.setObjectName("flowTaskHistoryChipName")
-        metrics = QFontMetrics(name_label.font())
-        name_label.setText(metrics.elidedText(name, Qt.ElideRight, self.kMaxNameWidth))
         name_label.setStyleSheet(
             f"color: {color_name}; background: transparent; border: none; "
             f"font-size: 11px; font-weight: 600;"
         )
         layout.addWidget(name_label, 0, Qt.AlignVCenter)
+
+        # La fuente del pack va al final, con los hijos ya creados. El elidido
+        # se mide DESPUES: con la fuente del host el corte del nombre no
+        # coincidia con lo que despues se dibujaba.
+        apply_ui_font(self)
+        metrics = QFontMetrics(name_label.font())
+        name_label.setText(metrics.elidedText(name, Qt.ElideRight, self.kMaxNameWidth))
 
 
 class TaskHistoryHeaderRow(QWidget):
@@ -173,8 +184,6 @@ class TaskHistoryNode(QWidget):
         name_label = QLabel(self)
         name_label.setObjectName("flowTaskHistoryName")
         name_label.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
-        metrics = QFontMetrics(name_label.font())
-        name_label.setText(metrics.elidedText(name, Qt.ElideRight, self.kNodeWidth - 10))
         name_label.setStyleSheet(f"color: {self._color.name()};")
         name_label.setToolTip(name)
         layout.addWidget(name_label)
@@ -197,6 +206,12 @@ class TaskHistoryNode(QWidget):
             effect = QtWidgets.QGraphicsOpacityEffect(name_label)
             effect.setOpacity(0.62)
             name_label.setGraphicsEffect(effect)
+
+        # Igual que en el chip: primero la fuente del pack sobre los hijos ya
+        # creados, y recien despues se mide el elidido del nombre.
+        apply_ui_font(self)
+        metrics = QFontMetrics(name_label.font())
+        name_label.setText(metrics.elidedText(name, Qt.ElideRight, self.kNodeWidth - 10))
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -409,6 +424,10 @@ def build_assignment_history_band(spans: List[Span], accent_color_fn, parent=Non
 
     nodes_layout.addStretch()
     scroll.setWidget(nodes_host)
+    # La fuente del pack sobre la franja entera (header, chips y nodos ya
+    # existen) y antes de medir el alto del grafico: el sizeHint sale de la
+    # metrica de la fuente, y con la del host quedaba calculado sobre otra.
+    apply_ui_font(band)
     content_h = max(nodes_host.sizeHint().height(), TaskHistoryNode.kMinHeight)
     scroll.setFixedHeight(content_h + 14)
     band_layout.addWidget(scroll)

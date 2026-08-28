@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskMismatchDialog v1.04 | Lega
+  LGA_NKS_TaskMismatchDialog v1.05 | Lega
 
   Ventana de advertencia compartida para cuando la task detectada en
   el filename de un clip NO coincide con el nombre del track donde
@@ -14,6 +14,9 @@ ____________________________________________________________________
 
   Convencion de nombres de tracks: docs/Docu_Logica_Nombres_Tracks.md
 
+  v1.05: La ventana lleva la fuente del pack (apply_ui_font); sin eso
+         salia con la del host. Las columnas se remiden despues de
+         aplicarla, para que el ancho no quede calculado con la vieja.
   v1.04: "Keep this window on top" lleva lgaLabeled: sin la propiedad la
          hoja del pack deja el texto pegado al cuadrito (spacing 0).
   v1.03: La tabla usa la hoja del pack. La fila seleccionada iba en gris
@@ -38,7 +41,7 @@ from pathlib import Path
 
 import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore, Qt
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Metric, Style
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Metric, Style, apply_ui_font
 
 _CONFIG_DIR_NAME = "LGA"
 _CONFIG_SUBDIR_NAME = "HieroTools"
@@ -210,6 +213,11 @@ class _TaskMismatchDialog(QtWidgets.QDialog):
         self._mismatches = list(mismatches or [])
         self._keep_on_top = _load_keep_on_top()
         self._build_ui()
+        # La fuente del pack va DESPUES de armar la ventana (recorre los hijos)
+        # y ANTES de medir: el ancho de las columnas y el alto de la ventana se
+        # calculan con la fuente definitiva, no con la del host.
+        apply_ui_font(self)
+        self.table.resizeColumnsToContents()
         self._apply_window_flags(initial=True)
         self._adjust_window_size()
 

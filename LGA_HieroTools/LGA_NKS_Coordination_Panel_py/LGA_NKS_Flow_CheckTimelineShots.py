@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CheckTimelineShots v1.03 | Lega
+  LGA_NKS_Flow_CheckTimelineShots v1.04 | Lega
 
   Chequea si los shots del track comp del timeline existen en Flow.
   Muestra una ventana con la lista de shots existentes y los faltantes.
 
+  v1.04: La ventana lleva la fuente del pack (apply_ui_font); sin
+         eso salia con la fuente del host.
   v1.03: La ventana de resultados migra al modulo de estilo del pack
          (Style.FORM, botones y listas con tokens; el rojo suelto pasa a
          Color.ERROR_TEXT).
@@ -24,7 +26,7 @@ import sys
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric, apply_ui_font
 
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
@@ -218,6 +220,9 @@ class ShotCheckResultsDialog(QDialog):
         close_button.clicked.connect(self.close)
         button_row.addWidget(close_button)
         layout.addLayout(button_row)
+
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
 
 def _collect_shots_from_track(seq, track_name):

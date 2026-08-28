@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign v0.62 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign v0.63 | Lega
 
   Muestra y gestiona shots asignados en políticas IAM de Wasabi
 
+  v0.63: La ventana lleva la fuente del pack (apply_ui_font), al
+         armarla y de nuevo al redibujar las tarjetas de shot; sin
+         eso salian con la fuente del host.
   v0.62: La ventana de shots migra al modulo de estilo LGA_UI_Style_HieroTools:
          Style.WINDOW, tokens en el HTML, filas sobre SURFACE y el boton de
          quitar por fila pasa de violeta a BTN_ICON (el violeta queda reservado
@@ -22,7 +25,7 @@ import hiero.ui
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_wasabi_user
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
@@ -152,6 +155,9 @@ class WasabiShotsWindow(QDialog):
         buttons_row.addWidget(self.close_button)
         layout.addLayout(buttons_row)
 
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
+
         # Diccionario para mantener referencia a los widgets de shots
         self.shot_widgets = {}
         # Lista para mantener la referencia de los shots actualmente mostrados
@@ -252,6 +258,10 @@ class WasabiShotsWindow(QDialog):
 
             self.shots_layout.addWidget(shot_frame, row, col)
             self.shot_widgets[shot_name] = shot_frame
+
+        # Las tarjetas de shot se recrean en cada refresco: hay que volver a
+        # pasar la fuente del pack para que no salgan con la del host.
+        apply_ui_font(self)
 
         # Calcular y ajustar altura de la ventana basado en el número de filas
         rows_needed = (len(shots_list) + columns - 1) // columns

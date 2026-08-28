@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assignee v1.27 | Lega
+  LGA_NKS_Flow_Assignee v1.28 | Lega
 
   Imprime los asignados de una tarea en ShotGrid (Flow) a partir del base_name.
   Se usa desde el panel de assignee de LGA_NKS_Assignee_Panel.py
@@ -9,6 +9,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.28: La ventana lleva la fuente del pack (apply_ui_font), al
+         armarla y de nuevo al listar las tasks; sin eso salia con
+         la fuente del host.
   v1.27: El look sale de LGA_UI_Style_HieroTools. La ventana no tenia
          ningun fondo propio y heredaba el tema de Hiero; los botones
          iban estirados a lo ancho y ahora van en una fila a la
@@ -30,7 +33,7 @@ import sys
 import json
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style, apply_ui_font
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_name
 
 # Reasignar clases para compatibilidad con código existente
@@ -224,6 +227,8 @@ class FlowStatusWindow(QDialog):
         buttons_row.addStretch()
         buttons_row.addWidget(self.close_button)
         layout.addLayout(buttons_row)
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
         self.set_close_enabled(False)
 
     def update_shot_info(self, shot_name, task_name=None):
@@ -316,6 +321,9 @@ class FlowStatusWindow(QDialog):
 
         self.task_widget.setVisible(bool(tasks))
         self.assignees_label.setText("")
+        # Las filas de task se crean recien aca: hay que volver a pasar la
+        # fuente del pack para que no salgan con la del host.
+        apply_ui_font(self)
         self.set_close_enabled(True)
         self._adjust_window_size()
 

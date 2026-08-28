@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode_queue_ui v0.03 | Lega
+  LGA_import_shots_transcode_queue_ui v0.04 | Lega
 
   Ventana no modal para visualizar la cola global de Transcode Plates.
   Muestra jobs activos, pendientes y completados en una tabla unica
   ordenada globalmente, sin modificar la cola ni ejecutar transcodes.
 
+  v0.04: La ventana lleva la fuente del pack (apply_ui_font), al
+         armarla y de nuevo en cada render de la tabla; sin eso
+         salia con la fuente del host.
   v0.03: Migracion al modulo de estilo LGA_UI_Style_HieroTools: la
          ventana usa Style.FORM y las hojas locales (_BTN_SMALL,
          _COMBO_STYLE, _TABLE_STYLE, _PBAR_STYLE) pasan a las del
@@ -39,7 +42,7 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     widget_property,
 )
 from LGA_NKS_Edit_Panel_py import LGA_import_shots_settings as settings_mod
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 
 
 # Nombre de shot alternado por fila: entidad del pipeline y el celeste
@@ -248,6 +251,9 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         btn_row.addWidget(self.keep_chk)
         layout.addLayout(btn_row)
 
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
+
     def _connect_manager(self):
         self.manager.queue_changed.connect(self._render)
         self.manager.sequence_started.connect(self._on_sequence_started)
@@ -433,6 +439,9 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         shot_colors = self._shot_colors(rows)
         for row_i, job in enumerate(rows):
             self._populate_row(row_i, job, shot_colors.get(_job_key(job), SHOTNAME_COLOR))
+        # Las celdas de la tabla se recrean en cada render: hay que volver a
+        # pasar la fuente del pack para que no salgan con la del host.
+        apply_ui_font(self)
         self.clear_btn.setEnabled(bool(self._completed))
 
     def _shot_colors(self, rows):

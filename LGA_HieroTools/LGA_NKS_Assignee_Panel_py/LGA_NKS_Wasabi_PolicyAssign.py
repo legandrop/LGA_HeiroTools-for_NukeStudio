@@ -1,7 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v1.01 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v1.02 | Lega
+
+  v1.02
+  - La ventana lleva la fuente del pack (apply_ui_font). Sin la llamada la
+    ventana se dibujaba con la fuente del host, no con la de las tools.
 
   v1.01
   - La ventana de estado migra al modulo de estilo LGA_UI_Style_HieroTools:
@@ -39,7 +43,7 @@ import hiero.ui
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import find_user_by_wasabi_user
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
@@ -161,6 +165,9 @@ class WasabiStatusWindow(QDialog):
         buttons_row.addStretch()
         buttons_row.addWidget(self.close_button)
         layout.addLayout(buttons_row)
+
+        # Fuente del pack al final del armado: recorre los hijos ya creados.
+        apply_ui_font(self)
 
     def update_paths(self, paths_info):
         """Actualiza la ventana con las rutas reales que se están procesando"""

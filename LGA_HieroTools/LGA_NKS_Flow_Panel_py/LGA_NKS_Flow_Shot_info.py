@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.97 | Lega
+  LGA_NKS_Flow_Shot_info v1.98 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.98: La ventana usa la fuente del pack. Con la franja de Task
+         history ya en Inter y el resto en la del host, salia mezclada.
   v1.97: SHOT_INFO_QSS migra al modulo de estilo LGA_UI_Style_HieroTools:
          fondos WINDOW/SURFACE, textos TEXT/TEXT_STRONG/TEXT_DIM, bordes y
          scrollbars con tokens, y el header morado de version pasa al violeta
@@ -74,6 +76,7 @@ from pathlib import Path
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QShortcut, QApplication
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color as UIColor
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import apply_ui_font
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import load_flow_users
 from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
@@ -1384,6 +1387,11 @@ class GUIWindow(QWidget):
         # Cerrar con ESC
         shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
         shortcut.activated.connect(self.close)
+
+        # La franja de Task history ya venia en Inter y el resto de la
+        # ventana quedaba con la fuente del host: la ventana salia mezclada.
+        # Va al final del armado porque apply_ui_font recorre los hijos.
+        apply_ui_font(self)
 
     def resizeEvent(self, event):
         super(GUIWindow, self).resizeEvent(event)
