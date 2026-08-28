@@ -1,4 +1,17 @@
-# version_up_everywhere.py 
+"""
+____________________________________________________________________
+
+  z_version_everywhere v1.01 | Lega
+
+  Menu "Set Version for all Shots": versiona un Clip/Shot a
+  Min/Max/Next/Prev en todos los shots del proyecto donde se usa.
+
+  v1.01: El cartel de resultados pasa al helper LGA_NKS_MessageBox con
+         el estilo del pack. Primer versionado del header.
+____________________________________________________________________
+"""
+
+# version_up_everywhere.py
 # Adds action to enable a Clip/Shot to be Min/Max/Next/Prev versioned in all shots used in a Project.
 #
 # Usage: 
@@ -8,6 +21,7 @@
 
 import hiero.core
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QAction
+from LGA_NKS_Shared.LGA_NKS_MessageBox import styled_message_box
 
 def whereAmI(self, searchType='TrackItem'):
   """returns a list of TrackItem or Sequnece objects in the Project which contain this Clip. 
@@ -96,8 +110,8 @@ class VersionAllMenu(object):
           updateReportString+='  %s\n    (New Version: %s)\n' % (shot.name(), shot.currentVersion().name())
         updateReportString+='\n'
 
-      infoBox = QtWidgets.QMessageBox(hiero.ui.mainWindow())
-      infoBox.setIcon(QtWidgets.QMessageBox.Information)
+      # Cartel estandar con el estilo del pack (LGA_NKS_MessageBox)
+      infoBox = styled_message_box(hiero.ui.mainWindow())
 
       if len(sequenceShotManifest)<=0:
         infoBox.setText("No Shot Versions were updated")

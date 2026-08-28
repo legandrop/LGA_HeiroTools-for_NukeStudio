@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_GetClip v1.86 | Lega
+  LGA_NKS_GetClip v1.87 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
@@ -44,6 +44,8 @@ ____________________________________________________________________
   5. Intenta obtener el clip del track especificado en la posición del playhead.
   6. Si no encuentra, usa el clip seleccionado como fallback.
 
+  v1.87: El cartel "Shots diferentes" pasa a styled_message_box conservando
+         el RichText; el cyan #6AB5CA (rol informativo) pasa a Color.INFO.
   v1.86: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.85: Agrega TRACK_cg_EXR/_REV y la task CG (contexto client): CG_TASK_NAME,
@@ -546,20 +548,23 @@ def get_clip_to_process(track_name=None, prioritize_multiple_selection=False):
                         import sys
                         sys.path.insert(0, r"C:\Users\leg4-pc\.nuke\Python\Startup")
                         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
-                        QMessageBox = QtWidgets.QMessageBox
+                        from LGA_NKS_Shared.LGA_NKS_MessageBox import styled_message_box
+                        from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color
                         Qt = QtCore.Qt
 
-                        msg_box = QMessageBox()
-                        msg_box.setIcon(QMessageBox.Warning)
-                        msg_box.setWindowTitle("Shots diferentes")
-                        msg_box.setTextFormat(Qt.RichText)
-                        msg_box.setText(
+                        # Cartel del pack; los shots resaltados van en el
+                        # celeste informativo de la paleta (Color.INFO)
+                        texto = (
                             f"El clip seleccionado pertenece al shot<br>"
-                            f"<font color=\"#6AB5CA\">{selected_shot}</font>,<br>"
+                            f"<font color=\"{Color.INFO}\">{selected_shot}</font>,<br>"
                             f"pero el playhead está posicionado sobre el shot<br>"
-                            f"<font color=\"#6AB5CA\">{playhead_shot}</font> (del track '{track_name}')<br><br>"
+                            f"<font color=\"{Color.INFO}\">{playhead_shot}</font> (del track '{track_name}')<br><br>"
                             f"Se usará el clip del track '{track_name}' (playhead)."
                         )
+                        msg_box = styled_message_box(None, "Shots diferentes", texto)
+                        msg_box.setTextFormat(Qt.RichText)
+                        msg_box.setText(texto)
+                        msg_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
                         msg_box.exec_()
                     if prioritize_multiple_selection:
                         return [playhead_clip]  # Devolver como lista

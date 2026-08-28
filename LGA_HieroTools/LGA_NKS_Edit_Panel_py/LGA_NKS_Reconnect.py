@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Reconnect v1.19 | Lega
+  LGA_NKS_Reconnect v1.20 | Lega
 
   Reconecta clips seleccionados a diferentes rutas, manteniendo el color original.
 
+  v1.20: El cartel "Reconnect: nombres cambiados" pasa a styled_message_box
+         del helper LGA_NKS_MessageBox con el estilo del pack.
   v1.19: Fix reconnect de archivos sin versión en Win que en Mac existen con _vXX:
          si el path exacto no existe en Mac, busca en el mismo directorio archivos
          con el mismo stem + _vXX y usa el más alto disponible.
@@ -41,6 +43,7 @@ import datetime
 import time
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui, QtWidgets
+from LGA_NKS_Shared.LGA_NKS_MessageBox import styled_message_box
 
 # Eliminamos la importaci?n del SelfReplace
 # import LGA_NKS_SelfReplaceClip as self_replace
@@ -585,10 +588,11 @@ def main(force_all_clips=False):
                     lines = ["Los siguientes clips fueron reconectados con un archivo de nombre diferente:\n"]
                     for clip_name, original_fname, new_fname in renamed_clips:
                         lines.append(f"  {clip_name}:\n    {original_fname}\n    → {new_fname}\n")
-                    msg_box = QtWidgets.QMessageBox()
-                    msg_box.setWindowTitle("Reconnect: nombres cambiados")
-                    msg_box.setText("".join(lines))
-                    msg_box.setIcon(QtWidgets.QMessageBox.Warning)
+                    # Cartel estandar con el estilo del pack (LGA_NKS_MessageBox)
+                    msg_box = styled_message_box(
+                        None, "Reconnect: nombres cambiados", "".join(lines)
+                    )
+                    msg_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
                     msg_box.exec_()
 
                 debug_print("\n==== SCRIPT DE RECONNECT COMPLETADO ====")

@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_OpenInNukeX v1.31 | Lega
+  LGA_NKS_OpenInNukeX v1.32 | Lega
 
   Abre el script asociado al clip seleccionado en NukeX
   Verifica si hay una version mas reciente y pregunta si desea abrirla
-  
-  
+
+
+  v1.32 - Dialogos y carteles migrados al modulo de estilo del pack
+          (LGA_UI_Style_HieroTools + LGA_NKS_MessageBox)
   v1.31 - Si la version pedida no existe, permite seleccionar otra version disponible
   v1.30 - Obtiene la ruta de NukeX desde la configuracion de LGA_OpenInNukeX
 ____________________________________________________________________
@@ -20,6 +22,8 @@ import re
 import subprocess
 import socket
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric
+from LGA_NKS_Shared.LGA_NKS_MessageBox import styled_message_box
 
 DEBUG = False
 
@@ -30,8 +34,8 @@ def debug_print(*message):
 
 
 def show_message(title, message, duration=None):
-    msgBox = QtWidgets.QMessageBox()
-    msgBox.setWindowTitle(title)
+    # Cartel estandar con el estilo del pack (LGA_NKS_MessageBox)
+    msgBox = styled_message_box(None, title, message)
     # Interpretar el mensaje como HTML si incluye etiquetas, de lo contrario como texto normal
     if "<" in message and ">" in message:
         msgBox.setTextFormat(QtCore.Qt.TextFormat.RichText)  # Interpretar como HTML
@@ -60,28 +64,41 @@ class CustomVersionDialog(QtWidgets.QDialog):
 
         self.setWindowTitle("Verificacion de Version")
         self.setModal(True)
+        # Estilo del pack: hoja de formulario y tokens en vez de hexes sueltos
+        self.setStyleSheet(Style.FORM)
 
         # Layout principal
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(
+            Metric.DIALOG_MARGIN,
+            Metric.DIALOG_MARGIN,
+            Metric.DIALOG_MARGIN,
+            Metric.DIALOG_MARGIN,
+        )
+        layout.setSpacing(Metric.SPACING)
 
         # Mensaje HTML
         message_label = QtWidgets.QLabel()
         message_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         message_label.setText(
             f"<div style='text-align: center;'>"
-            f"<span style='color: #ff9900;'><b>¡Atencion!</b></span><br><br>"
+            f"<span style='color: {Color.WARNING_TEXT};'><b>¡Atencion!</b></span><br><br>"
             f"La version que intentas abrir no es la mas reciente:<br><br>"
-            f"Version actual: <span style='color: #ff9900;'>{current_version}</span><br>"
-            f"Ultima version: <span style='color: #00ff00;'>{latest_version}</span><br><br>"
+            f"Version actual: <span style='color: {Color.WARNING_TEXT};'>{current_version}</span><br>"
+            f"Ultima version: <span style='color: {Color.OK_TEXT};'>{latest_version}</span><br><br>"
             f"¿Deseas abrir la ultima version en su lugar?</div>"
         )
         layout.addWidget(message_label)
 
-        # Botones
+        # Botones: la accion recomendada (ultima version) va ultima, a la
+        # derecha y en violeta; la otra queda como secundaria
         button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
 
         self.yes_button = QtWidgets.QPushButton("Abrir version actual")
         self.no_button = QtWidgets.QPushButton("Abrir ultima version")
+        self.yes_button.setStyleSheet(Style.BTN_SECONDARY)
+        self.no_button.setStyleSheet(Style.BTN_PRIMARY)
 
         self.no_button.clicked.connect(self.accept_current)
         self.yes_button.clicked.connect(self.accept_latest)
@@ -128,35 +145,48 @@ class VersionSelectionDialog(QtWidgets.QDialog):
 
         self.setWindowTitle("Version no encontrada")
         self.setModal(True)
+        # Estilo del pack: hoja de formulario y tokens en vez de hexes sueltos
+        self.setStyleSheet(Style.FORM)
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(
+            Metric.DIALOG_MARGIN,
+            Metric.DIALOG_MARGIN,
+            Metric.DIALOG_MARGIN,
+            Metric.DIALOG_MARGIN,
+        )
+        layout.setSpacing(Metric.SPACING)
 
         # Mensaje HTML
         message_label = QtWidgets.QLabel()
         message_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         message_label.setText(
             f"<div style='text-align: center;'>"
-            f"<span style='color: #ff9900;'><b>Version no encontrada</b></span><br><br>"
-            f"La version <span style='color: #ff9900;'>{requested_label}</span> que intentas abrir no existe.<br><br>"
+            f"<span style='color: {Color.WARNING_TEXT};'><b>Version no encontrada</b></span><br><br>"
+            f"La version <span style='color: {Color.WARNING_TEXT};'>{requested_label}</span> que intentas abrir no existe.<br><br>"
             f"Selecciona una version disponible:</div>"
         )
         layout.addWidget(message_label)
 
         # Combo con las versiones disponibles (ordenadas de mayor a menor)
         self.combo = QtWidgets.QComboBox()
+        self.combo.setStyleSheet(Style.COMBO)
         for version, path in versions:
             label = get_version_label(os.path.basename(path)) or f"v{version}"
             self.combo.addItem(label, path)
         layout.addWidget(self.combo)
 
-        # Botones
+        # Botones: Cancelar secundario y Abrir (accion) ultimo, a la derecha
         button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
         self.open_button = QtWidgets.QPushButton("Abrir")
         self.cancel_button = QtWidgets.QPushButton("Cancelar")
+        self.open_button.setStyleSheet(Style.BTN_PRIMARY)
+        self.cancel_button.setStyleSheet(Style.BTN_SECONDARY)
         self.open_button.clicked.connect(self.accept_selection)
         self.cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(self.open_button)
         button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.open_button)
         layout.addLayout(button_layout)
 
         self.open_button.setDefault(True)
@@ -246,6 +276,10 @@ class TimedMessageBox(QtWidgets.QMessageBox):
         self.setWindowTitle(title)
         self.setText(message)
         self.setStandardButtons(QtWidgets.QMessageBox.Ok)
+        # Estilo del pack: mismo tratamiento que styled_message_box,
+        # conservando el timer del boton OK
+        self.setIcon(QtWidgets.QMessageBox.NoIcon)
+        self.setStyleSheet(Style.FORM)
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.updateButton)
@@ -353,8 +387,8 @@ def open_nuke_script(nk_filepath):
                         (
                             f"<div style='text-align: center;'>"
                             f"<span>Abriendo</span><br>"
-                            f"<span style='font-style: italic; color: #9f9f9f; font-size: 0.9em;'>{os.path.basename(nk_filepath)}</span><br><br>"
-                            f"<span style='color:white;'>Por favor, cambia a la ventana de NukeX...</span>"
+                            f"<span style='font-style: italic; color: {Color.TEXT_DIM}; font-size: 0.9em;'>{os.path.basename(nk_filepath)}</span><br><br>"
+                            f"<span style='color:{Color.TEXT_STRONG};'>Por favor, cambia a la ventana de NukeX...</span>"
                             f"</div>"
                         ),
                         5000,
@@ -377,9 +411,9 @@ def open_nuke_script(nk_filepath):
             show_timed_message(
                 "OpenInNukeX",
                 (
-                    f"<span style='color:white;'><b>Fallo la conexion con NukeX</b></span><br><br>"
+                    f"<span style='color:{Color.TEXT_STRONG};'><b>Fallo la conexion con NukeX</b></span><br><br>"
                     f"Abriendo una nueva instancia de NukeX<br>"
-                    f"<span style='font-style: italic; color: #9f9f9f; font-size: 0.9em;'>{nuke_path}</span>"
+                    f"<span style='font-style: italic; color: {Color.TEXT_DIM}; font-size: 0.9em;'>{nuke_path}</span>"
                 ),
                 5000,
             )

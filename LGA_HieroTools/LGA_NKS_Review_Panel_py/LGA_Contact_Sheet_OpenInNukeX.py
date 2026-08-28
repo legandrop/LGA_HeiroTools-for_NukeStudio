@@ -1,11 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_Contact_Sheet_OpenInNukeX v0.03 | Lega
+  LGA_Contact_Sheet_OpenInNukeX v0.04 | Lega
 
   Copia los clips seleccionados en Hiero/Nuke Studio y le pide a NukeX,
   por el puerto de LGA_OpenInNukeX, que pegue el contenido del clipboard.
 
+  v0.04 - show_message pasa al helper LGA_NKS_MessageBox con el estilo del pack
   v0.03 - Fix copy: key event Ctrl+C al QAbstractScrollArea del timeline
   v0.02 - Logging system + multiple approaches para trigger_hiero_copy
 ____________________________________________________________________
@@ -24,6 +25,7 @@ from logging.handlers import QueueHandler, QueueListener
 import hiero.core
 import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore, QtGui
+from LGA_NKS_Shared.LGA_NKS_MessageBox import styled_message_box
 
 
 HOST = "localhost"
@@ -145,8 +147,8 @@ def _flush_log():
 # ---------------------------------------------------------------------------
 
 def show_message(title, message):
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setWindowTitle(title)
+    # Cartel estandar con el estilo del pack (LGA_NKS_MessageBox)
+    msg_box = styled_message_box(None, title, message)
     msg_box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
     msg_box.setText(message)
     msg_box.setStandardButtons(QtWidgets.QMessageBox.Ok)

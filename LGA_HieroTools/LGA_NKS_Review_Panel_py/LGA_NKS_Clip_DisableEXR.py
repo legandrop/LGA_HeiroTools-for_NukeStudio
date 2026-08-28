@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Clip_DisableEXR v1.31 | Lega
+  LGA_NKS_Clip_DisableEXR v1.32 | Lega
 
   Habilita o deshabilita el clip en el track especificado (por defecto usa TRACK_comp_EXR del módulo LGA_NKS_GetClip).
 
@@ -20,6 +20,8 @@ ____________________________________________________________________
   Modo `enable_rev_fallback=False` (wrappers de otras tasks, ej: roto):
   - Comportamiento original: usa `get_clip_to_process` (playhead con fallback a selección).
 
+  v1.32: El diálogo de renombrado de track pasa a ask_question del helper
+         LGA_NKS_MessageBox (estilo del pack), adaptando el retorno a bool.
   v1.31: Default `enable_rev_fallback=True` para que el botón ON OFF _comp_ herede el nuevo
          flujo sin necesidad de un wrapper específico. El wrapper de roto pasa `False` explícito
          para mantener su comportamiento original.
@@ -65,8 +67,10 @@ else:
 # Qt para el diálogo de renombrado
 try:
     from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
+    from LGA_NKS_Shared.LGA_NKS_MessageBox import ask_question
 except Exception:
     QtWidgets = None
+    ask_question = None
 
 
 # Patrón v00/v000 (mismo criterio que LGA_NKS_ON_Clips_OFF_v00-Clips.py)
@@ -156,22 +160,20 @@ def _ask_rename_track(found_name, canonical_name):
     Diálogo Sí/No preguntando si renombrar `found_name` a `canonical_name`.
     Devuelve True si el usuario acepta, False en cualquier otro caso.
     """
-    if QtWidgets is None:
+    if QtWidgets is None or ask_question is None:
         debug_print("Qt no disponible, no se puede mostrar el diálogo de renombrado.")
         return False
     try:
-        msg = QtWidgets.QMessageBox()
-        msg.setWindowTitle("Track de review encontrado")
-        msg.setIcon(QtWidgets.QMessageBox.Question)
-        msg.setText(
+        # Pregunta estandar del pack: devuelve bool directamente
+        return ask_question(
+            None,
+            "Track de review encontrado",
             f"Se encontró el track <b>{found_name}</b>, que no coincide con el "
             f"nombre canónico <b>{canonical_name}</b>.<br><br>"
-            f"¿Querés renombrarlo a <b>{canonical_name}</b> y continuar con el toggle?"
+            f"¿Querés renombrarlo a <b>{canonical_name}</b> y continuar con el toggle?",
+            yes_text="Yes",
+            no_text="No",
         )
-        msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-        msg.setDefaultButton(QtWidgets.QMessageBox.Yes)
-        result = msg.exec_()
-        return result == QtWidgets.QMessageBox.Yes
     except Exception as e:
         debug_print(f"Error mostrando diálogo de renombrado: {e}")
         return False

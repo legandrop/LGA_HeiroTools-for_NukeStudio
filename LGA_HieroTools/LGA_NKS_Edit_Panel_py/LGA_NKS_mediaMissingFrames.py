@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_mediaMissingFrames v1.51 | Lega
+  LGA_NKS_mediaMissingFrames v1.52 | Lega
 
   Escanea los clips seleccionados en Hiero para secuencias EXR con frames faltantes o corruptos
 
+  v1.52: La ventana de tabla y el QProgressDialog migran al modulo de
+         estilo del pack (Style.WINDOW + Style.TABLE / Style.FORM + PROGRESS)
   v1.51: Actualizada la ruta de openexr a shared
 ____________________________________________________________________
 
@@ -13,6 +15,7 @@ ____________________________________________________________________
 import hiero.core
 import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style
 
 # Qt ya está disponible desde LGA_QtAdapter_HieroTools
 import os
@@ -123,12 +126,17 @@ class ClipMediaInfo(QtWidgets.QWidget):
     def initUI(self):
         try:
             self.setWindowTitle("Informacion de Clips EXR")
+            # Estilo del pack: un QWidget pelado necesita WA_StyledBackground
+            # para pintar el fondo que le da la hoja
+            self.setAttribute(Qt.WA_StyledBackground, True)
+            self.setStyleSheet(Style.WINDOW)
             layout = QtWidgets.QVBoxLayout(self)
 
             self.table = QtWidgets.QTableWidget(0, 7, self)
+            self.table.setStyleSheet(Style.TABLE)
             self.table.setHorizontalHeaderLabels(['Ruta', 'Nombre del Clip', 'IN', 'OUT', 'Frames', 'Frames Faltantes', 'Frames Corruptos'])
             self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-            
+
             layout.addWidget(self.table)
             self.setLayout(layout)
             
@@ -146,6 +154,12 @@ class ClipMediaInfo(QtWidgets.QWidget):
 
                 self.progress = QtWidgets.QProgressDialog("Verificando clips...", "Cancelar", 0, len(selected_items), self)
                 self.progress.setWindowModality(Qt.WindowModal)
+                # Estilo del pack para el dialogo y su barra de progreso; el
+                # boton de cancelar se reemplaza para que no quede con el host
+                self.progress.setStyleSheet(Style.FORM + Style.PROGRESS)
+                cancel_button = QtWidgets.QPushButton("Cancelar")
+                cancel_button.setStyleSheet(Style.BTN_SECONDARY)
+                self.progress.setCancelButton(cancel_button)
 
                 self.worker = WorkerThread(selected_items)
                 self.worker.update_progress.connect(self.update_progress)

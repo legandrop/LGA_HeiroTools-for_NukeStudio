@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CheckTimelineShots v1.02 | Lega
+  LGA_NKS_Flow_CheckTimelineShots v1.03 | Lega
 
   Chequea si los shots del track comp del timeline existen en Flow.
   Muestra una ventana con la lista de shots existentes y los faltantes.
 
+  v1.03: La ventana de resultados migra al modulo de estilo del pack
+         (Style.FORM, botones y listas con tokens; el rojo suelto pasa a
+         Color.ERROR_TEXT).
   v1.02: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.01: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
@@ -21,6 +24,7 @@ import sys
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric
 
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
@@ -137,14 +141,22 @@ class ShotCheckResultsDialog(QDialog):
         self.setMinimumWidth(640)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
+        # Estilo del pack: hoja de formulario y tokens en vez de hexes sueltos
+        self.setStyleSheet(Style.FORM)
 
         layout = QVBoxLayout()
         self.setLayout(layout)
+        layout.setContentsMargins(
+            Metric.WINDOW_MARGIN,
+            Metric.WINDOW_MARGIN,
+            Metric.WINDOW_MARGIN,
+            Metric.WINDOW_MARGIN,
+        )
+        layout.setSpacing(Metric.SPACING)
 
         header = QLabel("Resultados de chequeo de shots en Flow")
-        header_font = QFont()
-        header_font.setPointSize(11)
-        header.setFont(header_font)
+        # Titulo de la ventana: la hoja FORM lo destaca via lgaTitle
+        header.setProperty("lgaTitle", True)
         layout.addWidget(header)
 
         lists_layout = QHBoxLayout()
@@ -160,6 +172,23 @@ class ShotCheckResultsDialog(QDialog):
 
         existing_list = QListWidget()
         missing_list = QListWidget()
+        # No hay token de Style para QListWidget: se compone la hoja con los
+        # tokens de la paleta (mismo tratamiento de superficie que una tabla)
+        list_style = (
+            "QListWidget { background-color: %s; color: %s;"
+            " border: 1px solid %s; border-radius: %dpx; outline: none; }"
+            "QListWidget::item:selected { background-color: %s; color: %s; }"
+            % (
+                Color.SURFACE,
+                Color.TEXT,
+                Color.BORDER,
+                Metric.RADIUS_SMALL,
+                Color.SURFACE_SELECTED,
+                Color.TEXT_STRONG,
+            )
+        ) + Style.SCROLLBAR
+        existing_list.setStyleSheet(list_style)
+        missing_list.setStyleSheet(list_style)
 
         for item in existing:
             existing_list.addItem(item["shot_code"])
@@ -178,12 +207,17 @@ class ShotCheckResultsDialog(QDialog):
                 + ", ".join([item.get("clip_name", "N/A") for item in unresolved])
             )
             unresolved_label.setWordWrap(True)
-            unresolved_label.setStyleSheet("color: #C05050;")
+            unresolved_label.setStyleSheet("color: %s;" % Color.ERROR_TEXT)
             layout.addWidget(unresolved_label)
 
+        # Close es la unica accion de cierre: secundario, abajo a la derecha
+        button_row = QHBoxLayout()
+        button_row.addStretch()
         close_button = QPushButton("Close")
+        close_button.setStyleSheet(Style.BTN_SECONDARY)
         close_button.clicked.connect(self.close)
-        layout.addWidget(close_button)
+        button_row.addWidget(close_button)
+        layout.addLayout(button_row)
 
 
 def _collect_shots_from_track(seq, track_name):
