@@ -1,12 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode_queue_ui v0.02 | Lega
+  LGA_import_shots_transcode_queue_ui v0.03 | Lega
 
   Ventana no modal para visualizar la cola global de Transcode Plates.
   Muestra jobs activos, pendientes y completados en una tabla unica
   ordenada globalmente, sin modificar la cola ni ejecutar transcodes.
 
+  v0.03: Migracion al modulo de estilo LGA_UI_Style_HieroTools: la
+         ventana usa Style.FORM y las hojas locales (_BTN_SMALL,
+         _COMBO_STYLE, _TABLE_STYLE, _PBAR_STYLE) pasan a las del
+         modulo. Los colores de shot alternado pasan a ENTITY/INFO y
+         los de estado DONE/Error a OK/ERROR (mismo valor); el azul de
+         Queued y el hover/pressed del link de shot quedan como hex
+         porque no tienen token del mismo matiz.
   v0.02: Show All Import Windows y el foco por shot dejan de barrer
          QApplication.topLevelWidgets() a pelo y pasan por
          iter_live_widgets(only_top_level=True) + safe_widget_call.
@@ -32,113 +39,31 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     widget_property,
 )
 from LGA_NKS_Edit_Panel_py import LGA_import_shots_settings as settings_mod
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
 
-SHOTNAME_COLOR = "#B56AB5"
-SHOTNAME_COLOR_ALT = "#6AB5CA"
+# Nombre de shot alternado por fila: entidad del pipeline y el celeste
+# informativo, mismos roles que en los headers de Import Shots / CreateV000.
+SHOTNAME_COLOR = Color.ENTITY
+SHOTNAME_COLOR_ALT = Color.INFO
 
-_CLR_BG = "#2B2B2B"
-_CLR_TABLE_BG = "#272727"
-_CLR_TEXT = "#CCCCCC"
-_CLR_DIM = "#a7a7a7"
-_CLR_FRAMES = "#b09040"
+_CLR_TABLE_BG = Color.SURFACE  # fondo de los cell widgets HTML de la tabla
+_CLR_TEXT = Color.TEXT         # texto de contenido en las celdas
+_CLR_DIM = Color.TEXT          # etiquetas de la ventana (era el mismo gris)
+# Ambar de frames/duracion. Es el mismo valor que Color.WARNING; se usa como
+# dato de metadata, no como estado.
+_CLR_FRAMES = Color.WARNING
+# Azul de "Queued": no hay token del mismo matiz (Color.INFO es mucho mas
+# saturado para este texto chico), se deja el hex y se reporta.
 _CLR_PENDING = "#5a9ab5"
-_CLR_DONE = "#6a9960"
-_CLR_ERROR = "#a06060"
+_CLR_DONE = Color.OK       # mismo valor que el hex anterior (#6a9960)
+_CLR_ERROR = Color.ERROR   # mismo valor que el hex anterior (#a06060)
 
-_BTN_SMALL = """
-QPushButton {
-    background-color: #2e2e2e;
-    border: 1px solid #444444;
-    color: #999999;
-    padding: 3px 10px;
-    border-radius: 3px;
-    font-size: 11px;
-}
-QPushButton:hover {
-    background-color: #3a3a3a;
-    color: #cccccc;
-}
-QPushButton:pressed {
-    background-color: #252525;
-}
-"""
-
-_COMBO_STYLE = """
-QComboBox {
-    background-color: #2e2e2e;
-    border: 1px solid #444444;
-    color: #999999;
-    padding: 2px 22px 2px 8px;
-    border-radius: 3px;
-    font-size: 11px;
-    min-height: 19px;
-}
-QComboBox:hover {
-    background-color: #3a3a3a;
-    color: #cccccc;
-}
-QComboBox QAbstractItemView {
-    background-color: #2b2b2b;
-    border: 1px solid #444444;
-    color: #cccccc;
-    selection-background-color: #3a3a3a;
-}
-"""
-
-_TABLE_STYLE = """
-QTableWidget {
-    background-color: #272727;
-    border: 1px solid #333333;
-    color: #cccccc;
-    gridline-color: #333333;
-    selection-background-color: #333344;
-    selection-color: #cccccc;
-}
-QTableWidget::item {
-    padding: 4px 6px;
-    border: none;
-}
-QHeaderView::section {
-    background-color: #303030;
-    color: #999999;
-    border: none;
-    border-bottom: 1px solid #444444;
-    padding: 5px 6px;
-    font-weight: normal;
-}
-QScrollBar:vertical {
-    background: #242424;
-    width: 12px;
-    margin: 0px;
-}
-QScrollBar::handle:vertical {
-    background: #444444;
-    min-height: 24px;
-    border-radius: 5px;
-}
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-"""
-
-_PBAR_STYLE = """
-QProgressBar {
-    background-color: #393959;
-    border: none;
-    border-radius: 5px;
-    text-align: center;
-    color: #cccccc;
-    font-size: 9px;
-    min-height: 16px;
-    max-height: 22px;
-}
-QProgressBar::chunk {
-    background-color: #443a91;
-    border-radius: 5px;
-}
-"""
+# Hojas del modulo de estilo del pack; este archivo ya no define QSS propio.
+_BTN_SMALL = Style.BTN_SMALL
+_COMBO_STYLE = Style.COMBO
+_TABLE_STYLE = Style.TABLE
+_PBAR_STYLE = Style.PROGRESS
 
 _WINDOW = None
 
@@ -259,13 +184,9 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         self.setWindowTitle("Import Shots - Transcode Queue")
         self.setModal(False)
         self.setMinimumSize(720, 360)
-        self.setStyleSheet(
-            "QDialog { background-color:%s; color:%s; }"
-            "QLabel { color:%s; }"
-            "QCheckBox { color:%s; spacing:6px; }"
-            "QCheckBox::indicator { width:13px; height:13px; }"
-            % (_CLR_BG, _CLR_TEXT, _CLR_DIM, _CLR_DIM)
-        )
+        # Hoja completa del pack: fondo de ventana, labels y checkbox salen
+        # de Style.FORM en lugar del QSS local con hexes.
+        self.setStyleSheet(Style.FORM)
         self._apply_window_flags(initial=True)
         self._build_ui()
         self._connect_manager()
@@ -320,6 +241,8 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         btn_row.addStretch(1)
 
         self.keep_chk = QtWidgets.QCheckBox("Keep this window on top")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self.keep_chk.setProperty("lgaLabeled", True)
         self.keep_chk.setChecked(bool(self._keep_on_top))
         self.keep_chk.stateChanged.connect(lambda _state: self._set_keep_on_top(self.keep_chk.isChecked()))
         btn_row.addWidget(self.keep_chk)
@@ -531,6 +454,8 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         shot_btn = QtWidgets.QPushButton(shot)
         shot_btn.setFlat(True)
         shot_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        # Hover/pressed del link: variantes clara y oscura del magenta de
+        # entidad; la paleta no tiene tokens para esos dos matices.
         shot_btn.setStyleSheet(
             "QPushButton { background: transparent; border:0px; padding:0px 6px;"
             " color:%s; text-align:left; }"

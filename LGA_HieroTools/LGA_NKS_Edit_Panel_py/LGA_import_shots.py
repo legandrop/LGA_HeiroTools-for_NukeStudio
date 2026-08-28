@@ -1,13 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.35 | Lega
+  LGA_import_shots v1.36 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.36: Migracion al modulo de estilo LGA_UI_Style_HieroTools: los
+         bloques QSS locales (_DIALOG_STYLE, _TABLE_STYLE, _BTN_*) pasan
+         a las hojas del modulo, la hoja de tabs se arma con tokens de
+         la paleta, y _show_tool_message/_show_shot_exists_confirm usan
+         el helper LGA_NKS_MessageBox. Los colores por tipo/estado de la
+         preview quedan: son data de la tool, no estilo.
   v1.35: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.34: Los tres barridos de ventanas ajenas dejan de usar
@@ -181,7 +187,14 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     safe_widget_call,
     widget_property,
 )
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning, show_error
+from LGA_NKS_Shared.LGA_NKS_MessageBox import (
+    show_info,
+    show_warning,
+    show_error,
+    ask_question,
+    styled_message_box,
+)
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
@@ -1168,106 +1181,48 @@ def _find_insert_frame(seq, shot_name, duration):
 #  Helpers UI
 # ══════════════════════════════════════════════════════════════════
 
-_DIALOG_STYLE = """
-QDialog {
-    background-color: #2B2B2B;
-    border: 1px solid #555555;
-}
-QLabel {
-    color: #a7a7a7;
-}
-"""
+# Hojas del modulo de estilo del pack. Los nombres locales se conservan
+# porque los usan decenas de callsites de este archivo; el contenido ya no
+# define ningun hex propio.
+_DIALOG_STYLE = Style.FORM
+_TABLE_STYLE = Style.TABLE
+_BTN_CANCEL = Style.BTN_SECONDARY
+_BTN_PRIMARY = Style.BTN_PRIMARY
+_BTN_SECONDARY = Style.BTN_SECONDARY
+_BTN_SMALL = Style.BTN_SMALL
 
-_TABLE_STYLE = """
-QTableWidget {
-    background-color: #272727;
-    border: 1px solid #333333;
-    color: #a7a7a7;
-    gridline-color: #333333;
-    outline: none;
-}
-QHeaderView::section {
-    background-color: #2B2B2B;
-    color: #999999;
-    padding: 4px 8px;
-    border: 0px;
-    border-bottom: 1px solid #444444;
-    font-weight: bold;
-}
-QTableWidget::item { padding-left: 6px; padding-right: 6px; }
-QTableWidget::item:selected { background-color: #353535; color: #cccccc; }
-"""
-
-_BTN_CANCEL = """
-QPushButton {
-    background-color: #555555;
-    border: 1px solid #666666;
-    color: #CCCCCC;
-    padding: 7px 18px;
-    border-radius: 3px;
-}
-QPushButton:hover { background-color: #666666; }
-"""
-
-_BTN_PRIMARY = """
-QPushButton {
-    background-color: #443a91;
-    border: none;
-    color: #B2B2B2;
-    padding: 7px 18px;
-    border-radius: 5px;
-    font-weight: bold;
-}
-QPushButton:hover { background-color: #774dcb; color: #ffffff; }
-QPushButton:disabled { background-color: #2a2540; color: #666666; border: none; }
-"""
-
-_BTN_SECONDARY = """
-QPushButton {
-    background-color: #3a3a3a;
-    border: 1px solid #555555;
-    color: #CCCCCC;
-    padding: 7px 18px;
-    border-radius: 3px;
-}
-QPushButton:hover { background-color: #4a4a4a; }
-QPushButton:disabled { background-color: #2a2a2a; color: #666666; border-color: #3a3a3a; }
-"""
-
-_BTN_SMALL = """
-QPushButton {
-    background-color: #2e2e2e;
-    border: 1px solid #444444;
-    color: #999999;
-    padding: 3px 10px;
-    border-radius: 3px;
-    font-size: 11px;
-}
-QPushButton:hover { background-color: #383838; color: #cccccc; }
-QPushButton:disabled { background-color: #272727; color: #555555; }
-"""
-
+# Boton "Open Queue": conserva su identidad teal (los dos hex de arriba son
+# data de la tool, distinguen la cola del boton de accion violeta y no tienen
+# token equivalente en la paleta). La caja copia la del BTN_PRIMARY del pack.
 _BTN_QUEUE_OPEN = """
 QPushButton {{
     background-color: {normal_bg};
     border: none;
-    color: #B2B2B2;
+    color: {text};
     padding: 7px 18px;
     border-radius: 5px;
     font-weight: bold;
 }}
-QPushButton:hover {{ background-color: {hover_bg}; color: #ffffff; }}
-QPushButton:disabled {{ background-color: #2a2540; color: #666666; border: none; }}
-""".format(normal_bg=_QUEUE_BTN_BG_NORMAL, hover_bg=_QUEUE_BTN_BG_HOVER)
+QPushButton:hover {{ background-color: {hover_bg}; color: {text_on}; }}
+QPushButton:disabled {{ background-color: {dis_bg}; color: {dis_text}; border: none; }}
+""".format(
+    normal_bg=_QUEUE_BTN_BG_NORMAL,
+    hover_bg=_QUEUE_BTN_BG_HOVER,
+    text=Color.TEXT,
+    text_on=Color.TEXT_ON_ACCENT,
+    dis_bg=Color.ACCENT_DISABLED,
+    dis_text=Color.TEXT_DIM,
+)
 
+# Sin uso actual. Se conserva por compatibilidad, ya armado con tokens.
 _CHECKBOX_STYLE = """
-QCheckBox {
-    color: #a7a7a7;
+QCheckBox {{
+    color: {text};
     spacing: 8px;
     padding: 0px 4px;
-}
-QCheckBox:hover { color: #cccccc; }
-"""
+}}
+QCheckBox:hover {{ color: {text_strong}; }}
+""".format(text=Color.TEXT, text_strong=Color.TEXT_STRONG)
 
 # ✅✅ Espacio (px) entre el separador horizontal y la fila de botones de acción.
 # Se aplica en todas las páginas (media y convert) para mantener equilibrio visual.
@@ -1275,109 +1230,24 @@ _BTN_ROW_TOP_SPACING = 15
 
 
 def _show_tool_message(parent, title, message):
-    dialog = QtWidgets.QDialog(parent)
-    dialog.setWindowTitle(title)
-    dialog.setModal(True)
-    dialog.setMinimumWidth(440)
-    dialog.setStyleSheet(
-        _DIALOG_STYLE
-        + """
-        QLabel#ToolMessageTitle {
-            color: #CCCCCC;
-            font-size: 15px;
-            font-weight: bold;
-        }
-        QLabel#ToolMessageBody {
-            color: #A7A7A7;
-            font-size: 12px;
-            line-height: 1.35;
-        }
-        """
-    )
-
-    layout = QtWidgets.QVBoxLayout(dialog)
-    layout.setContentsMargins(18, 16, 18, 16)
-    layout.setSpacing(12)
-
-    title_lbl = QtWidgets.QLabel(title)
-    title_lbl.setObjectName("ToolMessageTitle")
-    layout.addWidget(title_lbl)
-
-    body_lbl = QtWidgets.QLabel(message)
-    body_lbl.setObjectName("ToolMessageBody")
-    body_lbl.setWordWrap(True)
-    layout.addWidget(body_lbl)
-
-    btn_row = QtWidgets.QHBoxLayout()
-    btn_row.addStretch()
-    ok_btn = QtWidgets.QPushButton("OK")
-    ok_btn.setMinimumWidth(90)
-    ok_btn.setStyleSheet(_BTN_PRIMARY)
-    ok_btn.clicked.connect(dialog.accept)
-    btn_row.addWidget(ok_btn)
-    layout.addLayout(btn_row)
-
-    return dialog.exec_()
+    # Cartel estandar del pack (LGA_NKS_MessageBox); reemplaza al QDialog a
+    # medida que dibujaba el titulo adentro del cuerpo.
+    box = styled_message_box(parent, title, message)
+    box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    return box.exec_()
 
 
 def _show_shot_exists_confirm(shot_name):
     """Muestra aviso de shot duplicado con opcion de continuar. Retorna True si el usuario elige continuar."""
-    dialog = QtWidgets.QDialog(None)
-    dialog.setWindowTitle("Import Shot")
-    dialog.setModal(True)
-    dialog.setMinimumWidth(440)
-    dialog.setStyleSheet(
-        _DIALOG_STYLE
-        + """
-        QLabel#ToolMessageTitle {
-            color: #CCCCCC;
-            font-size: 15px;
-            font-weight: bold;
-        }
-        QLabel#ToolMessageBody {
-            color: #A7A7A7;
-            font-size: 12px;
-            line-height: 1.35;
-        }
-        """
-    )
-
-    layout = QtWidgets.QVBoxLayout(dialog)
-    layout.setContentsMargins(18, 16, 18, 16)
-    layout.setSpacing(12)
-
-    title_lbl = QtWidgets.QLabel("Import Shot")
-    title_lbl.setObjectName("ToolMessageTitle")
-    layout.addWidget(title_lbl)
-
-    body_lbl = QtWidgets.QLabel(
+    return ask_question(
+        None,
+        "Import Shot",
         "El shot '%s' ya existe en el timeline.\n\n"
-        "Podés continuar de todas formas si querés importarlo como duplicado." % shot_name
+        "Podés continuar de todas formas si querés importarlo como duplicado."
+        % shot_name,
+        yes_text="Continue anyway",
+        no_text="Cancel",
     )
-    body_lbl.setObjectName("ToolMessageBody")
-    body_lbl.setWordWrap(True)
-    layout.addWidget(body_lbl)
-
-    btn_row = QtWidgets.QHBoxLayout()
-    btn_row.addStretch()
-
-    cancel_btn = QtWidgets.QPushButton("Cancel")
-    cancel_btn.setMinimumWidth(90)
-    cancel_btn.setStyleSheet(_BTN_CANCEL)
-    cancel_btn.clicked.connect(dialog.reject)
-    btn_row.addWidget(cancel_btn)
-
-    btn_row.addSpacing(8)
-
-    continue_btn = QtWidgets.QPushButton("Continue anyway")
-    continue_btn.setMinimumWidth(120)
-    continue_btn.setStyleSheet(_BTN_PRIMARY)
-    continue_btn.clicked.connect(dialog.accept)
-    btn_row.addWidget(continue_btn)
-
-    layout.addLayout(btn_row)
-
-    return dialog.exec_() == QtWidgets.QDialog.Accepted
 
 
 def _section_label(text):
@@ -2073,19 +1943,22 @@ class ImportShotDialog(QtWidgets.QDialog):
 
     _TAB_H_PAD_EXTRA = 14  # px adicionales a cada lado de todos los tabs — ajustar a mano
 
+    # Hoja de tabs armada con tokens del modulo de estilo: el pack no tiene
+    # Style.TABS, asi que se construye aca con la paleta (FIELD_BG para el
+    # header, SURFACE_HEADER para el tab activo, ACCENT_HOVER para su texto).
     _TAB_STYLE = (
         """
         QWidget#LGA_ImportShotHeader {
-            background: #232323;
+            background: %(field)s;
         }
         QTabBar {
-            background: #232323;
+            background: %(field)s;
             qproperty-drawBase: 0;
         }
         QTabBar::tab {
-            background: #232323;
-            color: #777777;
-            padding: 16px %dpx;
+            background: %(field)s;
+            color: %(dim)s;
+            padding: 16px %(pad)dpx;
             /* border 1px transparent en todos los tabs para que el geometry
                sea idéntico entre seleccionado y no seleccionado. El
                seleccionado sólo overridea los colores de top/left/right. */
@@ -2095,18 +1968,28 @@ class ImportShotDialog(QtWidgets.QDialog):
             letter-spacing: 1px;
         }
         QTabBar::tab:selected {
-            background: #2b2b2b;
-            color: #774dcb;
-            border-top-color: #4a4a4a;
-            border-left-color: #4a4a4a;
-            border-right-color: #4a4a4a;
+            background: %(header)s;
+            color: %(accent_hover)s;
+            border-top-color: %(border)s;
+            border-left-color: %(border)s;
+            border-right-color: %(border)s;
             /* border-bottom queda transparent → no reaparece la línea
                que el separador "abre" debajo del tab activo. */
         }
-        QTabBar::tab:hover:!selected { color: #AAAAAA; background: #272727; }
-        QTabBar::tab:disabled { color: #444444; background: #232323; }
+        QTabBar::tab:hover:!selected { color: %(text)s; background: %(surface)s; }
+        QTabBar::tab:disabled { color: %(disabled)s; background: %(field)s; }
     """
-        % _TAB_H_PAD_EXTRA
+        % {
+            "field": Color.FIELD_BG,
+            "dim": Color.TEXT_DIM,
+            "pad": _TAB_H_PAD_EXTRA,
+            "header": Color.SURFACE_HEADER,
+            "accent_hover": Color.ACCENT_HOVER,
+            "border": Color.BORDER_STRONG,
+            "text": Color.TEXT,
+            "surface": Color.SURFACE,
+            "disabled": Color.TEXT_DISABLED,
+        }
     )
 
     def __init__(self, shot_root, shot_name, seq, insert_frame, frames_to_push,
@@ -2801,7 +2684,6 @@ class ImportShotDialog(QtWidgets.QDialog):
 
         # Col 1: checkbox — marcado por defecto solo para la versión más reciente
         chk = QtWidgets.QCheckBox()
-        chk.setStyleSheet("color:#a7a7a7; padding:2px;")
         chk.setChecked(is_latest)
         chk.stateChanged.connect(self._update_action_btns)
         chk.clicked.connect(lambda _checked=False, ri=row_i: self._on_media_chk_clicked(ri))
@@ -3666,7 +3548,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._rename_sr1_replace.setPlaceholderText("Replace")
         self._rename_sr1_replace.setStyleSheet(line_style)
         self._rename_sr1_case = QtWidgets.QCheckBox("Case Sensitive")
-        self._rename_sr1_case.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._rename_sr1_case.setProperty("lgaLabeled", True)
         self._rename_sr1_case.setFocusPolicy(QtCore.Qt.NoFocus)
         _sr1_swap = QtWidgets.QPushButton("⇄")
         _sr1_swap.setStyleSheet(_BTN_SMALL)
@@ -3691,7 +3574,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._rename_sr2_replace.setPlaceholderText("Replace")
         self._rename_sr2_replace.setStyleSheet(line_style)
         self._rename_sr2_case = QtWidgets.QCheckBox("Case Sensitive")
-        self._rename_sr2_case.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._rename_sr2_case.setProperty("lgaLabeled", True)
         self._rename_sr2_case.setFocusPolicy(QtCore.Qt.NoFocus)
         _sr2_swap = QtWidgets.QPushButton("⇄")
         _sr2_swap.setStyleSheet(_BTN_SMALL)
@@ -4252,7 +4136,6 @@ class ImportShotDialog(QtWidgets.QDialog):
                 initial_checked = True
 
             chk = QtWidgets.QCheckBox()
-            chk.setStyleSheet("color:#a7a7a7; padding:2px;")
             chk.setChecked(initial_checked)  # antes de conectar la señal
             chk.setEnabled(not blocked)
             chk.stateChanged.connect(lambda _state, ri=i: self._on_rename_chk_changed(ri))
@@ -4617,7 +4500,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         dwaa_option_row.setSpacing(8)
         self._convert_dwaa_chk = QtWidgets.QCheckBox("Convertir a DWAA")
         self._convert_dwaa_chk.setChecked(True)
-        self._convert_dwaa_chk.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._convert_dwaa_chk.setProperty("lgaLabeled", True)
         self._convert_dwaa_chk.stateChanged.connect(self._on_dwaa_chk_changed)
         dwaa_option_row.addWidget(self._convert_dwaa_chk)
         self._convert_dwaa_level_lbl = QtWidgets.QLabel(
@@ -4720,7 +4604,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         keep_ar_row.setSpacing(8)
         self._convert_keep_ar = QtWidgets.QCheckBox("Preserve aspect ratio")
         self._convert_keep_ar.setChecked(True)
-        self._convert_keep_ar.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._convert_keep_ar.setProperty("lgaLabeled", True)
         self._convert_keep_ar.stateChanged.connect(self._on_keep_ar_changed)
         keep_ar_row.addWidget(self._convert_keep_ar)
 
@@ -4750,7 +4635,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         deana_main_row.setSpacing(8)
         self._convert_deana_chk = QtWidgets.QCheckBox("Desanamorfizar (Pixel Aspect Ratio)")
         self._convert_deana_chk.setChecked(False)
-        self._convert_deana_chk.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._convert_deana_chk.setProperty("lgaLabeled", True)
         self._convert_deana_chk.stateChanged.connect(self._on_deana_chk_changed)
         deana_main_row.addWidget(self._convert_deana_chk)
         self._deana_par_widget = QtWidgets.QWidget()
@@ -4778,7 +4664,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         # Dimensiones pares (opción recomendada para evitar incompatibilidades)
         self._convert_even_dims_chk = QtWidgets.QCheckBox("Forzar dimensiones pares (recomendado)")
         self._convert_even_dims_chk.setChecked(True)
-        self._convert_even_dims_chk.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._convert_even_dims_chk.setProperty("lgaLabeled", True)
         self._convert_even_dims_chk.setToolTip(
             "Si el resultado queda con ancho o alto impar, resta 1 px en esa dimensión."
         )
@@ -4827,7 +4714,8 @@ class ImportShotDialog(QtWidgets.QDialog):
         self._delete_originals_chk = QtWidgets.QCheckBox("Borrar /Originals al terminar")
         self._delete_originals_chk.setChecked(False)
         self._delete_originals_chk.setEnabled(not Transcode_TEST_Mode)
-        self._delete_originals_chk.setStyleSheet("color:#a7a7a7; padding:2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self._delete_originals_chk.setProperty("lgaLabeled", True)
         self._delete_originals_chk.setToolTip(
             "Los originales siempre se mueven a _input/Originals/<plate>/ antes del transcode.\n"
             "Activa para borrarlos automáticamente al terminar."
@@ -6474,7 +6362,6 @@ class ImportShotDialog(QtWidgets.QDialog):
 
             # Col 1: checkbox (deshabilitado para MOVs)
             chk = QtWidgets.QCheckBox()
-            chk.setStyleSheet("color:#a7a7a7; padding:2px;")
             if is_mov:
                 chk.setChecked(False)
                 chk.setEnabled(False)
@@ -7006,10 +6893,12 @@ class _BulkShotPanel(ImportShotDialog):
     def __init__(self, entry, seq, parent=None):
         QtWidgets.QDialog.__init__(self, parent)
         self.setWindowFlags(QtCore.Qt.Widget)
-        # _DIALOG_STYLE aplica border a todo QDialog. Este objeto es una pagina
-        # embebida, equivalente al QWidget de _build_import_main(), no una
-        # ventana: anulamos únicamente ese borde heredado.
-        self.setStyleSheet("QDialog { border: 0px; background-color: #2B2B2B; }")
+        # Este objeto es una pagina embebida, equivalente al QWidget de
+        # _build_import_main(), no una ventana: se anula cualquier borde
+        # heredado y se fija el fondo de ventana del pack.
+        self.setStyleSheet(
+            "QDialog { border: 0px; background-color: %s; }" % Color.WINDOW
+        )
         self.shot_root = entry["shot_root"]
         self.shot_name = entry["shot_name"]
         self.seq = seq

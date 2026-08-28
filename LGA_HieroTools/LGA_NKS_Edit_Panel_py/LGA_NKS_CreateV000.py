@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.14 | Lega
+  LGA_NKS_CreateV000 v1.15 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,12 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.15: Migracion al modulo de estilo LGA_UI_Style_HieroTools: la
+         ventana, el shell de tabs y los dos confirms usan Style.FORM y
+         los botones del modulo; la hoja de tabs se arma con tokens.
+         PROJECT_NAME_COLOR/SHOT_NAME_COLOR pasan a INFO/ENTITY y la
+         paleta de paths sale de PATH_PALETTE del modulo. Los colores
+         por task (TASK_COLORS) quedan: son data de la tool.
   v1.14: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.13: _visible_create_v000_dialog() deja de barrer
@@ -136,27 +142,6 @@ TASK_COLORS = {
     "cleanup": "#27c8c3",
     "cg":      "#27c8c3",  # mismo color que cleanup: en client no coexisten
 }
-PROJECT_NAME_COLOR = "#6AB5CA"
-SHOT_NAME_COLOR = "#B56AB5"
-
-# Sistema de colores de path por nivel (igual que LGA_mediaManager / LGA_PipeSync)
-PATH_SHOT_COLOR = "#c56cf0"   # lavanda — segmentos dentro del shot folder
-PATH_SEP_COLOR  = "#bbbbbb"   # gris claro — separadores /
-VALUE_COLOR     = "#e8c97a"   # amarillo dorado — valores numéricos en el output
-PATH_LEVEL_COLORS = {
-    0: "#ffff66",   # Amarillo       disco
-    1: "#28b5b5",   # Verde cian     proyecto
-    2: "#ff9a8a",   # Naranja pastel grupo
-    3: "#0088ff",   # Azul           shot
-    4: "#ffd369",   # Amarillo mostaza
-    5: "#28b5b5",   # Verde cian
-    6: "#ff9a8a",   # Naranja pastel
-    7: "#6bc9ff",   # Celeste
-    8: "#ffd369",
-    9: "#28b5b5",
-    10: "#ff9a8a",
-    11: "#6bc9ff",
-}
 RANGE_SOURCE_PLATE = "plate"
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -176,6 +161,7 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     safe_widget_call,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, PATH_PALETTE
 from LGA_NKS_Flow_NamingUtils import (
     clean_base_name,
     extract_project_name,
@@ -191,6 +177,21 @@ except Exception:
         return False
 
 TASKS = _resolve_active_tasks()
+
+# Colores de header y de paths, ahora tokens del modulo de estilo. Van aca y
+# no junto a TASK_COLORS porque necesitan el import de LGA_UI_Style de arriba.
+PROJECT_NAME_COLOR = Color.INFO    # nombre del proyecto en el header
+SHOT_NAME_COLOR = Color.ENTITY     # nombre del shot en el header
+
+# Sistema de colores de path por nivel (igual que LGA_mediaManager / LGA_PipeSync)
+PATH_SHOT_COLOR = Color.PATH_COMMON     # lavanda — segmentos dentro del shot folder
+PATH_SEP_COLOR = Color.PATH_SEPARATOR   # separadores /
+# Amarillo dorado para valores numericos en el output. Sin token equivalente
+# en la paleta (WARNING_TEXT es otro rol); se deja el hex y se reporta.
+VALUE_COLOR = "#e8c97a"
+# La paleta por nivel es la misma tupla del modulo de estilo, indexada por
+# nivel absoluto del path (el uso historico de esta tool).
+PATH_LEVEL_COLORS = {i: c for i, c in enumerate(PATH_PALETTE)}
 
 
 # Variables globales de logging (valores por defecto)
@@ -315,92 +316,92 @@ except Exception:
 debug_print("Iniciando LGA_NKS_CreateV000.py...")
 
 
-_DIALOG_STYLE = """
-QDialog {
-    background-color: #2B2B2B;
-    border: 1px solid #555555;
-}
-QLabel {
-    color: #CCCCCC;
-}
-QLineEdit, QComboBox, QTableWidget, QTextEdit, QListWidget {
-    background-color: #272727;
-    border: 1px solid #333333;
-    color: #a7a7a7;
-}
-QTableWidget::item:selected {
-    background-color: #cfcfcf;
-    color: #2B2B2B;
-}
-QHeaderView::section {
-    background-color: #2B2B2B;
-    color: #999999;
-    border: 0px;
-    border-bottom: 1px solid #444444;
-    padding: 4px;
-    font-weight: bold;
-}
-"""
+# Hojas del modulo de estilo del pack. Los nombres locales se conservan por
+# los callsites; el contenido ya no define ningun hex propio.
+_DIALOG_STYLE = Style.FORM
+_BTN_PRIMARY = Style.BTN_PRIMARY
+_BTN_SECONDARY = Style.BTN_SECONDARY
 
-_BTN_PRIMARY = """
-QPushButton {
-    background-color: #443a91;
-    color: #b2b2b2;
-    padding: 8px 15px;
-    border-radius: 3px;
-    font-weight: bold;
+# Radio buttons de RESOLUTION. El modulo no trae Style.RADIO y la regla
+# QWidget{background} de Style.FORM deja el indicador nativo ilegible, asi
+# que se dibuja aca con los tokens del checkbox del pack: circulo oscuro,
+# punto violeta al elegir.
+_RADIO_STYLE = """
+QRadioButton { color: %(text)s; padding: 2px; background: transparent; }
+QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+    border-radius: 8px;
+    background-color: %(off)s;
+    border: 1px solid %(border)s;
 }
-QPushButton:hover {
-    background-color: #774dcb;
-    color: #CCCCCC;
+QRadioButton::indicator:unchecked:hover { background-color: %(off_hover)s; }
+QRadioButton::indicator:checked {
+    width: 8px;
+    height: 8px;
+    border: 4px solid %(off)s;
+    background-color: %(accent)s;
 }
-QPushButton:disabled {
-    background-color: #2f2a5e;
-    color: #6a6a6a;
+QRadioButton:disabled { color: %(dim)s; }
+QRadioButton::indicator:disabled {
+    background-color: %(surface)s;
+    border-color: %(border_dis)s;
 }
-"""
-
-_BTN_SECONDARY = """
-QPushButton {
-    background-color: #555555;
-    border: 1px solid #666666;
-    color: #CCCCCC;
-    padding: 8px 15px;
-    border-radius: 3px;
+""" % {
+    "text": Color.TEXT,
+    "off": Color.CHECKBOX_OFF,
+    "off_hover": Color.CHECKBOX_OFF_HOVER,
+    "border": Color.CHECKBOX_BORDER,
+    "accent": Color.ACCENT_HOVER,
+    "dim": Color.TEXT_DIM,
+    "surface": Color.SURFACE,
+    "border_dis": Color.BORDER_STRONG,
 }
-QPushButton:hover { background-color: #666666; }
-"""
 
 _TAB_H_PAD_EXTRA = 14
+# Hoja de tabs armada con tokens del modulo de estilo: el pack no tiene
+# Style.TABS, asi que se construye aca con la paleta (FIELD_BG para el
+# header, SURFACE_HEADER para el tab activo, ACCENT_HOVER para su texto).
+# Mismo bloque que en LGA_import_shots.
 _TAB_STYLE = (
     """
     QWidget#LGA_ImportShotHeader {
-        background: #232323;
+        background: %(field)s;
     }
     QTabBar {
-        background: #232323;
+        background: %(field)s;
         qproperty-drawBase: 0;
     }
     QTabBar::tab {
-        background: #232323;
-        color: #777777;
-        padding: 16px %dpx;
+        background: %(field)s;
+        color: %(dim)s;
+        padding: 16px %(pad)dpx;
         border: 1px solid transparent;
         font-weight: bold;
         font-size: 12px;
         letter-spacing: 1px;
     }
     QTabBar::tab:selected {
-        background: #2b2b2b;
-        color: #774dcb;
-        border-top-color: #4a4a4a;
-        border-left-color: #4a4a4a;
-        border-right-color: #4a4a4a;
+        background: %(header)s;
+        color: %(accent_hover)s;
+        border-top-color: %(border)s;
+        border-left-color: %(border)s;
+        border-right-color: %(border)s;
     }
-    QTabBar::tab:hover:!selected { color: #AAAAAA; background: #272727; }
-    QTabBar::tab:disabled { color: #444444; background: #232323; }
+    QTabBar::tab:hover:!selected { color: %(text)s; background: %(surface)s; }
+    QTabBar::tab:disabled { color: %(disabled)s; background: %(field)s; }
 """
-    % _TAB_H_PAD_EXTRA
+    % {
+        "field": Color.FIELD_BG,
+        "dim": Color.TEXT_DIM,
+        "pad": _TAB_H_PAD_EXTRA,
+        "header": Color.SURFACE_HEADER,
+        "accent_hover": Color.ACCENT_HOVER,
+        "border": Color.BORDER_STRONG,
+        "text": Color.TEXT,
+        "surface": Color.SURFACE,
+        "disabled": Color.TEXT_DISABLED,
+    }
 )
 
 
@@ -612,7 +613,7 @@ def _colorize_path(path, shot_root):
         if i < shot_depth:
             color = PATH_SHOT_COLOR
         else:
-            color = PATH_LEVEL_COLORS.get(i, "#bbbbbb")
+            color = PATH_LEVEL_COLORS.get(i, PATH_SEP_COLOR)
         colored.append('<span style="color: %s;">%s</span>' % (color, part))
 
     sep = '<span style="color: %s;">/</span>' % PATH_SEP_COLOR
@@ -1902,7 +1903,8 @@ class CreateV000Dialog(QtWidgets.QDialog):
         if self._embedded:
             self.setStyleSheet(
                 _DIALOG_STYLE
-                + "\nQDialog { border: 0px; background-color: #2B2B2B; }\n"
+                + "\nQDialog { border: 0px; background-color: %s; }\n"
+                % Color.WINDOW
             )
         else:
             self.setStyleSheet(_DIALOG_STYLE)
@@ -1929,19 +1931,23 @@ class CreateV000Dialog(QtWidgets.QDialog):
         info_label = QtWidgets.QLabel(info_text)
         info_label.setTextFormat(QtCore.Qt.RichText)
         info_label.setStyleSheet(
-            "color: #CCCCCC; padding: 2px 5px 0px 5px; font-size: 14px; font-weight: bold;"
+            "color: %s; padding: 2px 5px 0px 5px; font-size: 14px; font-weight: bold;"
+            % Color.TEXT_STRONG
         )
         header_row.addWidget(info_label, 0, QtCore.Qt.AlignLeft)
         header_row.addStretch()
         title = QtWidgets.QLabel("Create v000")
         title.setStyleSheet(
-            "color: #CCCCCC; padding: 2px 5px 0px 5px; font-size: 14px; font-weight: bold;"
+            "color: %s; padding: 2px 5px 0px 5px; font-size: 14px; font-weight: bold;"
+            % Color.TEXT_STRONG
         )
         header_row.addWidget(title, 0, QtCore.Qt.AlignRight)
         layout.addLayout(header_row)
 
         self.warning_label = QtWidgets.QLabel("")
-        self.warning_label.setStyleSheet("color: #d9a441; padding: 2px 5px;")
+        self.warning_label.setStyleSheet(
+            "color: %s; padding: 2px 5px;" % Color.WARNING_TEXT
+        )
         self.warning_label.setWordWrap(True)
         self.warning_label.setVisible(False)
         layout.addWidget(self.warning_label)
@@ -2002,36 +2008,15 @@ class CreateV000Dialog(QtWidgets.QDialog):
         self.output_text = QtWidgets.QTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setMaximumHeight(128)
-        self.output_text.setStyleSheet(
-            """
-            QTextEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                padding: 5px;
-                border-radius: 3px;
-            }
-            """
-        )
+        # Sin hoja propia: la regla de QTextEdit de Style.FORM (aplicado al
+        # dialogo) ya lo pinta con la superficie del pack.
         layout.addWidget(self.output_text)
 
         buttons = QtWidgets.QHBoxLayout()
         self.preview_in_out_btn = QtWidgets.QPushButton("Preview In/Out")
         self.preview_in_out_btn.clicked.connect(self._preview_in_out)
         self.preview_in_out_btn.setToolTip("Set timeline In/Out to the v000 range")
-        self.preview_in_out_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #3a3a3a;
-                border: 1px solid #555555;
-                color: #CCCCCC;
-                padding: 8px 15px;
-                border-radius: 3px;
-            }
-            QPushButton:hover { background-color: #4a4a4a; }
-            QPushButton:disabled { background-color: #2a2a2a; color: #666666; border: 1px solid #3a3a3a; }
-            """
-        )
+        self.preview_in_out_btn.setStyleSheet(Style.BTN_SECONDARY)
         buttons.addWidget(self.preview_in_out_btn)
         buttons.addStretch()
         self.cancel_btn = QtWidgets.QPushButton("Cancel")
@@ -2050,17 +2035,29 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
     def _section_label(self, text):
         label = QtWidgets.QLabel(text)
-        label.setStyleSheet("color: #CCCCCC; font-weight: bold; padding-top: 5px;")
+        label.setStyleSheet(
+            "color: %s; font-weight: bold; padding-top: 5px;" % Color.TEXT_STRONG
+        )
         return label
 
     def _build_separator(self, orientation="h"):
         sep = QtWidgets.QFrame()
+        # La hoja propia define la geometria completa: Style.FORM trae una
+        # regla de QFrame HLine/VLine con max-height 1px que aplastaria los
+        # separadores verticales si no se pisa aca.
         if orientation == "v":
             sep.setFrameShape(QtWidgets.QFrame.VLine)
+            sep.setStyleSheet(
+                "background-color: %s; border: none; margin: 0px;"
+                " max-width: 1px; max-height: 16777215px;" % Color.BORDER
+            )
         else:
             sep.setFrameShape(QtWidgets.QFrame.HLine)
+            sep.setStyleSheet(
+                "background-color: %s; border: none; margin: 0px;"
+                " max-height: 1px;" % Color.BORDER
+            )
         sep.setFrameShadow(QtWidgets.QFrame.Sunken)
-        sep.setStyleSheet("color: #444444; margin: 0px;")
         return sep
 
     def _on_plate_row_clicked(self, row, col):
@@ -2083,29 +2080,13 @@ class CreateV000Dialog(QtWidgets.QDialog):
         table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         table.cellClicked.connect(self._on_plate_row_clicked)
-        table.setStyleSheet(
-            """
-            QTableWidget {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                gridline-color: #333333;
-            }
-            QHeaderView::section {
-                background-color: #2B2B2B;
-                color: #999999;
-                padding: 4px 8px;
-                border: 0px;
-                border-bottom: 1px solid #444444;
-                font-weight: bold;
-            }
-            QTableWidget::item { padding-left: 10px; padding-right: 10px; }
-            """
-        )
+        # Tabla del pack. Sin delegados propios que pinten fondos: aplica
+        # Style.TABLE directo.
+        table.setStyleSheet(Style.TABLE)
 
         for row, plate in enumerate(self.context["range_sources"]):
             check = QtWidgets.QCheckBox()
-            check.setStyleSheet("color: #a7a7a7; padding: 2px;")
+            # Sin hoja propia: el checkbox del pack sale de Style.FORM.
             check.setChecked(row == 0)
             check.stateChanged.connect(lambda state, changed_check=check: self._on_range_check_changed(changed_check))
             self.plate_checks.append((check, plate))
@@ -2145,7 +2126,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         tw, th = self.context["timeline_resolution"]
         timeline_text = "Timeline    %s x %s" % (tw or "N/A", th or "N/A")
         timeline_btn = QtWidgets.QRadioButton(timeline_text)
-        timeline_btn.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        timeline_btn.setStyleSheet(_RADIO_STYLE)
         timeline_btn.setChecked(True)
         timeline_btn.toggled.connect(self._update_state)
         group.addButton(timeline_btn)
@@ -2164,7 +2145,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
                 height or "N/A",
             )
             btn = QtWidgets.QRadioButton(text)
-            btn.setStyleSheet("color: #a7a7a7; padding: 2px;")
+            btn.setStyleSheet(_RADIO_STYLE)
             btn.setEnabled(bool(width and height))
             btn.toggled.connect(self._update_state)
             group.addButton(btn)
@@ -2184,28 +2165,38 @@ class CreateV000Dialog(QtWidgets.QDialog):
         layout.setSpacing(0)
 
         self.handle_value = self.saved_handle_value
+        # Spinner a medida del handle, armado con tokens de la paleta.
         handle_style = """
             QPushButton {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
+                background-color: %(surface)s;
+                border: 1px solid %(border)s;
+                color: %(text)s;
                 padding: 2px 0px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #333333;
-                color: #cfcfcf;
+                background-color: %(hover)s;
+                color: %(text_strong)s;
             }
             QPushButton:pressed {
-                background-color: #3a3a3a;
-                color: #ffffff;
+                background-color: %(selected)s;
+                color: %(text_strong)s;
             }
             QPushButton:disabled {
-                background-color: #232323;
-                border: 1px solid #303030;
-                color: #555555;
+                background-color: %(field)s;
+                border: 1px solid %(border)s;
+                color: %(disabled)s;
             }
-        """
+        """ % {
+            "surface": Color.SURFACE,
+            "border": Color.BORDER,
+            "text": Color.TEXT,
+            "hover": Color.SURFACE_HOVER,
+            "selected": Color.SURFACE_SELECTED,
+            "text_strong": Color.TEXT_STRONG,
+            "field": Color.FIELD_BG,
+            "disabled": Color.TEXT_DISABLED,
+        }
 
         self.handle_down_btn = QtWidgets.QPushButton("▼")
         self.handle_down_btn.setFixedSize(22, 24)
@@ -2228,19 +2219,27 @@ class CreateV000Dialog(QtWidgets.QDialog):
         self.handle_value_label.setStyleSheet(
             """
             QLineEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
+                background-color: %(surface)s;
+                border: 1px solid %(border)s;
+                color: %(text)s;
                 padding: 2px 0px;
-                selection-background-color: #cfcfcf;
-                selection-color: #2B2B2B;
+                selection-background-color: %(accent)s;
+                selection-color: %(text_strong)s;
             }
             QLineEdit:disabled {
-                background-color: #232323;
-                border: 1px solid #303030;
-                color: #555555;
+                background-color: %(field)s;
+                border: 1px solid %(border)s;
+                color: %(disabled)s;
             }
-            """
+            """ % {
+                "surface": Color.SURFACE,
+                "border": Color.BORDER,
+                "text": Color.TEXT,
+                "accent": Color.ACCENT,
+                "text_strong": Color.TEXT_STRONG,
+                "field": Color.FIELD_BG,
+                "disabled": Color.TEXT_DISABLED,
+            }
         )
 
         self.handle_up_btn = QtWidgets.QPushButton("▲")
@@ -2285,31 +2284,41 @@ class CreateV000Dialog(QtWidgets.QDialog):
             btn.setCheckable(True)
             btn.setMinimumWidth(90)
             task_color = TASK_COLORS.get(task.lower(), "#3B9ACA")
+            # El color por task es DATA (TASK_COLORS); la caja sale de tokens.
             btn.setStyleSheet(
                 """
                 QPushButton {
-                    background-color: #2B2B2B;
-                    border: 1px solid #444444;
+                    background-color: %(raised)s;
+                    border: 1px solid %(border_strong)s;
                     color: %(color)s;
                     padding: 6px 14px;
                     border-radius: 3px;
                     font-weight: bold;
                 }
                 QPushButton:hover:!checked:!disabled {
-                    background-color: #333333;
+                    background-color: %(selected)s;
                 }
                 QPushButton:checked {
-                    background-color: #3a3a3a;
+                    background-color: %(hover)s;
                     color: %(color)s;
                     border: 1px solid %(color)s;
                 }
                 QPushButton:disabled {
-                    background-color: #232323;
-                    color: #555555;
-                    border: 1px solid #333333;
+                    background-color: %(field)s;
+                    color: %(disabled)s;
+                    border: 1px solid %(border)s;
                 }
                 """
-                % {"color": task_color}
+                % {
+                    "color": task_color,
+                    "raised": Color.SURFACE_RAISED,
+                    "border_strong": Color.BORDER_STRONG,
+                    "selected": Color.SURFACE_SELECTED,
+                    "hover": Color.SURFACE_HOVER,
+                    "field": Color.FIELD_BG,
+                    "disabled": Color.TEXT_DISABLED,
+                    "border": Color.BORDER,
+                }
             )
             task_state = (self.context.get("task_state") or {}).get(task, {})
             if task_state.get("blocked"):
@@ -2337,7 +2346,8 @@ class CreateV000Dialog(QtWidgets.QDialog):
         self.create_folders_chk = QtWidgets.QCheckBox(
             "Create folder structure for selected tasks if missing"
         )
-        self.create_folders_chk.setStyleSheet("color: #a7a7a7; padding: 2px;")
+        # Checkbox con texto: el del pack usa spacing 0 salvo esta propiedad.
+        self.create_folders_chk.setProperty("lgaLabeled", True)
         self.create_folders_chk.setChecked(_read_create_folders_setting())
         self.create_folders_chk.stateChanged.connect(
             lambda state: _write_create_folders_setting(bool(state))
@@ -2521,7 +2531,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         preview_blocks = []
         for params in params_list:
             task = params["task"]
-            task_color = TASK_COLORS.get(task.lower(), "#a7a7a7")
+            task_color = TASK_COLORS.get(task.lower(), Color.TEXT)
             format_dict = dict(params)
             format_dict["task_colored"] = '<span style="color: {color}; font-weight: bold;">{task}</span>'.format(
                 color=task_color,
@@ -2531,7 +2541,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
                 params["output_dir"], params["shot_root"]
             )
             file_level = len(params["output_dir"].replace("\\", "/").split("/"))
-            file_color = PATH_LEVEL_COLORS.get(file_level, "#bbbbbb")
+            file_color = PATH_LEVEL_COLORS.get(file_level, PATH_SEP_COLOR)
             format_dict["name_colored"] = '<span style="color: %s;">%s</span>' % (
                 file_color, params["output_name_pattern"]
             )
@@ -2641,20 +2651,13 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
         Devuelve True si el usuario confirma, False si cancela.
         """
-        task_color = TASK_COLORS.get(task.lower(), "#a7a7a7")
+        task_color = TASK_COLORS.get(task.lower(), Color.TEXT)
         parent = self
 
         dialog = QtWidgets.QDialog(parent)
         dialog.setWindowTitle("Create v000")
         dialog.setModal(True)
-        dialog.setStyleSheet(
-            """
-            QDialog {
-                background-color: #2B2B2B;
-                border: 1px solid #555555;
-            }
-            """
-        )
+        dialog.setStyleSheet(Style.FORM)
 
         layout = QtWidgets.QVBoxLayout(dialog)
         layout.setSpacing(10)
@@ -2670,7 +2673,9 @@ class CreateV000Dialog(QtWidgets.QDialog):
         )
         header_row.addWidget(shot_badge)
         separator_badge = QtWidgets.QLabel("|")
-        separator_badge.setStyleSheet("color: #777777; font-size: 13px;")
+        separator_badge.setStyleSheet(
+            "color: %s; font-size: 13px;" % Color.TEXT_DIM
+        )
         header_row.addWidget(separator_badge)
         badge = QtWidgets.QLabel(task.upper())
         badge.setStyleSheet(
@@ -2693,13 +2698,16 @@ class CreateV000Dialog(QtWidgets.QDialog):
         sep = QtWidgets.QFrame()
         sep.setFrameShape(QtWidgets.QFrame.HLine)
         sep.setFrameShadow(QtWidgets.QFrame.Sunken)
-        sep.setStyleSheet("color: #444444; margin: 0px;")
+        sep.setStyleSheet(
+            "background-color: %s; border: none; margin: 0px; max-height: 1px;"
+            % Color.BORDER
+        )
         layout.addWidget(sep)
 
         # Mensaje
         msg_label = QtWidgets.QLabel(message)
         msg_label.setWordWrap(True)
-        msg_label.setStyleSheet("color: #CCCCCC; padding: 4px 0px;")
+        msg_label.setStyleSheet("color: %s; padding: 4px 0px;" % Color.TEXT)
         layout.addWidget(msg_label)
 
         # Botones
@@ -2707,33 +2715,11 @@ class CreateV000Dialog(QtWidgets.QDialog):
         btn_row.addStretch()
 
         cancel_btn = QtWidgets.QPushButton(cancel_label)
-        cancel_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #555555;
-                border: 1px solid #666666;
-                color: #CCCCCC;
-                padding: 6px 14px;
-                border-radius: 3px;
-            }
-            QPushButton:hover { background-color: #666666; }
-            """
-        )
+        cancel_btn.setStyleSheet(Style.BTN_SECONDARY)
         cancel_btn.clicked.connect(dialog.reject)
 
         confirm_btn = QtWidgets.QPushButton(confirm_label)
-        confirm_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #443a91;
-                color: #b2b2b2;
-                padding: 6px 14px;
-                border-radius: 3px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #774dcb; color: #CCCCCC; }
-            """
-        )
+        confirm_btn.setStyleSheet(Style.BTN_PRIMARY)
         confirm_btn.clicked.connect(dialog.accept)
 
         btn_row.addWidget(cancel_btn)
@@ -2748,20 +2734,13 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
         Devuelve uno de: 'exrs_only', 'bin_only', 'replace_timeline', None (cancelar).
         """
-        task_color = TASK_COLORS.get(task.lower(), "#a7a7a7")
+        task_color = TASK_COLORS.get(task.lower(), Color.TEXT)
 
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle("Create v000")
         dialog.setModal(True)
         dialog.setMinimumWidth(380)
-        dialog.setStyleSheet(
-            """
-            QDialog {
-                background-color: #2B2B2B;
-                border: 1px solid #555555;
-            }
-            """
-        )
+        dialog.setStyleSheet(Style.FORM)
 
         layout = QtWidgets.QVBoxLayout(dialog)
         layout.setSpacing(10)
@@ -2779,14 +2758,17 @@ class CreateV000Dialog(QtWidgets.QDialog):
             sep = QtWidgets.QFrame()
             sep.setFrameShape(QtWidgets.QFrame.HLine)
             sep.setFrameShadow(QtWidgets.QFrame.Sunken)
-            sep.setStyleSheet("color: #444444; margin: 0px;")
+            sep.setStyleSheet(
+                "background-color: %s; border: none; margin: 0px;"
+                " max-height: 1px;" % Color.BORDER
+            )
             return sep
 
         layout.addWidget(make_sep())
 
         # Mensaje principal
         msg = QtWidgets.QLabel("actualmente en el track %s del timeline,\nhay clips ocupando el espacio donde debería ir esta v000:" % task.capitalize())
-        msg.setStyleSheet("color: #CCCCCC; padding: 4px 0px;")
+        msg.setStyleSheet("color: %s; padding: 4px 0px;" % Color.TEXT)
         layout.addWidget(msg)
 
         # Lista de clips solapados
@@ -2805,33 +2787,16 @@ class CreateV000Dialog(QtWidgets.QDialog):
         summary_box.setFocusPolicy(QtCore.Qt.NoFocus)
         summary_box.setFont(QtGui.QFont("Monospace", 8))
         summary_box.setMaximumHeight(20 + 18 * len(overlaps))
-        summary_box.setStyleSheet(
-            """
-            QPlainTextEdit {
-                background-color: #272727;
-                border: 1px solid #333333;
-                color: #a7a7a7;
-                padding: 4px 6px;
-                border-radius: 3px;
-            }
-            """
-        )
+        # Sin hoja propia: la regla de QPlainTextEdit de Style.FORM (aplicado
+        # al dialogo) ya lo pinta con la superficie del pack.
         layout.addWidget(summary_box)
 
         layout.addWidget(make_sep())
 
-        # Estilos de botones de acción
-        action_style = """
-            QPushButton {
-                background-color: #443a91;
-                color: #b2b2b2;
-                padding: 7px 14px;
-                border-radius: 3px;
-                font-weight: bold;
-                text-align: left;
-            }
-            QPushButton:hover { background-color: #774dcb; color: #CCCCCC; }
-        """
+        # Estilos de botones de acción. Son tres acciones alternativas y las
+        # tres van en el primario del pack, como antes; solo se agrega el
+        # text-align izquierdo que tenian.
+        action_style = Style.BTN_PRIMARY + "\nQPushButton { text-align: left; }\n"
 
         result = {"choice": None}
 
@@ -2852,18 +2817,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         cancel_row = QtWidgets.QHBoxLayout()
         cancel_row.addStretch()
         cancel_btn = QtWidgets.QPushButton("Cancelar")
-        cancel_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #555555;
-                border: 1px solid #666666;
-                color: #CCCCCC;
-                padding: 6px 14px;
-                border-radius: 3px;
-            }
-            QPushButton:hover { background-color: #666666; }
-            """
-        )
+        cancel_btn.setStyleSheet(Style.BTN_SECONDARY)
         cancel_btn.clicked.connect(dialog.reject)
         cancel_row.addWidget(cancel_btn)
         layout.addLayout(cancel_row)
