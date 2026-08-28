@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.09 | Lega
+  LGA_NKS_Flow_Push v4.10 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.10: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v4.09: Los estados que piden nota salen de NOTE_CAPABLE_CODES
          (LGA_NKS_Flow_Status_Config) via is_note_capable(). Estaban
          hardcodeados en cuatro listas identicas dentro de este archivo, dos
@@ -158,6 +160,7 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_task_status_dict,
     is_note_capable,
 )
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning, show_error
 
 # Reasignar clases para compatibilidad con código existente
 QRunnable = QtCore.QRunnable
@@ -1459,7 +1462,7 @@ class InputDialog(QDialog):
         QtCore.QTimer.singleShot(
             0,
             lambda: (
-                QMessageBox.information(self, "Media no agregada", message)
+                show_info(self, "Media no agregada", message)
                 if is_widget_alive(self)
                 else None
             ),
@@ -1631,7 +1634,7 @@ class InputDialog(QDialog):
             import traceback
 
             debug_print(traceback.format_exc())
-            QMessageBox.warning(
+            show_warning(
                 self, "Error", f"No se pudo borrar la imagen:\n{str(e)}"
             )
 
@@ -2722,7 +2725,7 @@ def show_push_warning_message(warning_text):
 
 def show_push_error_message(error_text):
     debug_print(f"Mostrando error de Push al usuario: {error_text}")
-    QMessageBox.critical(
+    show_error(
         None,
         "Flow Push - Error",
         f"No se pudo completar el Push:\n\n{error_text}",
@@ -2802,7 +2805,7 @@ def Push_Task_Status(
     is_valid, error_text, _state = validate_push_preflight()
     if not is_valid:
         debug_print(f"Preflight Push falló:\n{error_text}")
-        QMessageBox.warning(None, "PipeSync no configurado", error_text)
+        show_warning(None, "PipeSync no configurado", error_text)
         return False
 
     # Verificar que tengamos las credenciales disponibles
@@ -3086,7 +3089,7 @@ def push_from_selected_clips(
     is_valid, error_text, _state = validate_push_preflight()
     if not is_valid:
         debug_print(f"Preflight Push (entrypoint) falló:\n{error_text}")
-        QMessageBox.warning(None, "PipeSync no configurado", error_text)
+        show_warning(None, "PipeSync no configurado", error_text)
         return False
 
     # Imports locales (lazy) para evitar problemas de inicialización Qt al cargar el módulo.
@@ -3251,7 +3254,7 @@ def push_from_selected_clips(
                     per_clip_callback(current_clip, current_base_name, current_exr_name)
                 except Exception as e:
                     debug_print(f"Error ejecutando per_clip_callback: {e}")
-                    QMessageBox.critical(
+                    show_error(
                         None,
                         "Flow Push - Error post-push",
                         f"El Push termino, pero fallo la actualizacion local:\n\n{e}",
@@ -3265,7 +3268,7 @@ def push_from_selected_clips(
                 f"Shift+Click ignorado para estado '{button_name}' (no requiere comentario); se usa flujo normal."
             )
         elif len(valid_clips) != 1:
-            QMessageBox.warning(
+            show_warning(
                 None,
                 "Shift+Click - Selección inválida",
                 "Shift+Click para elegir versión de Flow solo admite 1 clip seleccionado.",
@@ -3289,7 +3292,7 @@ def push_from_selected_clips(
             def _on_versions_loaded(versions):
                 _cleanup_loader()
                 if not versions:
-                    QMessageBox.warning(
+                    show_warning(
                         None,
                         "Shift+Click - Sin versiones",
                         "No se encontraron versiones en Flow para esta task.",
@@ -3314,7 +3317,7 @@ def push_from_selected_clips(
 
             def _on_versions_error(error_text):
                 _cleanup_loader()
-                QMessageBox.warning(
+                show_warning(
                     None,
                     "Shift+Click - Error",
                     f"No se pudieron listar versiones de Flow:\n{error_text}",

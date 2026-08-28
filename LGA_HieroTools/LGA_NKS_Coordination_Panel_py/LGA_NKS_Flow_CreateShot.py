@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.46 | Lega
+  LGA_NKS_Flow_CreateShot v1.47 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
+
+  v1.47: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
 
   v1.46: `apr` pasa a "Delivery Apr" y la cola queda pubsh -> check -> apr. En
          el dropdown de shot sale `pbshed` y entra `check`, que es el que usa
@@ -99,6 +102,7 @@ import time
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
 QDialog = QtWidgets.QDialog
@@ -2623,7 +2627,7 @@ def launch_modify_shot_script():
     debug_print(f"Intentando lanzar Modify Shot desde: {script_path}")
     if not script_path.exists():
         debug_print("No se encontró el script Modify Shot", level="warning")
-        QMessageBox.warning(
+        show_warning(
             None,
             "Flow | Modify Shot",
             f"No se encontró el script Modify Shot en: {script_path}",
@@ -2643,7 +2647,7 @@ def launch_modify_shot_script():
         module.main()
     except Exception as e:
         debug_print(f"Error lanzando Modify Shot: {e}", level="error")
-        QMessageBox.warning(None, "Flow | Modify Shot", str(e))
+        show_warning(None, "Flow | Modify Shot", str(e))
 
 
 def create_shots_from_selected_clips():
@@ -2665,7 +2669,7 @@ def create_shots_from_selected_clips():
 
     if not clips_info:
         debug_print("No se encontraron clips seleccionados para crear shots", level="warning")
-        QMessageBox.warning(
+        show_warning(
             None, "Error", "No se encontraron clips seleccionados en Hiero."
         )
         return
@@ -2676,7 +2680,7 @@ def create_shots_from_selected_clips():
     sequence_name = get_active_sequence_name(first_file_path)
     if not sequence_name:
         debug_print("No se pudo obtener el nombre de la secuencia activa", level="warning")
-        QMessageBox.warning(
+        show_warning(
             None,
             "Error",
             "No se pudo obtener el nombre de la secuencia activa en Hiero.",
@@ -2717,7 +2721,7 @@ def handle_shot_existence_error(message):
     if _status_window:
         _status_window.show_error(message)
     else:
-        QMessageBox.warning(None, "Flow | Create Shot", message)
+        show_warning(None, "Flow | Create Shot", message)
 
 
 def handle_shot_existence_result(existing_shots, clips_info, sequence_name):
@@ -2746,7 +2750,7 @@ def handle_shot_existence_result(existing_shots, clips_info, sequence_name):
             if _status_window:
                 _status_window.show_error(message)
             else:
-                QMessageBox.warning(
+                show_warning(
                     None,
                     "Shots ya existentes",
                     "Ya existen en Flow:\n" + "\n".join(sorted(shot_names)),

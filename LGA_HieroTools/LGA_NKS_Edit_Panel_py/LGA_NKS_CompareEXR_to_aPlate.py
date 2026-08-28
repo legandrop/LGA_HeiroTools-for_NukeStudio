@@ -1,11 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CompareEXR_to_aPlate v1.14 | Lega
+  LGA_NKS_CompareEXR_to_aPlate v1.15 | Lega
 
   Compara los rangos de frames de los clips del track especificado (por defecto _comp_) con
   los clips correspondientes del track aPlate para verificar coincidencias.
 
+  v1.15: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
   v1.14: Actualizado para ser compatible con ambos sistemas de nomenclatura:
          - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
          - PROYECTO_SEQ_SHOT (3 bloques simplificado)
@@ -70,6 +71,18 @@ else:
     extract_shot_code = None
     clean_base_name = None
 
+# Importar carteles estilados del pack (fallback a los estaticos de Qt)
+try:
+    from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
+except ImportError:
+    debug_print("ERROR: No se encontró el módulo LGA_NKS_MessageBox")
+
+    def show_info(parent, title, text):
+        QtWidgets.QMessageBox.information(parent, title, text)
+
+    def show_warning(parent, title, text):
+        QtWidgets.QMessageBox.warning(parent, title, text)
+
 
 def tc_str_to_frames(tc_str, fps):
     """Convierte string de timecode a frames totales"""
@@ -124,7 +137,7 @@ class FrameRangeComparisonGUI(QtWidgets.QWidget):
                 track_name = (
                     self.hiero_ops.track_name if self.hiero_ops.track_name else "_comp_"
                 )
-                QtWidgets.QMessageBox.information(
+                show_info(
                     self,
                     "No Changes",
                     f"No se encontraron clips '{track_name}' con correspondientes clips aPlate.",
@@ -459,13 +472,13 @@ class HieroOperations:
         """MODIFICADO - Procesar clips usando módulo centralizado con prioridad: selecciones múltiples > force_all_clips > playhead"""
         seq = hiero.ui.activeSequence()
         if not seq:
-            QtWidgets.QMessageBox.warning(None, "Error", "No hay secuencia activa en Hiero.")
+            show_warning(None, "Error", "No hay secuencia activa en Hiero.")
             return False
 
         # Obtener el proyecto para el manejo de UNDO
         project = seq.project()
         if not project:
-            QtWidgets.QMessageBox.warning(None, "Error", "No se encontró el proyecto.")
+            show_warning(None, "Error", "No se encontró el proyecto.")
             return False
 
         # Encontrar track aPlate (el track principal se obtiene del módulo centralizado)
@@ -476,7 +489,7 @@ class HieroOperations:
                 break
 
         if not aplate_track:
-            QtWidgets.QMessageBox.warning(None, "Error", "No se encontró el track aPlate.")
+            show_warning(None, "Error", "No se encontró el track aPlate.")
             return False
 
         # Obtener el track principal usando el módulo centralizado para obtener su nombre
@@ -493,7 +506,7 @@ class HieroOperations:
                 break
 
         if not exr_track:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 None,
                 "Error",
                 f"No se encontró el track '{track_name}' (configurado en TRACK_comp_EXR).",
@@ -519,7 +532,7 @@ class HieroOperations:
             )
 
             if not exr_clips:
-                QtWidgets.QMessageBox.warning(
+                show_warning(
                     None,
                     "Error",
                     f"No se encontró ningún clip en el track '{track_name}' en la posición del playhead o seleccionado.",

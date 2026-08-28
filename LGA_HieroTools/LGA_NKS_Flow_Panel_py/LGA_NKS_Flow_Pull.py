@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.58 | Lega
+  LGA_NKS_Flow_Pull v3.59 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.59: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v3.58: Soporte de la task CG (contexto client). Los clips del track _cg_ se
          procesan aunque el filename no tenga token de task conocido (ahi el
          filename lleva la disciplina); los demas tracks conservan el filtro
@@ -347,7 +349,7 @@ def _ensure_pull_result_sequence_active(nav_data):
 def navigate_to_pull_result(nav_data):
     """Abre/enfoca el timeline y ubica el playhead en el clip de la fila."""
     if not _ensure_pull_result_sequence_active(nav_data):
-        QMessageBox.warning(
+        show_warning(
             None,
             "Timeline switch failed",
             "No se pudo cambiar al proyecto/secuencia correspondiente.",
@@ -356,7 +358,7 @@ def navigate_to_pull_result(nav_data):
 
     target_clip, seq = _find_clip_for_navigation(nav_data)
     if not target_clip or not seq:
-        QMessageBox.warning(
+        show_warning(
             None,
             "Clip not found",
             "No se encontro el clip correspondiente en el timeline.",
@@ -429,7 +431,7 @@ def navigate_to_pull_result(nav_data):
         return True
     except Exception as e:
         debug_print(f"Error navegando al resultado del Pull: {e}")
-        QMessageBox.warning(None, "Navigation error", f"No se pudo navegar al clip:\n{e}")
+        show_warning(None, "Navigation error", f"No se pudo navegar al clip:\n{e}")
         return False
 from LGA_NKS_Shared.LGA_NKS_TaskMismatchDialog import (
     collect_task_mismatches,
@@ -443,6 +445,7 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_status_info,
     get_task_status_dict,
 )
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -995,7 +998,7 @@ class GUI_Table(QtWidgets.QDialog):
                     )
 
             def show_shots_not_found_warning():
-                QMessageBox.warning(
+                show_warning(
                     self,
                     "Shots no encontrados en PipeSync",
                     (
@@ -1008,7 +1011,7 @@ class GUI_Table(QtWidgets.QDialog):
                 )
 
             def show_no_changes_info():
-                QMessageBox.information(
+                show_info(
                     self,
                     "No Changes",
                     "No changes were detected in the selected shots.",
@@ -1034,7 +1037,7 @@ class GUI_Table(QtWidgets.QDialog):
                     f"  •  {shot_code}  —  {stream}   ({code})"
                     for shot_code, stream, code in missing_cg
                 )
-                QMessageBox.warning(
+                show_warning(
                     self,
                     "CG tasks sin clip en el timeline",
                     (
@@ -2476,13 +2479,13 @@ def FPT_Hiero(force_all_clips=False):
     is_valid, error_text, _state = validate_pull_preflight()
     if not is_valid:
         debug_print(f"Preflight Pull falló:\n{error_text}")
-        QMessageBox.warning(None, "PipeSync no configurado", error_text)
+        show_warning(None, "PipeSync no configurado", error_text)
         return
 
     db_path = get_pipesync_db_path("pipesync.db")
     if not os.path.exists(db_path):
         debug_print(f"DB file not found at path: {db_path}")
-        QMessageBox.warning(
+        show_warning(
             None,
             "PipeSync DB no encontrada",
             f"No se encontró la base de datos de PipeSync:\n{db_path}",
@@ -2498,7 +2501,7 @@ def FPT_Hiero(force_all_clips=False):
         context_mode = get_context_mode()
         debug_print(f"DB de PipeSync vacia (0 proyectos) en: {db_path}")
         sg_manager.close()
-        QMessageBox.warning(
+        show_warning(
             None,
             "PipeSync sin datos",
             (

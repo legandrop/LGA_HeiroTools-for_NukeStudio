@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.13 | Lega
+  LGA_NKS_CreateV000 v1.14 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,8 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.14: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.13: _visible_create_v000_dialog() deja de barrer
          QApplication.topLevelWidgets() a pelo y pasa por
          iter_live_widgets(only_top_level=True) + safe_widget_call.
@@ -173,6 +175,7 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     iter_live_widgets,
     safe_widget_call,
 )
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 from LGA_NKS_Flow_NamingUtils import (
     clean_base_name,
     extract_project_name,
@@ -2572,7 +2575,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         except Exception as exc:
             message = "Failed to set timeline In/Out: %s" % exc
             self._set_warning(message)
-            QtWidgets.QMessageBox.warning(self, "Create v000", message)
+            show_warning(self, "Create v000", message)
             debug_print(message)
             return
 
@@ -2597,7 +2600,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         if not project:
             message = "No active project found."
             self._set_warning(message)
-            QtWidgets.QMessageBox.warning(self, "Create v000", message)
+            show_warning(self, "Create v000", message)
             return
 
         # Phase 1: pre-flight dialogs + EXR creation (filesystem, outside undo)
@@ -2623,7 +2626,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
             except Exception as exc:
                 message = "EXRs were created, but Hiero import/placement failed:\n%s" % exc
                 self._set_warning(str(exc))
-                QtWidgets.QMessageBox.warning(self, "Create v000", message)
+                show_warning(self, "Create v000", message)
                 debug_print("import error:", exc)
                 created_count = 0
 
@@ -2934,7 +2937,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
         if not success:
             self._set_warning(message)
-            QtWidgets.QMessageBox.warning(self, "Create v000", message)
+            show_warning(self, "Create v000", message)
             debug_print("error:", message)
             return None
 
@@ -3158,21 +3161,21 @@ class CreateV000TabsDialog(QtWidgets.QDialog):
 
         if not preflight_payloads:
             if collected_errors:
-                QtWidgets.QMessageBox.warning(
+                show_warning(
                     self,
                     "Create v000",
                     "No se pudo preparar ninguna task:\n\n%s"
                     % "\n".join(collected_errors),
                 )
             elif shots_without_task:
-                QtWidgets.QMessageBox.warning(
+                show_warning(
                     self,
                     "Create v000",
                     "No hay tasks seleccionadas en los tabs.\n\n"
                     "Seleccioná al menos una task en uno o más shots.",
                 )
             else:
-                QtWidgets.QMessageBox.warning(
+                show_warning(
                     self,
                     "Create v000",
                     "No se creó ninguna v000.",
@@ -3205,7 +3208,7 @@ class CreateV000TabsDialog(QtWidgets.QDialog):
             grouped[project_key]["items"].append(payload)
 
         if hiero_payloads and not grouped:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Create v000",
                 "No active project found for selected shots.",
@@ -3250,7 +3253,7 @@ class CreateV000TabsDialog(QtWidgets.QDialog):
                 detail_lines.append("Preflight:\n%s" % "\n".join(collected_errors))
             if import_errors:
                 detail_lines.append("Import/Timeline:\n%s" % "\n".join(import_errors))
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Create v000 — errores parciales",
                 "Se crearon %d task(s).\n\n%s"
@@ -3312,7 +3315,7 @@ def open_create_v000_dialog(shot_targets=None):
             message = "No se pudo abrir Create v000."
             if skipped_errors:
                 message += "\n\n" + "\n".join(skipped_errors)
-        QtWidgets.QMessageBox.warning(None, "Create v000", message)
+        show_warning(None, "Create v000", message)
         debug_print(message)
         return None
 

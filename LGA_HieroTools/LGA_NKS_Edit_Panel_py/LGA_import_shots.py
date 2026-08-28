@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.34 | Lega
+  LGA_import_shots v1.35 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.35: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.34: Los tres barridos de ventanas ajenas dejan de usar
          QApplication.topLevelWidgets() a pelo y pasan por
          iter_live_widgets(only_top_level=True) + safe_widget_call.
@@ -179,6 +181,7 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     safe_widget_call,
     widget_property,
 )
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning, show_error
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
@@ -4429,7 +4432,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                 }
 
         if Rename_Test_mode:
-            QtWidgets.QMessageBox.information(
+            show_info(
                 self,
                 "Rename Test Mode",
                 "Rename_Test_mode está activo.\n"
@@ -4442,7 +4445,7 @@ class ImportShotDialog(QtWidgets.QDialog):
             log_fn=debug_print,
         )
         if result.get("errors"):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Rename",
                 "Se produjo un error durante el rename:\n%s" % "\n".join(result["errors"]),
@@ -5911,7 +5914,7 @@ class ImportShotDialog(QtWidgets.QDialog):
                 debug_print("_do_import PASO 5: error → %s" % exc, level="warning")
 
         if errors:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Import — errores parciales",
                 "Se completó con %d ítem(s) colocados.\n\nErrores:\n%s"
@@ -6978,7 +6981,7 @@ class ImportShotDialog(QtWidgets.QDialog):
     # ══════════════════════════════════════════════════════════
 
     def _show_error(self, msg):
-        QtWidgets.QMessageBox.critical(self, "Import Shot — Error", msg)
+        show_error(self, "Import Shot — Error", msg)
 
     def _run_set_shot_name(self):
         try:
@@ -7694,7 +7697,7 @@ class BulkImportDialog(QtWidgets.QDialog):
                          if item.parentTrack() is not None)
             timeline_mod.set_viewer_to_shot(self.seq, tc_in, tc_out)
         if errors:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self, "Bulk Import — errores parciales",
                 "%d items colocados.\n\n%s" % (len(placed_items), "\n".join(errors)),
             )
@@ -7786,7 +7789,7 @@ def main():
 
     seq = hiero.ui.activeSequence()
     if not seq:
-        QtWidgets.QMessageBox.warning(
+        show_warning(
             None, "Import Shot", "No hay sequence activa."
         )
         return

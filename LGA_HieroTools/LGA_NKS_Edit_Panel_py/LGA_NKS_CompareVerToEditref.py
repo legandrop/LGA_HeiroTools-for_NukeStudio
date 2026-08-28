@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CompareVerToEditref v1.17 | Lega
+  LGA_NKS_CompareVerToEditref v1.18 | Lega
 
   Compara los rangos de frames de los clips del track _compRev_ (TRACK_comp_REV) con
   los clips correspondientes del track EditRef para verificar coincidencias.
@@ -9,6 +9,7 @@ ____________________________________________________________________
   Track utilizado:
   - TRACK_comp_REV = "_compRev_": Track que contiene los archivos MOV o MXF con el render de COMP
 
+  v1.18: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
   v1.17: Renombra TRACK_comp_REV de "_compMov_" a "_compRev_" (nueva convención taskRev)
   v1.16: Actualiza fallback de TRACK_comp_REV a "_compMov_" (renombrado desde "_rev_")
   v1.15: Usa módulo centralizado LGA_NKS_GetClip con método híbrido para buscar clips en track REV (playhead primero, luego selección como fallback)
@@ -73,6 +74,19 @@ else:
     find_clip_at_playhead_in_track = None
     get_clip_to_process = None
 
+# Importar carteles estilados del pack (fallback a los estaticos de Qt)
+try:
+    from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
+except ImportError:
+    if DEBUG:
+        print("ERROR: No se encontró el módulo LGA_NKS_MessageBox")
+
+    def show_info(parent, title, text):
+        QtWidgets.QMessageBox.information(parent, title, text)
+
+    def show_warning(parent, title, text):
+        QtWidgets.QMessageBox.warning(parent, title, text)
+
 # Flag para controlar si se analiza y muestra TC IN en la comparacion
 AnalizeTC = False
 
@@ -135,7 +149,7 @@ class FrameRangeComparisonGUI(QtWidgets.QWidget):
                 self.adjust_window_size()  # COPIADO DEL PULL
                 self.show()
             else:
-                QtWidgets.QMessageBox.information(
+                show_info(
                     self,
                     "No Changes",
                     "No se encontraron clips REV con correspondientes clips EditRef.",
@@ -467,12 +481,12 @@ class HieroOperations:
         """MODIFICADO - Procesar clip del track basado en posicion del playhead"""
         seq = hiero.ui.activeSequence()
         if not seq:
-            QtWidgets.QMessageBox.warning(None, "Error", "No hay secuencia activa en Hiero.")
+            show_warning(None, "Error", "No hay secuencia activa en Hiero.")
             return False
 
         viewer = hiero.ui.currentViewer()
         if not viewer:
-            QtWidgets.QMessageBox.warning(None, "Error", "No se encontró un visor activo.")
+            show_warning(None, "Error", "No se encontró un visor activo.")
             return False
 
         current_time = viewer.time()
@@ -481,7 +495,7 @@ class HieroOperations:
         # Obtener el proyecto para el manejo de UNDO
         project = seq.project()
         if not project:
-            QtWidgets.QMessageBox.warning(None, "Error", "No se encontró el proyecto.")
+            show_warning(None, "Error", "No se encontró el proyecto.")
             return False
 
         # Encontrar tracks usando variables centralizadas
@@ -498,13 +512,13 @@ class HieroOperations:
                 editrefclean_track = track
 
         if not rev_track:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 None, "Error", f"No se encontró el track {TRACK_comp_REV}."
             )
             return False
 
         if not editref_track:
-            QtWidgets.QMessageBox.warning(None, "Error", "No se encontró el track EditRef.")
+            show_warning(None, "Error", "No se encontró el track EditRef.")
             return False
 
         # Obtener clips a procesar - basado en force_all_clips o método híbrido
@@ -535,7 +549,7 @@ class HieroOperations:
                 )
 
             if not rev_clip_at_playhead:
-                QtWidgets.QMessageBox.warning(
+                show_warning(
                     None,
                     "Error",
                     f"No se encontró un clip en el track {TRACK_comp_REV} en la posición actual del playhead ni en la selección.",

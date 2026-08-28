@@ -1,11 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_MatchVerToEXR v0.81 | Lega
+  LGA_NKS_MatchVerToEXR v0.82 | Lega
 
   Busca la version actual de los clips del track _comp_ (TRACK_comp_EXR) e
   intenta subir la versión de los clips correspondientes del track _compRev_ (TRACK_comp_REV) a la misma versión.
 
+  v0.82: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
   v0.81: Expande el filtro de clips EXR para incluir aliases de task name
          (compo → comp) evitando descartar clips con _Compo_ en el filename
          que están correctamente en el track _comp_.
@@ -77,6 +78,19 @@ else:
     TRACK_comp_REV = "_compRev_"  # Fallback
     get_clips_to_process = None
 
+# Importar carteles estilados del pack (fallback a los estaticos de Qt)
+try:
+    from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
+except ImportError:
+    if DEBUG:
+        print("ERROR: No se encontró el módulo LGA_NKS_MessageBox")
+
+    def show_info(parent, title, text):
+        QtWidgets.QMessageBox.information(parent, title, text)
+
+    def show_warning(parent, title, text):
+        QtWidgets.QMessageBox.warning(parent, title, text)
+
 # Variables globales para mantener la ventana en memoria - COPIADO DEL PULL
 app = None
 window = None
@@ -119,7 +133,7 @@ class VersionMatcherGUI(QtWidgets.QWidget):
                 self.adjust_window_size()  # COPIADO DEL PULL
                 self.show()
             else:
-                QtWidgets.QMessageBox.information(
+                show_info(
                     self,
                     "No Changes",
                     f"No se encontraron clips del track {TRACK_comp_EXR} con correspondientes clips del track {TRACK_comp_REV}.",
@@ -360,7 +374,7 @@ class HieroOperations:
         """MODIFICADO - Procesar clips de tracks _comp_ y _rev_ usando método híbrido, devolviendo si hay cambios"""
         seq = hiero.ui.activeSequence()
         if not seq:
-            QtWidgets.QMessageBox.warning(None, "Error", "No hay secuencia activa en Hiero.")
+            show_warning(None, "Error", "No hay secuencia activa en Hiero.")
             return False
 
         # Encontrar tracks usando variables centralizadas
@@ -374,13 +388,13 @@ class HieroOperations:
                 rev_track = track
 
         if not exr_track:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 None, "Error", f"No se encontró el track {TRACK_comp_EXR}."
             )
             return False
 
         if not rev_track:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 None, "Error", f"No se encontró el track {TRACK_comp_REV}."
             )
             return False
@@ -426,7 +440,7 @@ class HieroOperations:
                                 break
 
             if not exr_clips:
-                QtWidgets.QMessageBox.warning(
+                show_warning(
                     None,
                     "Error",
                     f"No se encontró ningún clip en el track {TRACK_comp_EXR} en la posición del playhead o seleccionado.",

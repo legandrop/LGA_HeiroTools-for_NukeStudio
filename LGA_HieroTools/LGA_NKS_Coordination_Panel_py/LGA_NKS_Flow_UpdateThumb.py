@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_UpdateThumb v1.01 | Lega
+  LGA_NKS_Flow_UpdateThumb v1.02 | Lega
 
   Reemplaza el thumbnail de un shot existente en Flow (ShotGrid) con un snapshot
   del viewer actual de Hiero. Pensado para el Shift+Click del boton "Thumbnail"
   del Coordination Panel.
 
+  v1.02: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.01: La ventana se auto-cierra tras un reemplazo exitoso, con cuenta regresiva
          en el boton Close. Configurable con AUTO_CLOSE_SECONDS (arriba); 0 lo
          desactiva.
@@ -39,6 +41,7 @@ import hiero.core
 import hiero.ui
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 
 QApplication = QtWidgets.QApplication
 QDialog = QtWidgets.QDialog
@@ -598,7 +601,7 @@ def _warn(message):
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    QtWidgets.QMessageBox.warning(None, "Flow | Update Thumbnail", message)
+    show_warning(None, "Flow | Update Thumbnail", message)
 
 
 def _cleanup_temps():

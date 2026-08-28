@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_ModifyShot v1.39 | Lega
+  LGA_NKS_Flow_ModifyShot v1.40 | Lega
 
   Script para modificar shots existentes en ShotGrid sin afectar estados.
   - Carga información actual del shot (descripción, tasks) desde Flow.
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - El número de versión siempre coincide con Create Shot para compatibilidad.
   - Desde v1.33, Create Shot dispara este flujo automáticamente cuando detecta un shot único que ya existe.
 
+  v1.40: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.39: Campos EDITABLES y prefilled con datos reales de Flow (estado del shot y
          de cada task con dropdowns coloreados, prioridad, reviewers). El
          ModifyShotWorker aplica los cambios de estado de shot, prioridad, y estado
@@ -31,6 +33,7 @@ ____________________________________________________________________
 """
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
 QDialog = QtWidgets.QDialog
@@ -416,7 +419,7 @@ _config_dialog = None
 
 
 def _show_error(message):
-    QMessageBox.warning(None, "Modify Shot", message)
+    show_warning(None, "Modify Shot", message)
 
 
 def _launch_config_dialog(

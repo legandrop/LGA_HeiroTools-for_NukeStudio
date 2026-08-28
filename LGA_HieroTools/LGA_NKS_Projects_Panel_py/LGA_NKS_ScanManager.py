@@ -3,14 +3,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ScanManager v1.00 | Lega
+  LGA_NKS_ScanManager v1.01 | Lega
 
   Gestor de escaneo para el panel de proyectos LGA.
+
+  v1.01: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
 ____________________________________________________________________
 
 """
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 
 # Importar funciones necesarias del módulo principal
 # Estas serán importadas desde el archivo principal cuando se importe este módulo
@@ -72,4 +75,4 @@ class ScanManager:
         """Callback cuando ocurre un error durante el escaneo"""
         debug_print(f"❌ ERROR durante el escaneo: {error_msg}")
         panel.refresh_button.setEnabled(True)
-        QtWidgets.QMessageBox.warning(panel, "Error de Escaneo", error_msg)
+        show_warning(panel, "Error de Escaneo", error_msg)

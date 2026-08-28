@@ -2,13 +2,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.28 | Lega
+  LGA_NKS_Projects_Panel v2.29 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (alineado a la derecha del contador) visible para lega@wanka.tv.
+
+  v2.29: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
 
   v2.28: ensure_min_luminance() se movio a LGA_NKS_StyleUtils, porque el
          Assignee y el Flow Panel necesitan la operacion inversa (techo) sobre
@@ -59,6 +62,7 @@ from LGA_NKS_Shared.LGA_NKS_Project_Colors_Config import (
     get_project_colors_db_path,
     load_project_colors as load_project_colors_from_db,
 )
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -434,7 +438,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         except Exception as e:
             debug_print(f"Error al cambiar contexto: {e}")
             self._refresh_context_toggle()
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self, "Error al cambiar contexto", f"No se pudo cambiar el contexto:\n{e}"
             )
 
@@ -490,7 +494,7 @@ class ProjectsPanel(QtWidgets.QWidget):
                 debug_print(f"Script not found at path: {script_path}")
         except Exception as e:
             debug_print(f"Error durante reimportación: {e}")
-            QtWidgets.QMessageBox.warning(self, "Error", f"Error durante reimportación:\n{str(e)}")
+            show_warning(self, "Error", f"Error durante reimportación:\n{str(e)}")
 
     def on_update_project_click(self, newer_version_info):
         """Manejar el click en el botón de update para actualizar proyecto a versión más nueva"""

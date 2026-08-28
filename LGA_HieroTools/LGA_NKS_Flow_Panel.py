@@ -1,13 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.58 | Lega
+  LGA_NKS_Flow_Panel v2.59 | Lega
 
   Panel con herramientas que interactuan con las tasks de Flow Production Tracking
   que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
+
+  v2.59: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
 
   v2.58: Techo de luminancia al FONDO de los botones de estado
          (MAX_STATUS_BG_LUMINANCE). El texto es claro y los estados mas
@@ -63,6 +66,7 @@ from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import (
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_change
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_push_buttons
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, show_error
 
 # Importar utilidades de naming
 sys.path.append(str(Path(__file__).parent / "LGA_NKS_Shared"))
@@ -482,7 +486,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
         debug_print("Ejecutando Flow Pull forzando procesamiento de todos los clips...")
         is_valid, error_text, _state = validate_pull_preflight()
         if not is_valid:
-            QtWidgets.QMessageBox.warning(self, "PipeSync no configurado", error_text)
+            show_warning(self, "PipeSync no configurado", error_text)
             return
 
         # Obtener el proyecto actual
@@ -516,7 +520,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
     def run_FPT_pull(self):
         is_valid, error_text, _state = validate_pull_preflight()
         if not is_valid:
-            QtWidgets.QMessageBox.warning(self, "PipeSync no configurado", error_text)
+            show_warning(self, "PipeSync no configurado", error_text)
             return
 
         # Obtener el proyecto actual
@@ -770,7 +774,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
         try:
             is_valid, error_text, _state = validate_push_preflight()
             if not is_valid:
-                QtWidgets.QMessageBox.warning(self, "PipeSync no configurado", error_text)
+                show_warning(self, "PipeSync no configurado", error_text)
                 return
 
             # Importar el módulo Push para usar el método centralizado
@@ -855,7 +859,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
                             project.endUndo()
                 except Exception as e:
                     debug_print(f"Error cambiando color del clip {exr_name}: {e}")
-                    QtWidgets.QMessageBox.critical(
+                    show_error(
                         self,
                         "Flow Push - Error post-push",
                         (

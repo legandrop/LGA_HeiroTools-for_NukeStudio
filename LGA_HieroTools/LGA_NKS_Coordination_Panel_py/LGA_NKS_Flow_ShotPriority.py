@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_ShotPriority v1.01 | Lega
+  LGA_NKS_Flow_ShotPriority v1.02 | Lega
 
   Script para cambiar la prioridad de shots en ShotGrid basado en el clip seleccionado.
   - Si la prioridad es normal (o no existe) → cambia a alta
@@ -11,6 +11,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.02: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.01: Extrae project_name desde el segmento VFX-NOMBRE del path en lugar
          del primer bloque del filename (corrige proyectos como PROJALT cuyos
          shots tienen prefijo PROJA en el filename).
@@ -22,6 +24,7 @@ import os
 import sys
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
 QMessageBox = QtWidgets.QMessageBox
 QApplication = QtWidgets.QApplication
 
@@ -211,7 +214,7 @@ def toggle_shot_priority_from_selected_clip():
     clips_info = hiero_ops.get_selected_clips_info()
 
     if not clips_info:
-        QMessageBox.warning(
+        show_warning(
             None, "Error", "No se encontraron clips seleccionados en Hiero."
         )
         return
@@ -219,7 +222,7 @@ def toggle_shot_priority_from_selected_clip():
     # Obtener credenciales de Flow
     sg_url, sg_login, sg_password = get_flow_credentials_secure()
     if not all([sg_url, sg_login, sg_password]):
-        QMessageBox.warning(
+        show_warning(
             None,
             "Error",
             "No se pudieron obtener las credenciales de Flow desde SecureConfig.",
@@ -229,7 +232,7 @@ def toggle_shot_priority_from_selected_clip():
     # Crear manager ShotGrid
     sg_manager = ShotGridManager(sg_url, sg_login, sg_password)
     if not sg_manager.sg:
-        QMessageBox.warning(
+        show_warning(
             None, "Error", "No se pudo inicializar la conexión a ShotGrid."
         )
         return
@@ -279,13 +282,13 @@ def toggle_shot_priority_from_selected_clip():
         # Un solo shot: mostrar mensaje simple
         result = results[0]
         if result["success"]:
-            QMessageBox.information(
+            show_info(
                 None,
                 "Prioridad Cambiada",
                 f"Shot: {result['shot_code']}\n{result['message']}",
             )
         else:
-            QMessageBox.warning(None, "Error", result["message"])
+            show_warning(None, "Error", result["message"])
     else:
         # Múltiples shots: mostrar resumen
         success_count = sum(1 for r in results if r["success"])
@@ -296,14 +299,14 @@ def toggle_shot_priority_from_selected_clip():
             message = f"Se cambiaron las prioridades de {success_count} shots:\n\n"
             for result in results:
                 message += f"• {result['shot_code']}: {result['message']}\n"
-            QMessageBox.information(None, "Prioridades Cambiadas", message)
+            show_info(None, "Prioridades Cambiadas", message)
         else:
             # Algunos fallaron
             message = f"Resultados ({success_count}/{total_count} exitosos):\n\n"
             for result in results:
                 status = "✓" if result["success"] else "✗"
                 message += f"{status} {result['shot_code']}: {result['message']}\n"
-            QMessageBox.warning(None, "Resultados", message)
+            show_warning(None, "Resultados", message)
 
 
 def main():

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_GetClip v1.85 | Lega
+  LGA_NKS_GetClip v1.86 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
@@ -44,6 +44,8 @@ ____________________________________________________________________
   5. Intenta obtener el clip del track especificado en la posición del playhead.
   6. Si no encuentra, usa el clip seleccionado como fallback.
 
+  v1.86: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.85: Agrega TRACK_cg_EXR/_REV y la task CG (contexto client): CG_TASK_NAME,
          registered_task_names(). Los helpers por nombre de track aceptan
          MULTIPLES tracks con el mismo nombre (caso tipico: varios _cg_).
@@ -614,12 +616,11 @@ def get_clip_to_process(track_name=None, prioritize_multiple_selection=False):
                 # 2c: Los shots no coinciden, mostrar mensaje informativo
                 debug_print(f"Shots diferentes - seleccionado: {selected_shot}, playhead: {playhead_shot}")
                 if _SHOW_WARNINGS:
-                    # Importar compatibilidad Qt
+                    # Importar el cartel estilado del pack
                     import sys
                     sys.path.insert(0, r"C:\Users\leg4-pc\.nuke\Python\Startup")
-                    from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
-                    QMessageBox = QtWidgets.QMessageBox
-                    QMessageBox.warning(
+                    from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+                    show_warning(
                         None,
                         "Shots diferentes",
                         f"El clip seleccionado pertenece al shot '{selected_shot}',\n"
@@ -644,12 +645,11 @@ def get_clip_to_process(track_name=None, prioritize_multiple_selection=False):
     # (solo si la lógica inteligente no resolvió el problema automáticamente)
     if not intelligent_selection_applied and len(all_selected_clips) > len(selected_clips_in_track) and _SHOW_WARNINGS:
         clips_in_other_tracks = len(all_selected_clips) - len(selected_clips_in_track)
-        # Importar compatibilidad Qt
+        # Importar el cartel estilado del pack
         import sys
         sys.path.insert(0, r"C:\Users\leg4-pc\.nuke\Python\Startup")
-        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
-        QMessageBox = QtWidgets.QMessageBox
-        QMessageBox.information(
+        from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info
+        show_info(
             None,
             "Selección filtrada por track",
             f"Se detectaron {clips_in_other_tracks} clip(s) seleccionado(s) en tracks que no son '{track_name}'.\n\n"

@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CheckTimelineShots v1.01 | Lega
+  LGA_NKS_Flow_CheckTimelineShots v1.02 | Lega
 
   Chequea si los shots del track comp del timeline existen en Flow.
   Muestra una ventana con la lista de shots existentes y los faltantes.
 
+  v1.02: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.01: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
          Corrige proyectos como PROJALT cuyos shots tienen prefijo PROJA en el filename.
@@ -18,6 +20,7 @@ import os
 import sys
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
@@ -251,7 +254,7 @@ def _show_error_message(title, message, status_window=None):
     if status_window:
         status_window.show_error(message)
     else:
-        QMessageBox.warning(None, title, message)
+        show_warning(None, title, message)
 
 
 def check_timeline_shots():
@@ -262,12 +265,12 @@ def check_timeline_shots():
 
     seq = hiero.ui.activeSequence()
     if not seq:
-        QMessageBox.warning(None, "Flow | Check Shots", "No hay secuencia activa.")
+        show_warning(None, "Flow | Check Shots", "No hay secuencia activa.")
         return
 
     shots_info = _collect_shots_from_track(seq, TRACK_comp_EXR)
     if not shots_info:
-        QMessageBox.warning(
+        show_warning(
             None,
             "Flow | Check Shots",
             f"No se encontraron clips en el track '{TRACK_comp_EXR}'.",

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.25 | Lega
+  LGA_NKS_Flow_FlowProd_Panel v1.26 | Lega
   Panel para operaciones de producción con Flow:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -10,6 +10,8 @@ ________________________________________________________________________________
   - Integración con FileManagerS3 (Open, Download, Upload)
 
 
+  v1.26: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
+         estilo del pack.
   v1.25: Invertido comportamiento del boton Download Clip:
          Click ahora descarga la ultima version, Shift+Click la version seleccionada.
   v1.24: El boton "Thumbnail" ahora soporta Shift+Click: reemplaza el thumbnail
@@ -51,6 +53,7 @@ import queue
 import time
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 
 
 # Clase de botón personalizada que maneja el Shift+Click
@@ -546,7 +549,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ShowInFlow.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -569,7 +572,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             module.show_in_flow_from_selected_clip()
         except Exception as e:
             debug_print(f"Error al ejecutar show_in_flow_from_selected_clip: {e}")
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def show_shot_in_flow_for_selected_clip(self):
         """Llama al script Show in Flow para abrir el Shot completo en Chrome (Shift+Click)"""
@@ -578,7 +581,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ShowInFlow.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -601,7 +604,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             module.show_shot_in_flow_from_selected_clip()
         except Exception as e:
             debug_print(f"Error al ejecutar show_shot_in_flow_from_selected_clip: {e}")
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def create_thumbnail_for_selected_clip(self):
         """Llama al script Thumbnail para crear un thumbnail del clip seleccionado"""
@@ -609,7 +612,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_Thumbs.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -628,7 +631,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Llamar a la función principal
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def update_thumbnail_in_flow_for_selected_clip(self):
         """Shift+Click del boton Thumbnail: reemplaza el thumbnail del shot en Flow
@@ -639,7 +642,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             "LGA_NKS_Flow_UpdateThumb.py",
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -659,7 +662,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             spec.loader.exec_module(module)
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def create_shot_for_selected_clip(self):
         """Llama al script Create Shot para crear shots basado en el clip seleccionado"""
@@ -667,7 +670,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_CreateShot.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -688,7 +691,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Llamar a la función principal
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def modify_shot_for_selected_clip(self):
         """Llama al script Modify Shot para ajustar shots existentes"""
@@ -696,7 +699,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ModifyShot.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -716,7 +719,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             spec.loader.exec_module(module)
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def toggle_shot_priority_for_selected_clip(self):
         """Llama al script Shot Priority para cambiar la prioridad del shot seleccionado"""
@@ -724,7 +727,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ShotPriority.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -745,7 +748,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Llamar a la función principal
             module.toggle_shot_priority_from_selected_clip()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def open_shot_in_pipesync(self):
         """Llama al script PipeSync para abrir la carpeta del shot seleccionado"""
@@ -753,7 +756,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_PipeSync_OpenPath.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -773,7 +776,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             spec.loader.exec_module(module)
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def create_pipesync_token_file(self):
         """Genera un archivo .psync para compartir el shot"""
@@ -781,7 +784,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_PipeSync_CreatePsync.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -801,7 +804,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             spec.loader.exec_module(module)
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def open_shot_in_filemanagers3(self):
         """Llama al script FileManagerS3 para abrir la carpeta del shot seleccionado"""
@@ -809,7 +812,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_OpenPath.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -830,7 +833,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Llamar a la función principal
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def download_shot_from_filemanagers3(self):
         """Llama al script FileManagerS3 para descargar el shot seleccionado"""
@@ -838,7 +841,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_Download.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -859,7 +862,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Llamar a la función principal
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def upload_shot_to_filemanagers3(self):
         """Llama al script FileManagerS3 para subir el shot seleccionado"""
@@ -867,7 +870,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_Upload.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -888,7 +891,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Llamar a la función principal
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def _run_download_clip_from_filemanagers3(self, download_latest=False):
         """Llama al script FileManagerS3 para descargar clip(s) seleccionado(s)."""
@@ -896,7 +899,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_DownloadClip.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -916,7 +919,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             spec.loader.exec_module(module)
             module.main(download_latest=download_latest)
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar", str(e))
+            show_warning(self, "Error al ejecutar", str(e))
 
     def download_clip_from_filemanagers3(self):
         """Descarga el clip seleccionado en modo normal."""
@@ -932,7 +935,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_CheckTimelineShots.py"
         )
         if not os.path.exists(script_path):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 self,
                 "Script no encontrado",
                 f"No se encontró el script en la ruta: {script_path}",
@@ -952,7 +955,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             spec.loader.exec_module(module)
             module.main()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error al ejecutar Check Shots", str(e))
+            show_warning(self, "Error al ejecutar Check Shots", str(e))
 
 
 # Crear la instancia del panel y agregarlo al windowManager de Hiero

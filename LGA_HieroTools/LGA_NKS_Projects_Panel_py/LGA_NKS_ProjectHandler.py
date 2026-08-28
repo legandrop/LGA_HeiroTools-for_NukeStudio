@@ -3,10 +3,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.02 | Lega
+  LGA_NKS_ProjectHandler v1.03 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.03: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
   v1.02: El display formateado usa obtener_nombre_display_proyecto()
   v1.01: 'project_key' y 'vfx_folder' de los proyectos abiertos salen de la ruta en disco
 ____________________________________________________________________
@@ -15,6 +16,7 @@ ____________________________________________________________________
 
 import os
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 import hiero.core
 
 # Importar funciones necesarias del módulo principal
@@ -204,7 +206,7 @@ class ProjectHandler:
             debug_print("🔄 Iniciando re-escaneo automático...")
             panel.start_scan()
         except Exception as e:
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 panel,
                 "Error al abrir proyecto",
                 f"No se pudo abrir el proyecto {nombre_base}:\n{str(e)}",
@@ -226,7 +228,7 @@ class ProjectHandler:
         # Verificar que la ruta de la nueva versión existe
         import os
         if not os.path.exists(ruta_nueva_version):
-            QtWidgets.QMessageBox.warning(
+            show_warning(
                 panel,
                 "Error",
                 f"No se puede encontrar el archivo de la nueva versión:\n{ruta_nueva_version}"
