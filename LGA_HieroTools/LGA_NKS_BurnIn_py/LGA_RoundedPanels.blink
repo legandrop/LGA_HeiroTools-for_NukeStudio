@@ -1,0 +1,176 @@
+// LGA_RoundedPanels v0.03 | Lega
+// Kernel de produccion de LGA_BurnIn: fondos redondeados de los seis
+// campos en una pasada. SDF de rounded box + antialiasing de 1px.
+// v0.03: sin funcion miembro, logica inline por campo (la funcion no
+//        compilaba en el contexto del timeline).
+// v0.02: una declaracion por linea.
+
+kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
+{
+  Image<eRead, eAccessPoint, eEdgeClamped> src;
+  Image<eWrite, eAccessPoint> dst;
+
+  param:
+    float clip_x;
+    float clip_y;
+    float clip_w;
+    float clip_h;
+    float clip_on;
+    float res_x;
+    float res_y;
+    float res_w;
+    float res_h;
+    float res_on;
+    float frame_x;
+    float frame_y;
+    float frame_w;
+    float frame_h;
+    float frame_on;
+    float tc_x;
+    float tc_y;
+    float tc_w;
+    float tc_h;
+    float tc_on;
+    float cspace_x;
+    float cspace_y;
+    float cspace_w;
+    float cspace_h;
+    float cspace_on;
+    float fps_x;
+    float fps_y;
+    float fps_w;
+    float fps_h;
+    float fps_on;
+    float corner_radius;
+    float color_r;
+    float color_g;
+    float color_b;
+    float bg_opacity;
+
+  void define() {
+    defineParam(clip_x, "clip_x", 0.0f);
+    defineParam(clip_y, "clip_y", 0.0f);
+    defineParam(clip_w, "clip_w", 0.0f);
+    defineParam(clip_h, "clip_h", 0.0f);
+    defineParam(clip_on, "clip_on", 0.0f);
+    defineParam(res_x, "res_x", 0.0f);
+    defineParam(res_y, "res_y", 0.0f);
+    defineParam(res_w, "res_w", 0.0f);
+    defineParam(res_h, "res_h", 0.0f);
+    defineParam(res_on, "res_on", 0.0f);
+    defineParam(frame_x, "frame_x", 0.0f);
+    defineParam(frame_y, "frame_y", 0.0f);
+    defineParam(frame_w, "frame_w", 0.0f);
+    defineParam(frame_h, "frame_h", 0.0f);
+    defineParam(frame_on, "frame_on", 0.0f);
+    defineParam(tc_x, "tc_x", 0.0f);
+    defineParam(tc_y, "tc_y", 0.0f);
+    defineParam(tc_w, "tc_w", 0.0f);
+    defineParam(tc_h, "tc_h", 0.0f);
+    defineParam(tc_on, "tc_on", 0.0f);
+    defineParam(cspace_x, "cspace_x", 0.0f);
+    defineParam(cspace_y, "cspace_y", 0.0f);
+    defineParam(cspace_w, "cspace_w", 0.0f);
+    defineParam(cspace_h, "cspace_h", 0.0f);
+    defineParam(cspace_on, "cspace_on", 0.0f);
+    defineParam(fps_x, "fps_x", 0.0f);
+    defineParam(fps_y, "fps_y", 0.0f);
+    defineParam(fps_w, "fps_w", 0.0f);
+    defineParam(fps_h, "fps_h", 0.0f);
+    defineParam(fps_on, "fps_on", 0.0f);
+    defineParam(corner_radius, "corner_radius", 30.0f);
+    defineParam(color_r, "color_r", 0.0f);
+    defineParam(color_g, "color_g", 0.0f);
+    defineParam(color_b, "color_b", 0.0f);
+    defineParam(bg_opacity, "bg_opacity", 0.8f);
+  }
+
+  void process(int2 pos) {
+    SampleType(src) input = src();
+    float ppx = float(pos.x);
+    float ppy = float(pos.y);
+    float a = 0.0f;
+
+    // panel clip
+    if (clip_on > 0.5f && clip_w > 0.0f && clip_h > 0.0f) {
+      float r = min(corner_radius, min(clip_w, clip_h) * 0.5f);
+      float cx = clip_x + clip_w * 0.5f;
+      float cy = clip_y + clip_h * 0.5f;
+      float dx = fabs(ppx - cx) - (clip_w * 0.5f - r);
+      float dy = fabs(ppy - cy) - (clip_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel res
+    if (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) {
+      float r = min(corner_radius, min(res_w, res_h) * 0.5f);
+      float cx = res_x + res_w * 0.5f;
+      float cy = res_y + res_h * 0.5f;
+      float dx = fabs(ppx - cx) - (res_w * 0.5f - r);
+      float dy = fabs(ppy - cy) - (res_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel frame
+    if (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) {
+      float r = min(corner_radius, min(frame_w, frame_h) * 0.5f);
+      float cx = frame_x + frame_w * 0.5f;
+      float cy = frame_y + frame_h * 0.5f;
+      float dx = fabs(ppx - cx) - (frame_w * 0.5f - r);
+      float dy = fabs(ppy - cy) - (frame_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel tc
+    if (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) {
+      float r = min(corner_radius, min(tc_w, tc_h) * 0.5f);
+      float cx = tc_x + tc_w * 0.5f;
+      float cy = tc_y + tc_h * 0.5f;
+      float dx = fabs(ppx - cx) - (tc_w * 0.5f - r);
+      float dy = fabs(ppy - cy) - (tc_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel cspace
+    if (cspace_on > 0.5f && cspace_w > 0.0f && cspace_h > 0.0f) {
+      float r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);
+      float cx = cspace_x + cspace_w * 0.5f;
+      float cy = cspace_y + cspace_h * 0.5f;
+      float dx = fabs(ppx - cx) - (cspace_w * 0.5f - r);
+      float dy = fabs(ppy - cy) - (cspace_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel fps
+    if (fps_on > 0.5f && fps_w > 0.0f && fps_h > 0.0f) {
+      float r = min(corner_radius, min(fps_w, fps_h) * 0.5f);
+      float cx = fps_x + fps_w * 0.5f;
+      float cy = fps_y + fps_h * 0.5f;
+      float dx = fabs(ppx - cx) - (fps_w * 0.5f - r);
+      float dy = fabs(ppy - cy) - (fps_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    a = a * bg_opacity;
+    float4 panel = float4(color_r, color_g, color_b, 1.0f);
+    dst() = input * (1.0f - a) + panel * a;
+  }
+};

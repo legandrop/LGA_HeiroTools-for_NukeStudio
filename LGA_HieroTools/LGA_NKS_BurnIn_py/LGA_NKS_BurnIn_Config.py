@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Config v1.00 | Lega
+  LGA_NKS_BurnIn_Config v1.01 | Lega
 
   Capa de configuracion de LGA_BurnIn. Resuelve la config efectiva
   en dos niveles: defaults + archivo de usuario en AppData
@@ -10,6 +10,8 @@ ____________________________________________________________________
   Modulo puro: no importa nuke ni hiero, para poder testearlo fuera
   del host.
 
+  v1.01: Frame/TC separados, campo colorspace, y pos como caja de
+         panel (x, y, w, h) con el layout de dos filas balanceadas.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -28,18 +30,19 @@ CONFIG_FILE_NAME = "BurnIn.json"
 PROJECT_TAG_NAME = "LGA_BurnIn_Settings"
 PROJECT_TAG_KEY = "tag.lga_burnin_config"
 
-FIELD_KEYS = ("clip", "res", "frame", "tc", "cspace", "fps")
-
-# Config default completa. "pos" son fracciones del formato (x1, y1, x2, y2)
-# para que las posiciones se adapten solas a la resolucion del proyecto.
+# Config default completa. "pos" es la caja del PANEL de cada campo en
+# fracciones del formato (x, y, w, h), igual que los knobs de Layout del
+# gizmo, para que las posiciones se adapten solas a la resolucion.
+# Layout: dos filas balanceadas (arriba: clip | colorspace | res; abajo:
+# frame | tc | fps). Debe coincidir con FIELDS del generador del gizmo.
 DEFAULTS = {
     "fields": {
-        "clip": {"enabled": True, "pos": [0.02, 0.90, 0.60, 0.96]},
-        "res": {"enabled": True, "pos": [0.80, 0.90, 0.98, 0.96]},
-        "frame": {"enabled": True, "pos": [0.02, 0.04, 0.30, 0.20]},
-        "tc": {"enabled": True, "pos": [0.30, 0.04, 0.60, 0.20]},
-        "cspace": {"enabled": True, "pos": [0.60, 0.04, 0.75, 0.20]},
-        "fps": {"enabled": True, "pos": [0.85, 0.04, 0.98, 0.20]},
+        "clip": {"enabled": True, "pos": [0.02, 0.92, 0.34, 0.05]},
+        "cspace": {"enabled": True, "pos": [0.40, 0.92, 0.20, 0.05]},
+        "res": {"enabled": True, "pos": [0.86, 0.92, 0.12, 0.05]},
+        "frame": {"enabled": True, "pos": [0.02, 0.03, 0.11, 0.05]},
+        "tc": {"enabled": True, "pos": [0.145, 0.03, 0.155, 0.05]},
+        "fps": {"enabled": True, "pos": [0.90, 0.03, 0.08, 0.05]},
     },
     # "timeline" compara contra el formato de salida del timeline;
     # un valor "3840x2160" compara contra ese valor explicito.

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.00 | Lega
+  LGA_NKS_BurnIn_Logic v1.01 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,8 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.01: Frame y TC como campos separados, campo colorspace (por API
+         con cache) y registro de llamadas en el log para diagnostico.
   v1.00: Version inicial. Campos res (rojo condicional, solo EXR),
          fps (rojo condicional), frametc y clip.
 ____________________________________________________________________

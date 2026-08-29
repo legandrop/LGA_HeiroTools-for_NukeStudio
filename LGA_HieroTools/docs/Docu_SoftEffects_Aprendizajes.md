@@ -127,6 +127,23 @@ codigo no rinde; **copiar el blob con `fromScript()`** desde un nodo rotado a
 mano si funciona (probado). El center va horneado en pixeles: recalcular por
 formato.
 
+## BlinkScript en el timeline (lo aprendido construyendo LGA_BurnIn)
+
+| # | Problema | Causa real / solucion |
+|---|---|---|
+| 1 | `recompile.execute()` por script no compila NADA en el timeline (el nodo queda con el kernel default Swirlomatic; sin popup) | La unica via que compila por script es `kernelSourceFile` + `reloadKernelSourceFile.execute()` (el boton Load). En GUI, abrir el panel del nodo tambien dispara el compile. |
+| 2 | Un BlinkScript del timeline que fallo un compile puede quedar CLAVADO (ni Load lo revive) | No pelearlo: crear un efecto fresco. |
+| 3 | Los knobs de los parametros del kernel no existen al cargar el gizmo | Se generan AL COMPILAR, prefijados con el nombre del kernel (`LGARoundedPanels_clip_x`). Por eso no se pueden escribir expresiones para ellos en el archivo del gizmo: se atan por codigo post-compile (onCreate -> setup -> setExpression). Buscarlos por sufijo, no por nombre exacto. |
+| 4 | Kernel con FUNCION MIEMBRO no compilaba en el timeline; el mismo codigo inline si | Escribir los kernels del timeline sin funciones auxiliares: todo inline en `process()`, una declaracion por linea (estilo de los ejemplos oficiales). |
+| 5 | ¿Un BlinkScript adentro de un gizmo custom corre en el timeline? | SI — medido (gizmo de prueba con kernel embebido + onCreate). La frase de la doc "can't publish kernels to Groups or Gizmos" refiere al boton Publish, no a esto. |
+| 6 | ¿Renderiza en el export? | Los soft effects van al export por default ("Include Effects"); confirmado por doc para soft effects en general. El gpuOP viewport-only era la era pre-14.1. |
+| 7 | Params del soft effect BlinkScript | Solo `int`, `float`, `bool` (doc). Todo escalar; los toggles llegan como 0.0/1.0 por expresion. |
+
+Serializacion de un kernel embebido en `.gizmo` (patron de los NST_*):
+`kernelSource` en UNA linea con `\n`, `\{`, `\}`, `\"`; `KernelDescription`
+es un blob que genera Nuke al compilar (no se escribe a mano — por eso el
+camino onCreate+Load en vez de embeberlo).
+
 ## Datos de version
 
 - El soft effect Burn-In nativo acepta texto arbitrario y TCL en sus campos

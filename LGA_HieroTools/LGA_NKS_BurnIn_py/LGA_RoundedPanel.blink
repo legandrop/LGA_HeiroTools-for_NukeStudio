@@ -1,0 +1,56 @@
+// LGA_RoundedPanel v0.01 | Lega
+// Kernel Blink que dibuja UN rectangulo redondeado (SDF de rounded box con
+// antialiasing de 1px) compuesto "over" sobre el input. Es la unidad basica
+// de los fondos del soft effect LGA_BurnIn; la version final va a manejar
+// los paneles de todos los campos.
+// Solo parametros escalares float: es lo unico garantizado por la doc para
+// BlinkScript como soft effect del timeline.
+
+kernel LGARoundedPanel : ImageComputationKernel<ePixelWise>
+{
+  Image<eRead, eAccessPoint, eEdgeClamped> src;
+  Image<eWrite, eAccessPoint> dst;
+
+  param:
+    float box_x;          // esquina inferior-izquierda del panel, en pixeles
+    float box_y;
+    float box_w;          // tamano del panel, en pixeles
+    float box_h;
+    float corner_radius;  // radio de las esquinas, en pixeles
+    float color_r;
+    float color_g;
+    float color_b;
+    float panel_opacity;
+
+  void define() {
+    defineParam(box_x, "box_x", 1000.0f);
+    defineParam(box_y, "box_y", 500.0f);
+    defineParam(box_w, "box_w", 800.0f);
+    defineParam(box_h, "box_h", 220.0f);
+    defineParam(corner_radius, "corner_radius", 40.0f);
+    defineParam(color_r, "color_r", 0.0f);
+    defineParam(color_g, "color_g", 0.0f);
+    defineParam(color_b, "color_b", 0.0f);
+    defineParam(panel_opacity, "panel_opacity", 0.8f);
+  }
+
+  void process(int2 pos) {
+    SampleType(src) input = src();
+
+    // Distancia con signo a una caja redondeada centrada en el panel:
+    // negativa adentro, positiva afuera, 0 en el borde.
+    float cx = box_x + box_w * 0.5f;
+    float cy = box_y + box_h * 0.5f;
+    float px = fabs(float(pos.x) - cx) - (box_w * 0.5f - corner_radius);
+    float py = fabs(float(pos.y) - cy) - (box_h * 0.5f - corner_radius);
+    float qx = max(px, 0.0f);
+    float qy = max(py, 0.0f);
+    float dist = sqrt(qx * qx + qy * qy) + min(max(px, py), 0.0f) - corner_radius;
+
+    // 1px de suavizado en el borde.
+    float alpha = clamp(0.5f - dist, 0.0f, 1.0f) * panel_opacity;
+
+    float4 panel = float4(color_r, color_g, color_b, 1.0f);
+    dst() = input * (1.0f - alpha) + panel * alpha;
+  }
+};
