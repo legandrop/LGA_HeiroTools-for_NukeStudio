@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.02 | Lega
+  LGA_NKS_BurnIn v1.03 | Lega
 
   Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
@@ -14,6 +14,9 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.03: el knobChanged tambien re-aplica la rotacion por campo
+         (bi_<f>_rot y todo lo que mueve el pivote: x/y/size, scale,
+         text_pad) via apply_rotation() del modulo Blink.
   v1.02: addKnobChanged por nodeClass LGA_BurnIn: al cambiar el peso
          de la fuente (bi_weight) re-aplica apply_font() para que el
          fondo se recalcule con las metricas del nuevo peso de Inter.
@@ -77,13 +80,32 @@ def _register():
     def _on_knob_changed():
         n = nuke.thisNode()
         k = nuke.thisKnob()
-        if n is not None and k is not None and k.name() == "bi_weight":
-            try:
-                import LGA_NKS_BurnIn_Blink as bi_blink
-
-                bi_blink.apply_font(n)
-            except Exception:
-                pass
+        if n is None or k is None:
+            return
+        name = k.name()
+        try:
+            import LGA_NKS_BurnIn_Blink as bi_blink
+        except Exception:
+            return
+        if name == "bi_weight":
+            # El peso cambia la fuente Y las metricas: re-aplicar ambas.
+            bi_blink.apply_font(n)
+            bi_blink.apply_rotation(n)
+            bi_blink.nudge(n)
+        elif name.startswith("bi_") and name.endswith("_rot"):
+            # bi_<campo>_rot: reescribir el literal del campo tocado.
+            field = name[3:-4]
+            bi_blink.apply_rotation(n, fields=(field,))
+            bi_blink.nudge(n)
+        elif name.startswith("bi_") and name.endswith(("_x", "_y", "_size")):
+            # Mover el ancla o el tamano corre el pivote: re-aplicar el campo
+            # (solo importa si esta rotado; con rot=0 es un write inocuo).
+            field = name[3:].rsplit("_", 1)[0]
+            if field in bi_blink.FIELDS:
+                bi_blink.apply_rotation(n, fields=(field,))
+        elif name in ("bi_scale", "bi_text_pad"):
+            # Cambian el alto de TODOS los paneles (y sus centros).
+            bi_blink.apply_rotation(n)
 
     nuke.addKnobChanged(_on_knob_changed, nodeClass="LGA_BurnIn")
 

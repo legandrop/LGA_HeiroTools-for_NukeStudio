@@ -113,8 +113,8 @@ todo se edita en la ventana `LGA_NKS_BurnIn_Panel` (estilo del pack,
   ON/BG tienen **paint-toggle** (click+drag tilda/destilda varios). Las
   filas son de **seleccion multiple**.
 - **Detalle** (opera sobre TODA la seleccion): ancla 3x3 que manda X/Y a una
-  esquina/centro, y el texto de los campos custom (con un unico custom
-  seleccionado). No hay rotacion (ver Limitaciones).
+  esquina/centro, rotacion 0/90/180/270 (texto + fondo juntos), y el texto de
+  los campos custom (con un unico custom seleccionado).
 - **Style global**: text color, peso de Inter, opacidades, radio, padding.
 - **Keep on top** (default ON) abajo a la izquierda.
 - **Presets**: guardan campos+layout+estilo con nombre en el BurnIn.json
@@ -151,12 +151,11 @@ y al cambiar el mtime del JSON.
 - Comparacion de resolucion solo para plates (EXR por default).
 - El costo GPU del kernel es una pasada full-frame por instancia; con "Use
   GPU if available" activo es despreciable frente a un Denoise.
-- **La rotacion por campo todavia no esta cableada** (los knobs `bi_<f>_rot`
-  existen pero inertes; sin control en el panel). El transform tab del Text2 no
-  renderiza en soft effects, PERO rotar el GRUPO "root transform" del Text2 SI:
-  seleccionarlo y escribir la rotacion como literal en la posicion [10] de
-  `animation_layers`. Falta la pasada de wiring (write del literal + centro por
-  campo + trigger de re-render). Detalle en `Docu_SoftEffects_Aprendizajes.md`.
+- **Rotacion por campo**: funciona (0/90/180/270 desde el panel, aplicada a la
+  seleccion; texto y fondo giran juntos sobre el centro del panel). Si el
+  viewer no refleja un cambio de rotacion hecho por codigo, el boton Refresh
+  Timeline del ViewerTL lo fuerza. Mecanismo y trampas en
+  `Docu_SoftEffects_Aprendizajes.md`.
 
 ## Pendientes
 

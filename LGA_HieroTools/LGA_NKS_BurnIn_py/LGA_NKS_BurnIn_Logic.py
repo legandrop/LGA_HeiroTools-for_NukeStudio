@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.04 | Lega
+  LGA_NKS_BurnIn_Logic v1.05 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,9 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.05: panel_geo() suma el comp 'cx' (centro horizontal del panel):
+         es el pivote de la rotacion por campo, compartido entre el
+         kernel (bind de ax) y el texto (apply_rotation del Blink).
   v1.04: 8 campos (agrega custom1/custom2, texto libre del usuario) y
          tamano POR CAMPO (bi_<f>_size en %): _font_px(parent, field) mide
          con el px efectivo (scale global x size del campo). PANEL_ANCHOR
@@ -512,7 +515,11 @@ def _measure_text(text, px, style):
 
 
 def panel_geo(field, comp, parent, frame=None):
-    """'w' o 'x' (en pixeles) del panel de un campo, medido de su texto.
+    """'w', 'x' o 'cx' (en pixeles) del panel de un campo, medido de su texto.
+
+    'cx' es el centro horizontal del panel (x + w/2): es el pivote de la
+    rotacion del campo, compartido entre el kernel (bind de ax) y el texto
+    (apply_rotation escribe el mismo centro en animation_layers).
 
     Sin texto devuelve 0: el kernel descarta paneles de ancho 0, asi que un
     campo vacio no dibuja panel.
@@ -531,10 +538,14 @@ def panel_geo(field, comp, parent, frame=None):
         anchor = float(parent["bi_%s_x" % field].value()) * float(parent.width())
         justify = PANEL_ANCHOR.get(field, "left")
         if justify == "left":
-            return anchor
-        if justify == "center":
-            return anchor - width * 0.5
-        return anchor - width
+            x = anchor
+        elif justify == "center":
+            x = anchor - width * 0.5
+        else:
+            x = anchor - width
+        if comp == "cx":
+            return x + width * 0.5
+        return x
     except Exception as exc:
         _log_error_once("panel:" + str(field), str(exc))
         return 0.0

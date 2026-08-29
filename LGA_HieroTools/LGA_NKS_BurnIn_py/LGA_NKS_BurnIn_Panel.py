@@ -6,19 +6,21 @@ ____________________________________________________________________
   Editor de LGA BurnIn con el estilo del pack. Rediseno "tabla +
   detalle": una fila por campo (nombre, ON, BG, X, Y, SIZE) con
   drag-sliders estilo Nuke, seleccion multiple de filas, y un bloque
-  de detalle que aplica a TODA la seleccion (ancla 3x3 -> X/Y y el
-  texto de los campos custom). Style global (color, peso Inter,
-  opacidades, radio, padding), presets y objetivos de comparacion del
-  proyecto (res/fps).
+  de detalle que aplica a TODA la seleccion (ancla 3x3 -> X/Y,
+  rotacion 0/90/180/270 y el texto de los campos custom). Style
+  global (color, peso Inter, opacidades, radio, padding), presets y
+  objetivos de comparacion del proyecto (res/fps).
 
   La ventana solo escribe knobs y config; no toca el render. El panel
   de Properties del gizmo quedo pelado a un solo boton que abre esta.
 
-  Sin control de rotacion TODAVIA: el mecanismo se encontro (rotar el
-  grupo "root transform" del Text2, literal en animation_layers[10]),
-  pero falta cablearlo (ver Docu_SoftEffects_Aprendizajes.md). Los
-  knobs bi_<f>_rot existen pero quedan inertes por ahora.
+  La rotacion escribe ademas el literal en los Text2 del efecto via
+  LGA_NKS_BurnIn_Blink.apply_rotation (el mecanismo del grupo "root
+  transform"; ver Docu_SoftEffects_Aprendizajes.md). Si el viewer no
+  refresca solo, el boton Refresh Timeline del ViewerTL lo fuerza.
 
+  v2.01: Rotacion por campo cableada (RotationBar en el detalle,
+         aplica a la seleccion; presets guardan/cargan rot).
   v2.00: Rediseno completo. Tabla con drag-sliders (click-drag cambia,
          click escribe) y paint-toggle de checkboxes (click+drag
          tilda/destilda varios). Seleccion multiple + detalle que
@@ -67,6 +69,7 @@ _ANCHOR_X = (2.0, 50.0, 98.0)
 _ANCHOR_Y = (93.0, 50.0, 2.5)
 
 _WEIGHTS = ("Regular", "SemiBold", "Bold")
+_ROTATIONS = (0, 90, 180, 270)
 
 # Capa intermedia de tooltips (regla del repo: castellano, nunca hardcodeados
 # en el widget, para la futura migracion bilingue).
@@ -80,6 +83,7 @@ TOOLTIPS = {
         "field_size": "Tamano del texto de este campo en % (click-drag cambia, click escribe)",
         "field_name": "Click selecciona la fila; Ctrl/Shift para seleccionar varias",
         "anchor": "Manda X/Y de las filas seleccionadas a esa esquina o centro",
+        "rotation": "Rota el texto y su fondo de las filas seleccionadas",
         "custom_text": "Texto libre del campo custom seleccionado",
         "weight": "Peso de la fuente Inter (recalcula los fondos)",
         "text_color": "Color del texto de todos los campos",
@@ -314,6 +318,44 @@ class AnchorPicker(QtWidgets.QWidget):
             self._paint_cell(cell, abs(cx - x) < 0.6 and abs(cy - y) < 0.6)
 
 
+class RotationBar(QtWidgets.QWidget):
+    """Segmentado 0/90/180/270: rota texto+fondo de la seleccion."""
+
+    picked = QtCore.Signal(int)
+
+    def __init__(self, parent=None):
+        super(RotationBar, self).__init__(parent)
+        row = QtWidgets.QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        self._cells = []
+        for deg in _ROTATIONS:
+            cell = _Clickable()
+            cell.setFixedSize(40, Metric.ROW_HEIGHT)
+            lay = QtWidgets.QHBoxLayout(cell)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lbl = QtWidgets.QLabel("%d°" % deg)
+            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setStyleSheet("background:transparent;")
+            lay.addWidget(lbl)
+            cell.clicked.connect(lambda d=deg: self.picked.emit(d))
+            self._paint_cell(cell, False)
+            row.addWidget(cell)
+            self._cells.append((cell, deg))
+        row.addStretch(1)
+
+    def _paint_cell(self, cell, sel):
+        bg = Color.CHECKBOX_ON if sel else Color.CHECKBOX_OFF
+        cell.setStyleSheet(
+            "background:%s; border:1px solid %s; border-radius:%dpx;"
+            % (bg, Color.CHECKBOX_BORDER, Metric.RADIUS_FIELD - 2)
+        )
+
+    def highlight(self, deg):
+        for cell, d in self._cells:
+            self._paint_cell(cell, d == deg)
+
+
 # ── Acceso al efecto real (stubbeable para el harness) ────────────────────────
 
 
@@ -400,6 +442,21 @@ class HieroController(object):
             import LGA_NKS_BurnIn_Blink as bi_blink
 
             bi_blink.apply_font(self.node)
+        except Exception:
+            pass
+        self.nudge_all()
+
+    def apply_rotation(self, fields=None):
+        """Re-escribe la rotacion literal de los campos en el efecto.
+
+        Llamada directa (ademas del knobChanged del registro) para que la
+        rotacion funcione tambien en una sesion donde el registro viejo no
+        tenia el branch de bi_<f>_rot.
+        """
+        try:
+            import LGA_NKS_BurnIn_Blink as bi_blink
+
+            bi_blink.apply_rotation(self.node, fields=fields)
         except Exception:
             pass
         self.nudge_all()
@@ -636,10 +693,21 @@ class BurnInPanel(QtWidgets.QDialog):
         col_anchor.addWidget(self.anchor)
         fila.addLayout(col_anchor)
 
-        # Texto custom (rotacion no: Hiero no permite rotar el texto de un
-        # Text2 por campo en un soft effect; ver Docu_LGA_BurnIn.md).
+        # Rotacion + texto custom.
         col_right = QtWidgets.QVBoxLayout()
         col_right.setSpacing(Metric.SPACING)
+        row_rot = QtWidgets.QHBoxLayout()
+        row_rot.setSpacing(Metric.SPACING)
+        lbl_rot = QtWidgets.QLabel("Rotation")
+        lbl_rot.setFixedWidth(Metric.BUTTON_HEIGHT * 2)
+        row_rot.addWidget(lbl_rot)
+        self.rotbar = RotationBar()
+        self.rotbar.setToolTip(_tip("rotation"))
+        self.rotbar.picked.connect(self._on_rotation)
+        row_rot.addWidget(self.rotbar)
+        row_rot.addStretch(1)
+        col_right.addLayout(row_rot)
+
         row_txt = QtWidgets.QHBoxLayout()
         row_txt.setSpacing(Metric.SPACING)
         self.lbl_custom = QtWidgets.QLabel("Text")
@@ -905,17 +973,22 @@ class BurnInPanel(QtWidgets.QDialog):
         return keys
 
     def _sync_detalle(self):
-        """Refleja la seleccion en el detalle (ancla, texto)."""
+        """Refleja la seleccion en el detalle (ancla, rotacion, texto)."""
         keys = self._selected_keys()
         has = bool(keys)
         self.anchor.setEnabled(has)
+        self.rotbar.setEnabled(has)
         if keys:
             first = keys[0]
             x = float(self.ctl.get("bi_%s_x" % first, 0.0)) * 100.0
             y = float(self.ctl.get("bi_%s_y" % first, 0.0)) * 100.0
             self.anchor.highlight(x, y)
+            self.rotbar.highlight(
+                int(round(float(self.ctl.get("bi_%s_rot" % first, 0.0))))
+            )
         else:
             self.anchor.highlight(-1, -1)
+            self.rotbar.highlight(-1)
         # El texto custom aparece solo con un unico campo custom seleccionado.
         custom_keys = [k for k in keys if k in ("custom1", "custom2")]
         single_custom = custom_keys[0] if len(keys) == 1 and custom_keys else None
@@ -945,6 +1018,17 @@ class BurnInPanel(QtWidgets.QDialog):
             self.slider_y[key].setValue(y, emit=False)
         self.anchor.highlight(x, y)
         self.ctl.nudge_all()
+
+    def _on_rotation(self, deg):
+        if self._loading:
+            return
+        keys = self._selected_keys()
+        for key in keys:
+            self.ctl.set("bi_%s_rot" % key, float(deg))
+        # Escritura directa del literal en los Text2 (el knobChanged tambien
+        # lo hace, pero asi funciona aunque el registro cargado sea viejo).
+        self.ctl.apply_rotation(fields=tuple(keys) or None)
+        self.rotbar.highlight(deg)
 
     def _on_custom_text(self, text):
         if self._loading or not getattr(self, "_custom_key", None):
@@ -1040,6 +1124,7 @@ class BurnInPanel(QtWidgets.QDialog):
                 "x": round(self.slider_x[key].value() / 100.0, 4),
                 "y": round(self.slider_y[key].value() / 100.0, 4),
                 "size": round(self.slider_size[key].value(), 2),
+                "rot": round(float(self.ctl.get("bi_%s_rot" % key, 0.0)), 2),
             }
         estilo = {
             "weight": self.combo_weight.currentText(),
@@ -1100,6 +1185,8 @@ class BurnInPanel(QtWidgets.QDialog):
                     size = self._num(data["size"], 100.0)
                     self.slider_size[key].setValue(size, emit=False)
                     self.ctl.set("bi_%s_size" % key, size)
+                if "rot" in data:
+                    self.ctl.set("bi_%s_rot" % key, self._num(data["rot"], 0.0))
             if "weight" in estilo:
                 idx = self.combo_weight.findText(str(estilo["weight"]))
                 if idx >= 0:
@@ -1132,6 +1219,8 @@ class BurnInPanel(QtWidgets.QDialog):
         finally:
             self._loading = False
         self._sync_detalle()
+        # El preset puede traer rotaciones: reescribir los literales.
+        self.ctl.apply_rotation()
         self.ctl.nudge_all()
 
     def _guardar_proyecto(self):

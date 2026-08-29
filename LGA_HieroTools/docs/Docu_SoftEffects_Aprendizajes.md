@@ -162,12 +162,12 @@ camino onCreate+Load en vez de embeberlo).
 - El mecanismo de registro (`registerAction` + `foundry.timeline.effect.*`)
   es identico al menos desde Nuke 13 hasta 17.x.
 
-## Rotacion del texto por campo: pendiente (medido, 29-08)
+## Rotacion del texto por campo: RESUELTA (medido y validado, 29-08)
 
-Se quiere rotar cada campo (texto + fondo) por separado —para burn-ins
-verticales a los costados—. Estado: **no integrada todavia**. Los caminos
-directos NO rotan, pero hay una via prometedora (blob `animation_layers`) que
-quedo sin verificar bien. Pruebas en NKS 16, con capturas del viewer:
+Se quiso rotar cada campo (texto + fondo) por separado —para burn-ins
+verticales a los costados—. Estado: **funcionando** (validado en NKS a 90 y
+270 con capturas). Los caminos directos NO rotan; el que SI, abajo. Pruebas
+en NKS 16, con capturas del viewer:
 
 1. El transform tab del Text2 (`translate`, `rotate`) NO renderiza: mover
    `translate` 400px no movio el texto; `rotate` 90 no lo roto. El Text2 se
@@ -202,6 +202,17 @@ Trampas medidas al intentar cablearlo:
 - El **centro** de la rotacion (posiciones [2][3] del layer) hay que ajustarlo
   por campo para que rote SOBRE SI MISMO; con el default queda descentrado.
 
-PENDIENTE: cablear una `apply_rotation()` que, leyendo `bi_<f>_rot`, escriba el
-literal en [10] con el grupo seleccionado y el centro correcto por campo, y que
-refresque. Los knobs `bi_<f>_rot` ya existen (inertes por ahora).
+CABLEADO (v1.03 del Blink): `apply_rotation()` lee `bi_<f>_rot` y escribe el
+literal en [10] con el grupo seleccionado; el pivote es el CENTRO del panel
+(`panel_geo('cx')` + la formula del alto), el mismo que se bindea a ax/ay del
+kernel — texto y fondo giran juntos y el conjunto rota sobre si mismo. Se llama
+desde el onCreate (setup), el knobChanged (bi_<f>_rot / x / y / size / scale /
+text_pad / weight) y el panel. Dos trampas mas, medidas al cablear:
+
+- `gizmo.width()/height()` por API devuelven el formato DEFAULT (640x480), no
+  el del stream: el formato real sale de `hiero.ui.activeSequence().format()`
+  (`_timeline_format()`).
+- Un efecto creado/mutado por API puede no aparecer en el viewer hasta forzar
+  un refresh de verdad: ni el nudge de opacity ni un toggle de enable alcanzan
+  siempre; el `LGA_NKS_Timeline_Refresh` del pack (cerrar/reabrir el viewer) lo
+  garantiza. En interaccion normal de UI el problema no aparece.
