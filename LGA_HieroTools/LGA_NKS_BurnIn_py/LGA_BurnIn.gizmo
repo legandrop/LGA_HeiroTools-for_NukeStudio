@@ -1,41 +1,38 @@
 Gizmo {
  addUserKnob {20 lga_burnin_tab l "LGA BurnIn"}
+ addUserKnob {84 bi_font l "font"}
+ addUserKnob {7 bi_scale l "text scale" R 0.0 2.0}
+ bi_scale 0.5
  addUserKnob {19 bi_color l "text color" t "Color del texto"}
  bi_color {1.0}
  addUserKnob {7 bi_opacity l "text opacity" t "Opacidad del texto" R 0.0 1.0}
  bi_opacity 1.0
- addUserKnob {84 bi_font l "font"}
- addUserKnob {84 bi_font_digits l "font digits"}
- addUserKnob {26 bi_font_digits_help l "" +STARTLINE T "font digits: fuente para frame y timecode. Elegir una monoespaciada (ej. Courier New) para que el texto no cambie de ancho al cambiar los digitos."}
- addUserKnob {7 bi_scale l "text scale" R 0.0 2.0}
- bi_scale 0.5
  addUserKnob {26 ""}
  addUserKnob {6 bi_clip_on l "clip name" t "Muestra el nombre del clip visible" +STARTLINE}
  bi_clip_on true
+ addUserKnob {6 bi_clip_bg l "bg" t "Panel redondeado de fondo detras de clip name"}
+ bi_clip_bg true
  addUserKnob {6 bi_cspace_on l "colorspace" t "Muestra el espacio de color del clip visible" +STARTLINE}
  bi_cspace_on true
+ addUserKnob {6 bi_cspace_bg l "bg" t "Panel redondeado de fondo detras de colorspace"}
+ bi_cspace_bg true
  addUserKnob {6 bi_res_on l "resolution" t "Muestra la resolucion del clip visible; rojo si difiere del objetivo del proyecto (solo plates EXR)" +STARTLINE}
  bi_res_on true
+ addUserKnob {6 bi_res_bg l "bg" t "Panel redondeado de fondo detras de resolution"}
+ bi_res_bg true
  addUserKnob {6 bi_frame_on l "frame" t "Muestra el numero de frame del clip visible" +STARTLINE}
  bi_frame_on true
+ addUserKnob {6 bi_frame_bg l "bg" t "Panel redondeado de fondo detras de frame"}
+ bi_frame_bg true
  addUserKnob {6 bi_tc_on l "timecode" t "Muestra el timecode del clip visible" +STARTLINE}
  bi_tc_on true
+ addUserKnob {6 bi_tc_bg l "bg" t "Panel redondeado de fondo detras de timecode"}
+ bi_tc_bg true
  addUserKnob {6 bi_fps_on l "fps" t "Muestra los fps del clip visible; rojo si difieren del objetivo del proyecto" +STARTLINE}
  bi_fps_on true
- addUserKnob {26 ""}
- addUserKnob {26 bi_bg_label l "" +STARTLINE T "Backgrounds (paneles redondeados)"}
- addUserKnob {6 bi_clip_bg l "bg clip name" t "Panel redondeado de fondo detras de clip name" +STARTLINE}
- bi_clip_bg true
- addUserKnob {6 bi_cspace_bg l "bg colorspace" t "Panel redondeado de fondo detras de colorspace" +STARTLINE}
- bi_cspace_bg true
- addUserKnob {6 bi_res_bg l "bg resolution" t "Panel redondeado de fondo detras de resolution" +STARTLINE}
- bi_res_bg true
- addUserKnob {6 bi_frame_bg l "bg frame" t "Panel redondeado de fondo detras de frame" +STARTLINE}
- bi_frame_bg true
- addUserKnob {6 bi_tc_bg l "bg timecode" t "Panel redondeado de fondo detras de timecode" +STARTLINE}
- bi_tc_bg true
- addUserKnob {6 bi_fps_bg l "bg fps" t "Panel redondeado de fondo detras de fps" +STARTLINE}
+ addUserKnob {6 bi_fps_bg l "bg" t "Panel redondeado de fondo detras de fps"}
  bi_fps_bg true
+ addUserKnob {26 ""}
  addUserKnob {19 bi_bg_color l "bg color" t "Color de los paneles de fondo"}
  bi_bg_color {0.0 0.0 0.0 1.0}
  addUserKnob {7 bi_bg_opacity l "bg opacity" t "Opacidad de los paneles de fondo" R 0.0 1.0}
@@ -46,56 +43,32 @@ Gizmo {
  bi_text_pad 28
  addUserKnob {22 bi_open_panel l "Open LGA Panel" t "Abre el panel de LGA BurnIn con el estilo del pack" T "__import__('LGA_NKS_BurnIn_Panel').show_panel()" +STARTLINE}
  addUserKnob {20 bi_layout_tab l "Layout"}
- addUserKnob {26 bi_layout_help l "" +STARTLINE T "Caja del panel de cada campo, en fracciones del formato (x, y = esquina inferior-izquierda; w, h = tamano). El texto se centra verticalmente adentro."}
+ addUserKnob {26 bi_layout_help l "" +STARTLINE T "Ancla de cada campo en fracciones del formato. El panel abraza a su texto solo."}
  addUserKnob {7 bi_clip_x l "clip x" R 0 1}
  bi_clip_x 0.02
- addUserKnob {7 bi_clip_y l "clip y" R 0 1}
- bi_clip_y 0.92
- addUserKnob {7 bi_clip_w l "clip w" R 0 1}
- bi_clip_w 0.34
- addUserKnob {7 bi_clip_h l "clip h" R 0 1}
- bi_clip_h 0.05
+ addUserKnob {7 bi_clip_y l "y" -STARTLINE R 0 1}
+ bi_clip_y 0.93
  addUserKnob {7 bi_cspace_x l "cspace x" R 0 1}
- bi_cspace_x 0.4
- addUserKnob {7 bi_cspace_y l "cspace y" R 0 1}
- bi_cspace_y 0.92
- addUserKnob {7 bi_cspace_w l "cspace w" R 0 1}
- bi_cspace_w 0.2
- addUserKnob {7 bi_cspace_h l "cspace h" R 0 1}
- bi_cspace_h 0.05
+ bi_cspace_x 0.5
+ addUserKnob {7 bi_cspace_y l "y" -STARTLINE R 0 1}
+ bi_cspace_y 0.93
  addUserKnob {7 bi_res_x l "res x" R 0 1}
- bi_res_x 0.86
- addUserKnob {7 bi_res_y l "res y" R 0 1}
- bi_res_y 0.92
- addUserKnob {7 bi_res_w l "res w" R 0 1}
- bi_res_w 0.12
- addUserKnob {7 bi_res_h l "res h" R 0 1}
- bi_res_h 0.05
+ bi_res_x 0.98
+ addUserKnob {7 bi_res_y l "y" -STARTLINE R 0 1}
+ bi_res_y 0.93
  addUserKnob {7 bi_frame_x l "frame x" R 0 1}
  bi_frame_x 0.02
- addUserKnob {7 bi_frame_y l "frame y" R 0 1}
- bi_frame_y 0.03
- addUserKnob {7 bi_frame_w l "frame w" R 0 1}
- bi_frame_w 0.11
- addUserKnob {7 bi_frame_h l "frame h" R 0 1}
- bi_frame_h 0.05
+ addUserKnob {7 bi_frame_y l "y" -STARTLINE R 0 1}
+ bi_frame_y 0.025
  addUserKnob {7 bi_tc_x l "tc x" R 0 1}
- bi_tc_x 0.145
- addUserKnob {7 bi_tc_y l "tc y" R 0 1}
- bi_tc_y 0.03
- addUserKnob {7 bi_tc_w l "tc w" R 0 1}
- bi_tc_w 0.155
- addUserKnob {7 bi_tc_h l "tc h" R 0 1}
- bi_tc_h 0.05
+ bi_tc_x 0.22
+ addUserKnob {7 bi_tc_y l "y" -STARTLINE R 0 1}
+ bi_tc_y 0.025
  addUserKnob {7 bi_fps_x l "fps x" R 0 1}
- bi_fps_x 0.9
- addUserKnob {7 bi_fps_y l "fps y" R 0 1}
- bi_fps_y 0.03
- addUserKnob {7 bi_fps_w l "fps w" R 0 1}
- bi_fps_w 0.08
- addUserKnob {7 bi_fps_h l "fps h" R 0 1}
- bi_fps_h 0.05
- help "LGA BurnIn: un solo soft effect con la metadata del clip visible, con paneles redondeados de fondo (BlinkScript).\n\nresolution y fps se pintan de rojo si no coinciden con el objetivo del proyecto (config en AppData + tag del proyecto). Posiciones en la pestana Layout. Open LGA Panel abre el editor con el estilo del pack."
+ bi_fps_x 0.98
+ addUserKnob {7 bi_fps_y l "y" -STARTLINE R 0 1}
+ bi_fps_y 0.025
+ help "LGA BurnIn: un solo soft effect con la metadata del clip visible sobre paneles redondeados que abrazan al texto (BlinkScript).\n\nresolution y fps se pintan de rojo si no coinciden con el objetivo del proyecto (config en AppData + tag del proyecto). Anclas en la pestana Layout. Open LGA Panel abre el editor con el estilo del pack."
 }
  Input {
   inputs 0
@@ -127,7 +100,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_clip_x*width+parent.bi_text_pad"} {"parent.bi_clip_y*height"} {"(parent.bi_clip_x+parent.bi_clip_w)*width-parent.bi_text_pad"} {"(parent.bi_clip_y+parent.bi_clip_h)*height"}}
+  box {{"parent.bi_clip_x*width+parent.bi_text_pad"} {"parent.bi_clip_y*height"} {"width"} {"parent.bi_clip_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
   yjustify center
   cliptype none
   transforms {{0 2}
@@ -159,7 +132,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_cspace_x*width+parent.bi_text_pad"} {"parent.bi_cspace_y*height"} {"(parent.bi_cspace_x+parent.bi_cspace_w)*width-parent.bi_text_pad"} {"(parent.bi_cspace_y+parent.bi_cspace_h)*height"}}
+  box {{"0"} {"parent.bi_cspace_y*height"} {"2*parent.bi_cspace_x*width"} {"parent.bi_cspace_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
   xjustify center
   yjustify center
   cliptype none
@@ -193,7 +166,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_res_x*width+parent.bi_text_pad"} {"parent.bi_res_y*height"} {"(parent.bi_res_x+parent.bi_res_w)*width-parent.bi_text_pad"} {"(parent.bi_res_y+parent.bi_res_h)*height"}}
+  box {{"0"} {"parent.bi_res_y*height"} {"parent.bi_res_x*width-parent.bi_text_pad"} {"parent.bi_res_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
   xjustify right
   yjustify center
   cliptype none
@@ -227,12 +200,12 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_frame_x*width+parent.bi_text_pad"} {"parent.bi_frame_y*height"} {"(parent.bi_frame_x+parent.bi_frame_w)*width-parent.bi_text_pad"} {"(parent.bi_frame_y+parent.bi_frame_h)*height"}}
+  box {{"parent.bi_frame_x*width+parent.bi_text_pad"} {"parent.bi_frame_y*height"} {"width"} {"parent.bi_frame_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
-  font "\[value parent.bi_font_digits]"
+  font "\[value parent.bi_font]"
   cursor_position 74
   global_font_scale {{parent.bi_scale}}
   scale {1 1}
@@ -259,12 +232,12 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_tc_x*width+parent.bi_text_pad"} {"parent.bi_tc_y*height"} {"(parent.bi_tc_x+parent.bi_tc_w)*width-parent.bi_text_pad"} {"(parent.bi_tc_y+parent.bi_tc_h)*height"}}
+  box {{"parent.bi_tc_x*width+parent.bi_text_pad"} {"parent.bi_tc_y*height"} {"width"} {"parent.bi_tc_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
-  font "\[value parent.bi_font_digits]"
+  font "\[value parent.bi_font]"
   cursor_position 74
   global_font_scale {{parent.bi_scale}}
   scale {1 1}
@@ -291,7 +264,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_fps_x*width+parent.bi_text_pad"} {"parent.bi_fps_y*height"} {"(parent.bi_fps_x+parent.bi_fps_w)*width-parent.bi_text_pad"} {"(parent.bi_fps_y+parent.bi_fps_h)*height"}}
+  box {{"0"} {"parent.bi_fps_y*height"} {"parent.bi_fps_x*width-parent.bi_text_pad"} {"parent.bi_fps_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
   xjustify right
   yjustify center
   cliptype none

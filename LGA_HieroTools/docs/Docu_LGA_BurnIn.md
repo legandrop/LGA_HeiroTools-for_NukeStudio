@@ -1,9 +1,10 @@
 # LGA_BurnIn — soft effect de burn-in con metadata del clip visible
 
-> Estado (29 ago 2026): **LGA_BurnIn** (BlinkScript + Text2) implementado
-> end-to-end, pendiente de la validacion visual final en NKS. La version
-> anterior queda como **LGA_BurnIn_v0** (solo Text2, fondos rectangulares
-> nativos), registrada aparte en el mismo menu.
+> Estado (29 ago 2026): **LGA_BurnIn** VALIDADO EN NKS REAL (efecto desde
+> el menu Effects, paneles medidos en el viewer, rojo condicional, ventana
+> desde el boton, presets) con capturas. La version anterior queda como
+> **LGA_BurnIn_v0** (solo Text2), registrada aparte en el mismo menu.
+> Pendiente: commit de esta ronda cuando Lega lo pida.
 
 ## Que es
 
@@ -28,10 +29,14 @@ coincide con el objetivo del proyecto.
 Objetivos: `res_target` y `fps_target` — `"timeline"` (formato/fps de la
 secuencia) o explicitos (`"3840x2160"`, `24`).
 
-Layout default: dos filas balanceadas — arriba `clip | colorspace | res`,
-abajo `frame | tc | fps` — con margenes parejos y paneles del ancho del
-contenido esperable. Todo en fracciones del formato: se adapta solo al
-cambiar de resolucion de proyecto.
+Layout: **los paneles ABRAZAN a su texto** — el ancho se mide con
+QFontMetrics del contenido real (con los digitos normalizados a "8" para
+que frame/TC no cambien de ancho) mas `text padding`; el alto sale de una
+formula compartida con los box de los Text2 (centrado vertical exacto).
+Cada campo tiene un ANCLA (x, y en fracciones del formato; izquierda,
+centro o derecha segun el campo). Default: dos filas balanceadas — arriba
+`clip | colorspace | res`, abajo `frame | tc | fps`. Un campo sin texto no
+dibuja panel.
 
 ## Arquitectura del gizmo
 
@@ -83,9 +88,15 @@ captura en `UI_Captures/BurnIn_Panel.png`) edita en vivo el efecto —
 campos, fondos, colores, opacidades, radio, padding — y los objetivos del
 proyecto, con dos guardados:
 
+- **Layout (% of format)**: posicion X/Y de cada campo en porcentaje,
+  editada en vivo sobre el efecto.
+- **Presets**: guardan campos+layout+estilo con nombre en el BurnIn.json
+  de AppData; Load los aplica al efecto y nudgea.
 - **Save Targets to Project**: tag `LGA_BurnIn_Settings` en el `tagsBin()`
   (key `tag.lga_burnin_config`) — viaja dentro del `.hrox`; Clean Project
-  no toca tags. Hay que guardar el proyecto despues.
+  no toca tags. Hay que guardar el proyecto despues. Tras guardar, la
+  ventana NUDGEA los efectos (el timeline no re-evalua las expresiones de
+  color hasta que el nodo se ensucia — medido).
 - **Save Targets as Defaults**: `%APPDATA%\LGA\HieroTools\BurnIn.json`
   (**no se versiona**: mapea nombres reales de proyectos; ejemplos siempre
   con `PROJA`).

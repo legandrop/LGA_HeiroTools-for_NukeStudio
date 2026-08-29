@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Config v1.01 | Lega
+  LGA_NKS_BurnIn_Config v1.02 | Lega
 
   Capa de configuracion de LGA_BurnIn. Resuelve la config efectiva
   en dos niveles: defaults + archivo de usuario en AppData
@@ -10,6 +10,8 @@ ____________________________________________________________________
   Modulo puro: no importa nuke ni hiero, para poder testearlo fuera
   del host.
 
+  v1.02: Presets de usuario con nombre (list/load/save) en la seccion
+         "presets" del BurnIn.json.
   v1.01: Frame/TC separados, campo colorspace, y pos como caja de
          panel (x, y, w, h) con el layout de dos filas balanceadas.
   v1.00: Version inicial.
@@ -167,6 +169,33 @@ def save_user_file(data, path=None):
         return None
     except Exception as exc:
         return "No se pudo escribir {}: {}".format(p, exc)
+
+
+# ── Presets de usuario (viven en el mismo BurnIn.json, seccion "presets") ─────
+
+
+def list_presets(path=None):
+    """Nombres de presets guardados, ordenados."""
+    data, _error = load_user_file(path)
+    return sorted((data.get("presets") or {}).keys())
+
+
+def load_preset(name, path=None):
+    """Dict del preset o None si no existe."""
+    data, _error = load_user_file(path)
+    preset = (data.get("presets") or {}).get(name)
+    return copy.deepcopy(preset) if isinstance(preset, dict) else None
+
+
+def save_preset(name, preset, path=None):
+    """Guarda/pisa un preset. Devuelve error o None."""
+    if not name or not str(name).strip():
+        return "El preset necesita un nombre"
+    data, error = load_user_file(path)
+    if error:
+        return error
+    data.setdefault("presets", {})[str(name).strip()] = copy.deepcopy(preset)
+    return save_user_file(data, path)
 
 
 def resolve(user_data, project_name, project_tag_json):

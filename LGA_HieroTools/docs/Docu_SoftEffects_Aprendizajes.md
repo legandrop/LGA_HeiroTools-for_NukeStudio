@@ -139,6 +139,17 @@ formato.
 | 6 | ¿Renderiza en el export? | Los soft effects van al export por default ("Include Effects"); confirmado por doc para soft effects en general. El gpuOP viewport-only era la era pre-14.1. |
 | 7 | Params del soft effect BlinkScript | Solo `int`, `float`, `bool` (doc). Todo escalar; los toggles llegan como 0.0/1.0 por expresion. |
 
+Dos trampas mas, medidas en NKS 16 con el efecto andando:
+
+- **`hiero/project` llega VACIO en el stream del gizmo en el timeline**,
+  aunque el preset del BurnIn nativo lo liste. Para saber el proyecto desde
+  la logica: fallback a `hiero.ui.activeSequence().project()` y, si no, al
+  unico proyecto abierto.
+- **Las expresiones `[python ...]` de knobs de color NO se re-evaluan al
+  cambiar datos externos** (config, tag): el timeline cachea hasta que el
+  NODO se ensucia. Tras cambiar config por fuera, tocar un knob del efecto
+  (nudge: setValue(v-0.001) y setValue(v)) fuerza el refresco.
+
 Serializacion de un kernel embebido en `.gizmo` (patron de los NST_*):
 `kernelSource` en UNA linea con `\n`, `\{`, `\}`, `\"`; `KernelDescription`
 es un blob que genera Nuke al compilar (no se escribe a mano — por eso el

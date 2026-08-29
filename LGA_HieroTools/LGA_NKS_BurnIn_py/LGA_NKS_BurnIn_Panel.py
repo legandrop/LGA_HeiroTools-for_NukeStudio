@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v1.00 | Lega
+  LGA_NKS_BurnIn_Panel v1.01 | Lega
 
   Ventana de LGA BurnIn con el estilo del pack: edita en vivo los
   knobs del efecto seleccionado en el timeline (campos, fondos,
@@ -12,6 +12,11 @@ ____________________________________________________________________
   La ventana no toca el render: solo escribe knobs y config. El panel
   de properties de Nuke queda como fallback crudo.
 
+  v1.01: Seccion Layout con la posicion de cada campo en % del
+         formato, presets con nombre (guardar/cargar, en el
+         BurnIn.json de AppData) y nudge automatico de los efectos
+         tras guardar targets (el timeline no re-evalua las
+         expresiones python de color hasta que el nodo se ensucia).
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -56,6 +61,11 @@ TOOLTIPS = {
         "fps_target": "FPS esperados: 'timeline' o un numero. Si el clip no coincide, FPS se pinta de rojo",
         "save_defaults": "Guarda los objetivos como default del usuario (AppData)",
         "save_project": "Guarda los objetivos en el proyecto: viajan dentro del .hrox",
+        "layout_pos": "Posicion del campo en porcentaje del formato (se adapta a cualquier resolucion)",
+        "preset_combo": "Presets guardados en AppData",
+        "preset_load": "Aplica el preset elegido al efecto",
+        "preset_name": "Nombre para guardar el estado actual como preset",
+        "preset_save": "Guarda campos, estilo y layout actuales con ese nombre",
     },
 }
 
@@ -164,6 +174,42 @@ class HieroController(object):
         except Exception:
             pass
 
+    def nudge_all(self):
+        """Ensucia todos los LGA_BurnIn de la secuencia activa.
+
+        MEDIDO en NKS: el timeline no re-evalua las expresiones python de
+        color hasta que el nodo cambia; sin esto un target nuevo no pinta.
+        """
+        try:
+            import hiero.ui
+
+            seq = hiero.ui.activeSequence()
+            if seq is None:
+                return
+            for track in seq.videoTracks():
+                for sub in track.subTrackItems():
+                    for item in sub:
+                        try:
+                            node = item.node()
+                            if node.Class() != "LGA_BurnIn":
+                                continue
+                            value = node["bi_opacity"].value()
+                            node["bi_opacity"].setValue(value - 0.001)
+                            node["bi_opacity"].setValue(value)
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+
+    def list_presets(self):
+        return bi_config.list_presets()
+
+    def load_preset(self, name):
+        return bi_config.load_preset(name)
+
+    def save_preset(self, name, preset):
+        return bi_config.save_preset(name, preset)
+
 
 class BurnInPanel(QtWidgets.QDialog):
     """Editor de LGA BurnIn con el estilo del pack."""
@@ -173,7 +219,9 @@ class BurnInPanel(QtWidgets.QDialog):
         self.ctl = controller
         self.setWindowTitle("LGA BurnIn")
         self.setStyleSheet(Style.FORM)
-        self.setMinimumWidth(Metric.DIALOG_MIN_WIDTH)
+        # Mas ancha que el minimo estandar: la seccion Layout lleva seis
+        # columnas (label + X + Y, dos campos por fila).
+        self.setMinimumWidth(int(Metric.DIALOG_MIN_WIDTH * 1.3))
         self._loading = True
         self._armar_ui()
         apply_ui_font(self)
@@ -193,7 +241,9 @@ class BurnInPanel(QtWidgets.QDialog):
 
         layout.addLayout(self._fila_target())
         layout.addWidget(self._grupo_campos())
+        layout.addWidget(self._grupo_layout())
         layout.addWidget(self._grupo_estilo())
+        layout.addWidget(self._grupo_presets())
         layout.addWidget(self._grupo_proyecto())
         layout.addLayout(self._acciones())
 
@@ -238,6 +288,68 @@ class BurnInPanel(QtWidgets.QDialog):
             grid.addWidget(bg, row, col + 1)
             self.chk_bg[key] = bg
         grid.setColumnStretch(4, 1)
+        return grupo
+
+    def _grupo_layout(self):
+        grupo = QtWidgets.QGroupBox("Layout (% of format)")
+        grid = QtWidgets.QGridLayout(grupo)
+        grid.setContentsMargins(
+            Metric.SPACING, Metric.SPACING, Metric.SPACING, Metric.SPACING
+        )
+        grid.setHorizontalSpacing(Metric.SPACING * 2)
+        grid.setVerticalSpacing(Metric.SPACING)
+
+        self.spin_x = {}
+        self.spin_y = {}
+        mitad = (len(FIELDS) + 1) // 2
+        for i, (key, label) in enumerate(FIELDS):
+            col = 0 if i < mitad else 3
+            row = i % mitad
+            grid.addWidget(QtWidgets.QLabel(label), row, col)
+            sx = self._spin(0.0, 100.0, 0.5, _tip("layout_pos"))
+            sx.setSuffix(" %")
+            sx.setMinimumWidth(Metric.BUTTON_HEIGHT * 3)
+            sx.valueChanged.connect(self._hacer_setter_pct("bi_%s_x" % key))
+            grid.addWidget(sx, row, col + 1)
+            self.spin_x[key] = sx
+            sy = self._spin(0.0, 100.0, 0.5, _tip("layout_pos"))
+            sy.setSuffix(" %")
+            sy.setMinimumWidth(Metric.BUTTON_HEIGHT * 3)
+            sy.valueChanged.connect(self._hacer_setter_pct("bi_%s_y" % key))
+            grid.addWidget(sy, row, col + 2)
+            self.spin_y[key] = sy
+        grid.setColumnStretch(6, 1)
+        return grupo
+
+    def _grupo_presets(self):
+        grupo = QtWidgets.QGroupBox("Presets")
+        fila = QtWidgets.QHBoxLayout(grupo)
+        fila.setContentsMargins(
+            Metric.SPACING, Metric.SPACING, Metric.SPACING, Metric.SPACING
+        )
+        fila.setSpacing(Metric.SPACING)
+
+        self.combo_presets = QtWidgets.QComboBox()
+        self.combo_presets.setStyleSheet(Style.COMBO)
+        self.combo_presets.setToolTip(_tip("preset_combo"))
+        fila.addWidget(self.combo_presets, 1)
+
+        cargar = QtWidgets.QPushButton("Load")
+        cargar.setStyleSheet(Style.BTN_SMALL)
+        cargar.setToolTip(_tip("preset_load"))
+        cargar.clicked.connect(self._cargar_preset)
+        fila.addWidget(cargar)
+
+        self.edit_preset = QtWidgets.QLineEdit()
+        self.edit_preset.setPlaceholderText("preset name")
+        self.edit_preset.setToolTip(_tip("preset_name"))
+        fila.addWidget(self.edit_preset, 1)
+
+        guardar = QtWidgets.QPushButton("Save")
+        guardar.setStyleSheet(Style.BTN_SMALL)
+        guardar.setToolTip(_tip("preset_save"))
+        guardar.clicked.connect(self._guardar_preset)
+        fila.addWidget(guardar)
         return grupo
 
     def _grupo_estilo(self):
@@ -379,6 +491,16 @@ class BurnInPanel(QtWidgets.QDialog):
 
         return _set
 
+    def _hacer_setter_pct(self, knob):
+        """Setter para los spins de layout: la UI habla en %, el knob en 0-1."""
+
+        def _set(value):
+            if self._loading:
+                return
+            self.ctl.set(knob, float(value) / 100.0)
+
+        return _set
+
     # -- estado --------------------------------------------------------------
     def _cargar_estado(self):
         self._loading = True
@@ -393,6 +515,10 @@ class BurnInPanel(QtWidgets.QDialog):
         self.spin_pad.setValue(float(self.ctl.get("bi_text_pad", 28.0)))
         self._pintar_swatch(self.btn_text_color, self.ctl.get_color("bi_color"))
         self._pintar_swatch(self.btn_bg_color, self.ctl.get_color("bi_bg_color"))
+        for key, _label in FIELDS:
+            self.spin_x[key].setValue(float(self.ctl.get("bi_%s_x" % key, 0.0)) * 100.0)
+            self.spin_y[key].setValue(float(self.ctl.get("bi_%s_y" % key, 0.0)) * 100.0)
+        self._recargar_presets()
 
         proyecto = self.ctl.project_name or "-"
         self.lbl_proyecto.setText("Project: %s" % emphasis(proyecto))
@@ -420,16 +546,105 @@ class BurnInPanel(QtWidgets.QDialog):
         self.ctl.set_color(knob, rgb)
         self._pintar_swatch(boton, rgb)
 
+    def _recargar_presets(self):
+        actual = self.combo_presets.currentText()
+        self.combo_presets.clear()
+        self.combo_presets.addItems(self.ctl.list_presets())
+        if actual:
+            idx = self.combo_presets.findText(actual)
+            if idx >= 0:
+                self.combo_presets.setCurrentIndex(idx)
+
+    def _estado_actual(self):
+        """Snapshot de campos + layout + estilo para guardar como preset."""
+        fields = {}
+        for key, _label in FIELDS:
+            fields[key] = {
+                "on": self.chk_on[key].isChecked(),
+                "bg": self.chk_bg[key].isChecked(),
+                "x": round(self.spin_x[key].value() / 100.0, 4),
+                "y": round(self.spin_y[key].value() / 100.0, 4),
+            }
+        estilo = {
+            "text_color": list(self.ctl.get_color("bi_color")),
+            "bg_color": list(self.ctl.get_color("bi_bg_color")),
+            "text_opacity": self.spin_opacity.value(),
+            "text_scale": self.spin_scale.value(),
+            "bg_opacity": self.spin_bg_opacity.value(),
+            "bg_radius": self.spin_radius.value(),
+            "text_pad": self.spin_pad.value(),
+        }
+        return {"fields": fields, "style": estilo}
+
+    def _guardar_preset(self):
+        nombre = self.edit_preset.text().strip()
+        error = self.ctl.save_preset(nombre, self._estado_actual())
+        if error:
+            self._avisar(error, "")
+            return
+        # Exito silencioso: el preset apareciendo seleccionado en el combo
+        # es el feedback (un cartel modal aca corta el flujo de trabajo).
+        self._recargar_presets()
+        idx = self.combo_presets.findText(nombre)
+        if idx >= 0:
+            self.combo_presets.setCurrentIndex(idx)
+        self.edit_preset.clear()
+
+    def _cargar_preset(self):
+        nombre = self.combo_presets.currentText()
+        if not nombre:
+            self._avisar("No preset selected", "")
+            return
+        preset = self.ctl.load_preset(nombre)
+        if not preset:
+            self._avisar("Preset '%s' not found" % nombre, "")
+            return
+        fields = preset.get("fields") or {}
+        estilo = preset.get("style") or {}
+        for key, _label in FIELDS:
+            data = fields.get(key) or {}
+            if "on" in data:
+                self.chk_on[key].setChecked(bool(data["on"]))
+            if "bg" in data:
+                self.chk_bg[key].setChecked(bool(data["bg"]))
+            if "x" in data:
+                self.spin_x[key].setValue(float(data["x"]) * 100.0)
+            if "y" in data:
+                self.spin_y[key].setValue(float(data["y"]) * 100.0)
+        if "text_opacity" in estilo:
+            self.spin_opacity.setValue(float(estilo["text_opacity"]))
+        if "text_scale" in estilo:
+            self.spin_scale.setValue(float(estilo["text_scale"]))
+        if "bg_opacity" in estilo:
+            self.spin_bg_opacity.setValue(float(estilo["bg_opacity"]))
+        if "bg_radius" in estilo:
+            self.spin_radius.setValue(float(estilo["bg_radius"]))
+        if "text_pad" in estilo:
+            self.spin_pad.setValue(float(estilo["text_pad"]))
+        if "text_color" in estilo:
+            rgb = tuple(estilo["text_color"])[:3]
+            self.ctl.set_color("bi_color", rgb)
+            self._pintar_swatch(self.btn_text_color, rgb)
+        if "bg_color" in estilo:
+            rgb = tuple(estilo["bg_color"])[:3]
+            self.ctl.set_color("bi_bg_color", rgb)
+            self._pintar_swatch(self.btn_bg_color, rgb)
+        self.ctl.nudge_all()
+
     def _guardar_proyecto(self):
         error = self.ctl.save_targets_project(
             self.edit_res.text().strip(), self.edit_fps.text().strip()
         )
+        if not error:
+            self.ctl.nudge_all()
         self._avisar(error, "Targets saved to the project (travels in the .hrox). Remember to save the project.")
 
     def _guardar_defaults(self):
         error = self.ctl.save_targets_defaults(
             self.edit_res.text().strip(), self.edit_fps.text().strip()
         )
+        if not error:
+            self.ctl.nudge_all()
         self._avisar(error, "Targets saved as user defaults.")
 
     def _avisar(self, error, ok_texto):

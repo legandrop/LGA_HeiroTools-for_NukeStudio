@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.01 | Lega
+  LGA_NKS_BurnIn_Logic v1.02 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,11 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.02: panel_geo(): geometria de los paneles medida del texto real
+         (QFontMetrics, digitos normalizados a 8) con anclas por campo.
+         Fix medido en NKS: hiero/project llega vacio en el stream del
+         timeline; el nombre del proyecto ahora cae a la secuencia
+         activa o al unico proyecto abierto.
   v1.01: Frame y TC como campos separados, campo colorspace (por API
          con cache) y registro de llamadas en el log para diagnostico.
   v1.00: Version inicial. Campos res (rojo condicional, solo EXR),
@@ -74,6 +79,7 @@ def invalidate_cache():
     """Vacia los caches. Lo llama el registro en eventos de proyecto."""
     _config_cache.clear()
     _colorspace_cache.clear()
+    _measure_cache.clear()
     _logged_error_keys.clear()
     _log("Cache de config invalidado")
 
@@ -145,7 +151,33 @@ def _meta(parent, key, frame=None):
 
 
 def _project_name(parent):
-    return _meta(parent, "hiero/project")
+    """Nombre del proyecto del clip visible.
+
+    MEDIDO en NKS 16: la key hiero/project llega VACIA en el stream del
+    gizmo en el timeline (aunque el preset del BurnIn nativo la liste),
+    asi que hay cadena de fallbacks: metadata -> secuencia activa ->
+    unico proyecto de usuario abierto.
+    """
+    name = _meta(parent, "hiero/project")
+    if name:
+        return name
+    try:
+        import hiero.ui
+
+        seq = hiero.ui.activeSequence()
+        if seq is not None:
+            return seq.project().name()
+    except Exception:
+        pass
+    try:
+        import hiero.core
+
+        projs = hiero.core.projects()
+        if len(projs) == 1:
+            return projs[0].name()
+    except Exception:
+        pass
+    return None
 
 
 def _clip_res(parent):
@@ -305,6 +337,98 @@ def bi_ok(field, parent, frame=None):
     except Exception as exc:
         _log_error_once("ok:" + str(field), str(exc))
         return 1.0
+
+
+# ── Geometria de los paneles de fondo (medida del texto real) ─────────────────
+#
+# El panel de cada campo ABRAZA a su texto: el ancho se mide con QFontMetrics
+# sobre el texto del campo (con los digitos normalizados a "8" para que
+# frame/tc no cambien de ancho al correr los numeros) mas el padding. Cada
+# campo ancla a la izquierda, al centro o a la derecha de su knob bi_<f>_x.
+# Lo llaman las expresiones de los parametros del BlinkScript (via el setup
+# de LGA_NKS_BurnIn_Blink), una vez por frame: todo cacheado.
+
+_measure_cache = {}
+
+PANEL_ANCHOR = {
+    "clip": "left",
+    "cspace": "center",
+    "res": "right",
+    "frame": "left",
+    "tc": "left",
+    "fps": "right",
+}
+
+
+def _digit_template(text):
+    """Normaliza digitos a '8' para medir un ancho estable por campo."""
+    return "".join("8" if ch.isdigit() else ch for ch in str(text))
+
+
+def _font_px(parent):
+    """Tamano en px del texto de Text2: base 100 x global_font_scale."""
+    try:
+        scale = float(parent["bi_scale"].value())
+    except Exception:
+        scale = 0.5
+    return max(8, int(round(100.0 * scale)))
+
+
+def _font_family(parent):
+    try:
+        value = parent["bi_font"].value()
+        if isinstance(value, (list, tuple)) and value:
+            value = value[0]
+        return str(value) if value else ""
+    except Exception:
+        return ""
+
+
+def _measure_text(text, family, px):
+    key = (text, family, px)
+    cached = _measure_cache.get(key)
+    if cached is not None:
+        return cached
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
+
+        font = QtGui.QFont()
+        if family:
+            font.setFamily(family)
+        font.setPixelSize(px)
+        width = float(QtGui.QFontMetricsF(font).horizontalAdvance(text))
+    except Exception as exc:
+        _log_error_once("measure", str(exc))
+        width = px * 0.6 * len(text)
+    _measure_cache[key] = width
+    return width
+
+
+def panel_geo(field, comp, parent, frame=None):
+    """'w' o 'x' (en pixeles) del panel de un campo, medido de su texto.
+
+    Sin texto devuelve 0: el kernel descarta paneles de ancho 0, asi que un
+    campo vacio no dibuja panel.
+    """
+    try:
+        text = _digit_template(bi_text(field, parent, frame))
+        if not text:
+            return 0.0
+        pad = float(parent["bi_text_pad"].value())
+        width = _measure_text(text, _font_family(parent), _font_px(parent))
+        width += 2.0 * pad
+        if comp == "w":
+            return width
+        anchor = float(parent["bi_%s_x" % field].value()) * float(parent.width())
+        justify = PANEL_ANCHOR.get(field, "left")
+        if justify == "left":
+            return anchor
+        if justify == "center":
+            return anchor - width * 0.5
+        return anchor - width
+    except Exception as exc:
+        _log_error_once("panel:" + str(field), str(exc))
+        return 0.0
 
 
 _log("Modulo de logica cargado")

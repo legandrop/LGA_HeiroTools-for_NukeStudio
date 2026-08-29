@@ -16,6 +16,9 @@ ____________________________________________________________________
      de compilar, con el nombre del kernel como prefijo, asi que no se
      pueden escribir en el archivo del gizmo).
 
+  v1.01: Los paneles abrazan al texto: w y x medidos por python
+         (panel_geo de la logica, con cache) y h/y por expresion
+         compartida con los box de los Text2.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -39,14 +42,31 @@ def _log(message):
         pass
 
 
+# Alto del panel y de la caja de texto: MISMA formula en el kernel y en los
+# box de los Text2 (generador), asi el centrado vertical es exacto. Base 100
+# px del Text2 x escala x 1.3 de interlinea, mas el padding.
+PANEL_H_EXPR = "100*parent.bi_scale*1.3+parent.bi_text_pad"
+
+
+def _py_geo(field, comp):
+    return (
+        "[python {__import__('LGA_NKS_BurnIn_Logic')"
+        ".panel_geo('%s', '%s', nuke.thisParent(), nuke.frame())}]" % (field, comp)
+    )
+
+
 def _bindings():
-    """Sufijo del knob del kernel -> expresion sobre los knobs del padre."""
+    """Sufijo del knob del kernel -> expresion sobre los knobs del padre.
+
+    x y w se MIDEN del texto real (python, cacheado); y y h salen de
+    expresiones simples compartidas con los box de los Text2.
+    """
     binds = {}
     for f in FIELDS:
-        binds["%s_x" % f] = "parent.bi_%s_x*width" % f
+        binds["%s_x" % f] = _py_geo(f, "x")
         binds["%s_y" % f] = "parent.bi_%s_y*height" % f
-        binds["%s_w" % f] = "parent.bi_%s_w*width" % f
-        binds["%s_h" % f] = "parent.bi_%s_h*height" % f
+        binds["%s_w" % f] = _py_geo(f, "w")
+        binds["%s_h" % f] = PANEL_H_EXPR
         binds["%s_on" % f] = "parent.bi_%s_on*parent.bi_%s_bg" % (f, f)
     binds["corner_radius"] = "parent.bi_bg_radius"
     binds["color_r"] = "parent.bi_bg_color.r"
