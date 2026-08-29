@@ -23,7 +23,6 @@ MODULES = [
     "LGA_NKS_Shortcuts",
     "LGA_NKS_ViewerTL_Panel",
     "z_clear_outpoint_workaround",
-    "z_lga_devlink",
     "z_version_everywhere",
 ]
 

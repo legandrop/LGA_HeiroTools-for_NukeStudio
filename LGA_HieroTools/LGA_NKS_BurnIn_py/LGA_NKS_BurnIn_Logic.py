@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.02 | Lega
+  LGA_NKS_BurnIn_Logic v1.03 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,12 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.03: El ancho del panel se mide con las metricas AFM de Nuke
+         (plugins/fonts/UtopiaRegular.afm), no con QFontMetrics: en NKS
+         Qt sustituye "Utopia" por otra fuente mas ancha e inflaba el
+         panel. Digitos normalizados solo en frame/tc (a '0'); el resto
+         se mide exacto. Colorspace con cache TTL (un cambio manual no
+         dispara evento; sin TTL nunca se refrescaba).
   v1.02: panel_geo(): geometria de los paneles medida del texto real
          (QFontMetrics, digitos normalizados a 8) con anclas por campo.
          Fix medido en NKS: hiero/project llega vacio en el stream del
@@ -201,8 +207,13 @@ def _clip_fps(parent):
 
 # El colorspace no viaja en la metadata del stream del timeline, asi que se
 # resuelve por API: se ubica el clip por nombre y se le pregunta su transform.
-# Cacheado por (proyecto, clip); se limpia junto con el cache de config.
+# Cache con TTL: NO se puede cachear indefinido porque cambiar el colorspace
+# de un clip a mano no dispara ningun evento de proyecto (medido: con cache
+# permanente el burn-in nunca se actualizaba). El TTL corto hace que el
+# re-escaneo (caro) sea raro pero que un cambio manual se refleje solo. Se
+# guarda (valor, timestamp) por (proyecto, clip).
 _colorspace_cache = {}
+_COLORSPACE_TTL = 1.5
 
 
 def _clip_colorspace(parent):
@@ -211,8 +222,10 @@ def _clip_colorspace(parent):
     if not clip_name:
         return ""
     key = (proj_name, clip_name)
-    if key in _colorspace_cache:
-        return _colorspace_cache[key]
+    now = time.time()
+    cached = _colorspace_cache.get(key)
+    if cached is not None and (now - cached[1]) < _COLORSPACE_TTL:
+        return cached[0]
     value = ""
     try:
         import hiero.core
@@ -227,7 +240,7 @@ def _clip_colorspace(parent):
             break
     except Exception as exc:
         _log_error_once("cspace:" + str(clip_name), str(exc))
-    _colorspace_cache[key] = value
+    _colorspace_cache[key] = (value, now)
     return value
 
 
@@ -341,14 +354,56 @@ def bi_ok(field, parent, frame=None):
 
 # ── Geometria de los paneles de fondo (medida del texto real) ─────────────────
 #
-# El panel de cada campo ABRAZA a su texto: el ancho se mide con QFontMetrics
-# sobre el texto del campo (con los digitos normalizados a "8" para que
-# frame/tc no cambien de ancho al correr los numeros) mas el padding. Cada
-# campo ancla a la izquierda, al centro o a la derecha de su knob bi_<f>_x.
-# Lo llaman las expresiones de los parametros del BlinkScript (via el setup
-# de LGA_NKS_BurnIn_Blink), una vez por frame: todo cacheado.
+# El panel de cada campo ABRAZA a su texto. El ancho se mide con las METRICAS
+# REALES de Nuke: los .afm de las fuentes Type1 que Nuke usa para maquetar
+# (plugins/fonts/UtopiaRegular.afm). NO se usa QFontMetrics: medido en NKS,
+# Qt no encuentra "Utopia" (es una fuente de Nuke, no del sistema) y sustituye
+# con otra mas ancha, inflando el panel. El AFM da el ancho exacto del render.
+# Para frame/tc los digitos se normalizan a '0' (ancho estable por frame).
+# Lo llaman las expresiones del BlinkScript, una vez por frame: todo cacheado.
 
 _measure_cache = {}
+
+# Anchos por caracter (1/1000 em) de la fuente, parseados del .afm de Nuke.
+# La fuente default del burn-in es Utopia Regular; si se elige otra, el AFM
+# no coincide y el panel puede no abrazar perfecto (limitacion conocida v1).
+_afm_wx = None
+
+_AFM_CANDIDATES = [
+    r"C:\Program Files\Nuke17.0v4\plugins\fonts\UtopiaRegular.afm",
+    r"C:\Program Files\Nuke16.0v4\plugins\fonts\UtopiaRegular.afm",
+    r"C:\Program Files\Nuke15.1v6\plugins\fonts\UtopiaRegular.afm",
+]
+
+
+def _load_afm():
+    global _afm_wx
+    if _afm_wx is not None:
+        return _afm_wx
+    wx = {}
+    for path in _AFM_CANDIDATES:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="latin-1") as f:
+                for line in f:
+                    if not line.startswith("C "):
+                        continue
+                    parts = line.split(";")
+                    code = int(parts[0].split()[1])
+                    for p in parts:
+                        p = p.strip()
+                        if p.startswith("WX "):
+                            if code >= 0:
+                                wx[code] = float(p.split()[1])
+                            break
+            if wx:
+                _log("AFM cargado: {} ({} chars)".format(path, len(wx)))
+                break
+        except Exception as exc:
+            _log_error_once("afm:" + path, str(exc))
+    _afm_wx = wx
+    return wx
 
 PANEL_ANCHOR = {
     "clip": "left",
@@ -360,9 +415,17 @@ PANEL_ANCHOR = {
 }
 
 
+# Solo frame y tc cambian de contenido por frame: para que su panel no
+# "respire" se mide con los digitos normalizados a '0' (asumiendo el peor
+# caso de conteo de digitos, como pidio Lega; si el numero real es mas
+# angosto sobra un poco, aceptable). El resto de los campos (clip, res,
+# fps, cspace) se miden EXACTOS: no cambian por frame, no hace falta padding.
+_DIGIT_FIELDS = ("frame", "tc")
+
+
 def _digit_template(text):
-    """Normaliza digitos a '8' para medir un ancho estable por campo."""
-    return "".join("8" if ch.isdigit() else ch for ch in str(text))
+    """Normaliza digitos a '0' para medir un ancho estable en frame/tc."""
+    return "".join("0" if ch.isdigit() else ch for ch in str(text))
 
 
 def _font_px(parent):
@@ -374,32 +437,20 @@ def _font_px(parent):
     return max(8, int(round(100.0 * scale)))
 
 
-def _font_family(parent):
-    try:
-        value = parent["bi_font"].value()
-        if isinstance(value, (list, tuple)) and value:
-            value = value[0]
-        return str(value) if value else ""
-    except Exception:
-        return ""
-
-
-def _measure_text(text, family, px):
-    key = (text, family, px)
+def _measure_text(text, px):
+    """Ancho en px del texto segun las metricas AFM de Nuke (Utopia Regular)."""
+    key = (text, px)
     cached = _measure_cache.get(key)
     if cached is not None:
         return cached
-    try:
-        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
-
-        font = QtGui.QFont()
-        if family:
-            font.setFamily(family)
-        font.setPixelSize(px)
-        width = float(QtGui.QFontMetricsF(font).horizontalAdvance(text))
-    except Exception as exc:
-        _log_error_once("measure", str(exc))
-        width = px * 0.6 * len(text)
+    wx = _load_afm()
+    if wx:
+        # 500 = ancho de fallback (medio em) para un caracter sin metrica.
+        em = sum(wx.get(ord(c), 500.0) for c in text) / 1000.0
+        width = em * px
+    else:
+        # Sin AFM disponible: estimacion gruesa (0.5 em promedio por caracter).
+        width = px * 0.5 * len(text)
     _measure_cache[key] = width
     return width
 
@@ -411,11 +462,13 @@ def panel_geo(field, comp, parent, frame=None):
     campo vacio no dibuja panel.
     """
     try:
-        text = _digit_template(bi_text(field, parent, frame))
+        text = bi_text(field, parent, frame)
+        if field in _DIGIT_FIELDS:
+            text = _digit_template(text)
         if not text:
             return 0.0
         pad = float(parent["bi_text_pad"].value())
-        width = _measure_text(text, _font_family(parent), _font_px(parent))
+        width = _measure_text(text, _font_px(parent))
         width += 2.0 * pad
         if comp == "w":
             return width
