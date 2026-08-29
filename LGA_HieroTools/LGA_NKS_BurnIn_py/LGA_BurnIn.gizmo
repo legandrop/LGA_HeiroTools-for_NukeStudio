@@ -1,74 +1,124 @@
 Gizmo {
  addUserKnob {20 lga_burnin_tab l "LGA BurnIn"}
- addUserKnob {84 bi_font l "font"}
- addUserKnob {7 bi_scale l "text scale" R 0.0 2.0}
+ addUserKnob {4 bi_weight l "weight" t "Peso de la fuente Inter (recalcula el fondo)" +INVISIBLE M {Regular SemiBold Bold}}
+ bi_weight SemiBold
+ addUserKnob {84 bi_font l "font" +INVISIBLE}
+ addUserKnob {7 bi_scale l "text scale" +INVISIBLE R 0.0 2.0}
  bi_scale 0.5
- addUserKnob {19 bi_color l "text color" t "Color del texto"}
+ addUserKnob {19 bi_color l "text color" +INVISIBLE}
  bi_color {1.0}
- addUserKnob {7 bi_opacity l "text opacity" t "Opacidad del texto" R 0.0 1.0}
+ addUserKnob {7 bi_opacity l "text opacity" +INVISIBLE R 0.0 1.0}
  bi_opacity 1.0
- addUserKnob {26 ""}
- addUserKnob {6 bi_clip_on l "clip name" t "Muestra el nombre del clip visible" +STARTLINE}
- bi_clip_on true
- addUserKnob {6 bi_clip_bg l "bg" t "Panel redondeado de fondo detras de clip name"}
- bi_clip_bg true
- addUserKnob {6 bi_cspace_on l "colorspace" t "Muestra el espacio de color del clip visible" +STARTLINE}
- bi_cspace_on true
- addUserKnob {6 bi_cspace_bg l "bg" t "Panel redondeado de fondo detras de colorspace"}
- bi_cspace_bg true
- addUserKnob {6 bi_res_on l "resolution" t "Muestra la resolucion del clip visible; rojo si difiere del objetivo del proyecto (solo plates EXR)" +STARTLINE}
- bi_res_on true
- addUserKnob {6 bi_res_bg l "bg" t "Panel redondeado de fondo detras de resolution"}
- bi_res_bg true
- addUserKnob {6 bi_frame_on l "frame" t "Muestra el numero de frame del clip visible" +STARTLINE}
- bi_frame_on true
- addUserKnob {6 bi_frame_bg l "bg" t "Panel redondeado de fondo detras de frame"}
- bi_frame_bg true
- addUserKnob {6 bi_tc_on l "timecode" t "Muestra el timecode del clip visible" +STARTLINE}
- bi_tc_on true
- addUserKnob {6 bi_tc_bg l "bg" t "Panel redondeado de fondo detras de timecode"}
- bi_tc_bg true
- addUserKnob {6 bi_fps_on l "fps" t "Muestra los fps del clip visible; rojo si difieren del objetivo del proyecto" +STARTLINE}
- bi_fps_on true
- addUserKnob {6 bi_fps_bg l "bg" t "Panel redondeado de fondo detras de fps"}
- bi_fps_bg true
- addUserKnob {26 ""}
- addUserKnob {19 bi_bg_color l "bg color" t "Color de los paneles de fondo"}
+ addUserKnob {19 bi_bg_color l "bg color" +INVISIBLE}
  bi_bg_color {0.0 0.0 0.0 1.0}
- addUserKnob {7 bi_bg_opacity l "bg opacity" t "Opacidad de los paneles de fondo" R 0.0 1.0}
+ addUserKnob {7 bi_bg_opacity l "bg opacity" +INVISIBLE R 0.0 1.0}
  bi_bg_opacity 0.65
- addUserKnob {7 bi_bg_radius l "bg corner radius" t "Radio de las esquinas de los paneles, en pixeles" R 0 120}
+ addUserKnob {7 bi_bg_radius l "bg corner radius" +INVISIBLE R 0 120}
  bi_bg_radius 30
- addUserKnob {7 bi_text_pad l "text padding" t "Margen interno horizontal del texto dentro de su panel, en pixeles (el vertical lo da el centrado)" R 0 120}
+ addUserKnob {7 bi_text_pad l "text padding" +INVISIBLE R 0 120}
  bi_text_pad 28
- addUserKnob {22 bi_open_panel l "Open LGA Panel" t "Abre el panel de LGA BurnIn con el estilo del pack" T "__import__('LGA_NKS_BurnIn_Panel').show_panel()" +STARTLINE}
- addUserKnob {20 bi_layout_tab l "Layout"}
- addUserKnob {26 bi_layout_help l "" +STARTLINE T "Ancla de cada campo en fracciones del formato. El panel abraza a su texto solo."}
- addUserKnob {7 bi_clip_x l "clip x" R 0 1}
+ addUserKnob {6 bi_clip_on l "clip name" +INVISIBLE}
+ bi_clip_on true
+ addUserKnob {6 bi_clip_bg l "bg" +INVISIBLE}
+ bi_clip_bg true
+ addUserKnob {7 bi_clip_x l "clip x" +INVISIBLE R 0 1}
  bi_clip_x 0.02
- addUserKnob {7 bi_clip_y l "y" -STARTLINE R 0 1}
+ addUserKnob {7 bi_clip_y l "y" +INVISIBLE R 0 1}
  bi_clip_y 0.93
- addUserKnob {7 bi_cspace_x l "cspace x" R 0 1}
+ addUserKnob {7 bi_clip_size l "size" +INVISIBLE R 10 400}
+ bi_clip_size 100
+ addUserKnob {7 bi_clip_rot l "rot" +INVISIBLE R 0 360}
+ bi_clip_rot 0
+ addUserKnob {6 bi_cspace_on l "colorspace" +INVISIBLE}
+ bi_cspace_on true
+ addUserKnob {6 bi_cspace_bg l "bg" +INVISIBLE}
+ bi_cspace_bg true
+ addUserKnob {7 bi_cspace_x l "cspace x" +INVISIBLE R 0 1}
  bi_cspace_x 0.5
- addUserKnob {7 bi_cspace_y l "y" -STARTLINE R 0 1}
+ addUserKnob {7 bi_cspace_y l "y" +INVISIBLE R 0 1}
  bi_cspace_y 0.93
- addUserKnob {7 bi_res_x l "res x" R 0 1}
+ addUserKnob {7 bi_cspace_size l "size" +INVISIBLE R 10 400}
+ bi_cspace_size 100
+ addUserKnob {7 bi_cspace_rot l "rot" +INVISIBLE R 0 360}
+ bi_cspace_rot 0
+ addUserKnob {6 bi_res_on l "resolution" +INVISIBLE}
+ bi_res_on true
+ addUserKnob {6 bi_res_bg l "bg" +INVISIBLE}
+ bi_res_bg true
+ addUserKnob {7 bi_res_x l "res x" +INVISIBLE R 0 1}
  bi_res_x 0.98
- addUserKnob {7 bi_res_y l "y" -STARTLINE R 0 1}
+ addUserKnob {7 bi_res_y l "y" +INVISIBLE R 0 1}
  bi_res_y 0.93
- addUserKnob {7 bi_frame_x l "frame x" R 0 1}
+ addUserKnob {7 bi_res_size l "size" +INVISIBLE R 10 400}
+ bi_res_size 100
+ addUserKnob {7 bi_res_rot l "rot" +INVISIBLE R 0 360}
+ bi_res_rot 0
+ addUserKnob {6 bi_frame_on l "frame" +INVISIBLE}
+ bi_frame_on true
+ addUserKnob {6 bi_frame_bg l "bg" +INVISIBLE}
+ bi_frame_bg true
+ addUserKnob {7 bi_frame_x l "frame x" +INVISIBLE R 0 1}
  bi_frame_x 0.02
- addUserKnob {7 bi_frame_y l "y" -STARTLINE R 0 1}
+ addUserKnob {7 bi_frame_y l "y" +INVISIBLE R 0 1}
  bi_frame_y 0.025
- addUserKnob {7 bi_tc_x l "tc x" R 0 1}
+ addUserKnob {7 bi_frame_size l "size" +INVISIBLE R 10 400}
+ bi_frame_size 100
+ addUserKnob {7 bi_frame_rot l "rot" +INVISIBLE R 0 360}
+ bi_frame_rot 0
+ addUserKnob {6 bi_tc_on l "timecode" +INVISIBLE}
+ bi_tc_on true
+ addUserKnob {6 bi_tc_bg l "bg" +INVISIBLE}
+ bi_tc_bg true
+ addUserKnob {7 bi_tc_x l "tc x" +INVISIBLE R 0 1}
  bi_tc_x 0.22
- addUserKnob {7 bi_tc_y l "y" -STARTLINE R 0 1}
+ addUserKnob {7 bi_tc_y l "y" +INVISIBLE R 0 1}
  bi_tc_y 0.025
- addUserKnob {7 bi_fps_x l "fps x" R 0 1}
+ addUserKnob {7 bi_tc_size l "size" +INVISIBLE R 10 400}
+ bi_tc_size 100
+ addUserKnob {7 bi_tc_rot l "rot" +INVISIBLE R 0 360}
+ bi_tc_rot 0
+ addUserKnob {6 bi_fps_on l "fps" +INVISIBLE}
+ bi_fps_on true
+ addUserKnob {6 bi_fps_bg l "bg" +INVISIBLE}
+ bi_fps_bg true
+ addUserKnob {7 bi_fps_x l "fps x" +INVISIBLE R 0 1}
  bi_fps_x 0.98
- addUserKnob {7 bi_fps_y l "y" -STARTLINE R 0 1}
+ addUserKnob {7 bi_fps_y l "y" +INVISIBLE R 0 1}
  bi_fps_y 0.025
- help "LGA BurnIn: un solo soft effect con la metadata del clip visible sobre paneles redondeados que abrazan al texto (BlinkScript).\n\nresolution y fps se pintan de rojo si no coinciden con el objetivo del proyecto (config en AppData + tag del proyecto). Anclas en la pestana Layout. Open LGA Panel abre el editor con el estilo del pack."
+ addUserKnob {7 bi_fps_size l "size" +INVISIBLE R 10 400}
+ bi_fps_size 100
+ addUserKnob {7 bi_fps_rot l "rot" +INVISIBLE R 0 360}
+ bi_fps_rot 0
+ addUserKnob {6 bi_custom1_on l "custom 1" +INVISIBLE}
+ bi_custom1_on false
+ addUserKnob {6 bi_custom1_bg l "bg" +INVISIBLE}
+ bi_custom1_bg true
+ addUserKnob {7 bi_custom1_x l "custom1 x" +INVISIBLE R 0 1}
+ bi_custom1_x 0.5
+ addUserKnob {7 bi_custom1_y l "y" +INVISIBLE R 0 1}
+ bi_custom1_y 0.5
+ addUserKnob {7 bi_custom1_size l "size" +INVISIBLE R 10 400}
+ bi_custom1_size 100
+ addUserKnob {7 bi_custom1_rot l "rot" +INVISIBLE R 0 360}
+ bi_custom1_rot 0
+ addUserKnob {1 bi_custom1_text l "text" +INVISIBLE}
+ bi_custom1_text ""
+ addUserKnob {6 bi_custom2_on l "custom 2" +INVISIBLE}
+ bi_custom2_on false
+ addUserKnob {6 bi_custom2_bg l "bg" +INVISIBLE}
+ bi_custom2_bg true
+ addUserKnob {7 bi_custom2_x l "custom2 x" +INVISIBLE R 0 1}
+ bi_custom2_x 0.5
+ addUserKnob {7 bi_custom2_y l "y" +INVISIBLE R 0 1}
+ bi_custom2_y 0.45
+ addUserKnob {7 bi_custom2_size l "size" +INVISIBLE R 10 400}
+ bi_custom2_size 100
+ addUserKnob {7 bi_custom2_rot l "rot" +INVISIBLE R 0 360}
+ bi_custom2_rot 0
+ addUserKnob {1 bi_custom2_text l "text" +INVISIBLE}
+ bi_custom2_text ""
+ addUserKnob {22 bi_open_panel l "Open LGA Panel" t "Abre el panel de LGA BurnIn con el estilo del pack" T "__import__('LGA_NKS_BurnIn_Panel').show_panel()" +STARTLINE}
+ help "LGA BurnIn: un solo soft effect con la metadata del clip visible sobre paneles redondeados que abrazan al texto (BlinkScript). resolution y fps se pintan de rojo si no coinciden con el objetivo del proyecto. Open LGA Panel abre el editor con el estilo del pack."
 }
  Input {
   inputs 0
@@ -83,7 +133,7 @@ Gizmo {
  }
  BlinkScript {
   onCreate "__import__('LGA_NKS_BurnIn_Blink').setup(nuke.thisNode())"
-  kernelSource "// LGA_RoundedPanels v0.03 | Lega\n// Kernel de produccion de LGA_BurnIn: fondos redondeados de los seis\n// campos en una pasada. SDF de rounded box + antialiasing de 1px.\n// v0.03: sin funcion miembro, logica inline por campo (la funcion no\n//        compilaba en el contexto del timeline).\n// v0.02: una declaracion por linea.\n\nkernel LGARoundedPanels : ImageComputationKernel<ePixelWise>\n\{\n  Image<eRead, eAccessPoint, eEdgeClamped> src;\n  Image<eWrite, eAccessPoint> dst;\n\n  param:\n    float clip_x;\n    float clip_y;\n    float clip_w;\n    float clip_h;\n    float clip_on;\n    float res_x;\n    float res_y;\n    float res_w;\n    float res_h;\n    float res_on;\n    float frame_x;\n    float frame_y;\n    float frame_w;\n    float frame_h;\n    float frame_on;\n    float tc_x;\n    float tc_y;\n    float tc_w;\n    float tc_h;\n    float tc_on;\n    float cspace_x;\n    float cspace_y;\n    float cspace_w;\n    float cspace_h;\n    float cspace_on;\n    float fps_x;\n    float fps_y;\n    float fps_w;\n    float fps_h;\n    float fps_on;\n    float corner_radius;\n    float color_r;\n    float color_g;\n    float color_b;\n    float bg_opacity;\n\n  void define() \{\n    defineParam(clip_x, \"clip_x\", 0.0f);\n    defineParam(clip_y, \"clip_y\", 0.0f);\n    defineParam(clip_w, \"clip_w\", 0.0f);\n    defineParam(clip_h, \"clip_h\", 0.0f);\n    defineParam(clip_on, \"clip_on\", 0.0f);\n    defineParam(res_x, \"res_x\", 0.0f);\n    defineParam(res_y, \"res_y\", 0.0f);\n    defineParam(res_w, \"res_w\", 0.0f);\n    defineParam(res_h, \"res_h\", 0.0f);\n    defineParam(res_on, \"res_on\", 0.0f);\n    defineParam(frame_x, \"frame_x\", 0.0f);\n    defineParam(frame_y, \"frame_y\", 0.0f);\n    defineParam(frame_w, \"frame_w\", 0.0f);\n    defineParam(frame_h, \"frame_h\", 0.0f);\n    defineParam(frame_on, \"frame_on\", 0.0f);\n    defineParam(tc_x, \"tc_x\", 0.0f);\n    defineParam(tc_y, \"tc_y\", 0.0f);\n    defineParam(tc_w, \"tc_w\", 0.0f);\n    defineParam(tc_h, \"tc_h\", 0.0f);\n    defineParam(tc_on, \"tc_on\", 0.0f);\n    defineParam(cspace_x, \"cspace_x\", 0.0f);\n    defineParam(cspace_y, \"cspace_y\", 0.0f);\n    defineParam(cspace_w, \"cspace_w\", 0.0f);\n    defineParam(cspace_h, \"cspace_h\", 0.0f);\n    defineParam(cspace_on, \"cspace_on\", 0.0f);\n    defineParam(fps_x, \"fps_x\", 0.0f);\n    defineParam(fps_y, \"fps_y\", 0.0f);\n    defineParam(fps_w, \"fps_w\", 0.0f);\n    defineParam(fps_h, \"fps_h\", 0.0f);\n    defineParam(fps_on, \"fps_on\", 0.0f);\n    defineParam(corner_radius, \"corner_radius\", 30.0f);\n    defineParam(color_r, \"color_r\", 0.0f);\n    defineParam(color_g, \"color_g\", 0.0f);\n    defineParam(color_b, \"color_b\", 0.0f);\n    defineParam(bg_opacity, \"bg_opacity\", 0.8f);\n  \}\n\n  void process(int2 pos) \{\n    SampleType(src) input = src();\n    float ppx = float(pos.x);\n    float ppy = float(pos.y);\n    float a = 0.0f;\n\n    // panel clip\n    if (clip_on > 0.5f && clip_w > 0.0f && clip_h > 0.0f) \{\n      float r = min(corner_radius, min(clip_w, clip_h) * 0.5f);\n      float cx = clip_x + clip_w * 0.5f;\n      float cy = clip_y + clip_h * 0.5f;\n      float dx = fabs(ppx - cx) - (clip_w * 0.5f - r);\n      float dy = fabs(ppy - cy) - (clip_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel res\n    if (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) \{\n      float r = min(corner_radius, min(res_w, res_h) * 0.5f);\n      float cx = res_x + res_w * 0.5f;\n      float cy = res_y + res_h * 0.5f;\n      float dx = fabs(ppx - cx) - (res_w * 0.5f - r);\n      float dy = fabs(ppy - cy) - (res_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel frame\n    if (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) \{\n      float r = min(corner_radius, min(frame_w, frame_h) * 0.5f);\n      float cx = frame_x + frame_w * 0.5f;\n      float cy = frame_y + frame_h * 0.5f;\n      float dx = fabs(ppx - cx) - (frame_w * 0.5f - r);\n      float dy = fabs(ppy - cy) - (frame_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel tc\n    if (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) \{\n      float r = min(corner_radius, min(tc_w, tc_h) * 0.5f);\n      float cx = tc_x + tc_w * 0.5f;\n      float cy = tc_y + tc_h * 0.5f;\n      float dx = fabs(ppx - cx) - (tc_w * 0.5f - r);\n      float dy = fabs(ppy - cy) - (tc_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel cspace\n    if (cspace_on > 0.5f && cspace_w > 0.0f && cspace_h > 0.0f) \{\n      float r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);\n      float cx = cspace_x + cspace_w * 0.5f;\n      float cy = cspace_y + cspace_h * 0.5f;\n      float dx = fabs(ppx - cx) - (cspace_w * 0.5f - r);\n      float dy = fabs(ppy - cy) - (cspace_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel fps\n    if (fps_on > 0.5f && fps_w > 0.0f && fps_h > 0.0f) \{\n      float r = min(corner_radius, min(fps_w, fps_h) * 0.5f);\n      float cx = fps_x + fps_w * 0.5f;\n      float cy = fps_y + fps_h * 0.5f;\n      float dx = fabs(ppx - cx) - (fps_w * 0.5f - r);\n      float dy = fabs(ppy - cy) - (fps_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    a = a * bg_opacity;\n    float4 panel = float4(color_r, color_g, color_b, 1.0f);\n    dst() = input * (1.0f - a) + panel * a;\n  \}\n\};\n"
+  kernelSource "// LGA_RoundedPanels v0.04 | Lega\n// Fondos redondeados de los campos del burn-in, en una pasada.\n// SDF de rounded box + antialiasing 1px, con rotacion por campo.\n// v0.04: rotacion por campo (ax,ay = ancla; rot en radianes).\n// v0.03: sin funcion miembro, logica inline por campo.\n\nkernel LGARoundedPanels : ImageComputationKernel<ePixelWise>\n\{\n  Image<eRead, eAccessPoint, eEdgeClamped> src;\n  Image<eWrite, eAccessPoint> dst;\n\n  param:\n    float clip_x;\n    float clip_y;\n    float clip_w;\n    float clip_h;\n    float clip_on;\n    float clip_ax;\n    float clip_ay;\n    float clip_rot;\n    float cspace_x;\n    float cspace_y;\n    float cspace_w;\n    float cspace_h;\n    float cspace_on;\n    float cspace_ax;\n    float cspace_ay;\n    float cspace_rot;\n    float res_x;\n    float res_y;\n    float res_w;\n    float res_h;\n    float res_on;\n    float res_ax;\n    float res_ay;\n    float res_rot;\n    float frame_x;\n    float frame_y;\n    float frame_w;\n    float frame_h;\n    float frame_on;\n    float frame_ax;\n    float frame_ay;\n    float frame_rot;\n    float tc_x;\n    float tc_y;\n    float tc_w;\n    float tc_h;\n    float tc_on;\n    float tc_ax;\n    float tc_ay;\n    float tc_rot;\n    float fps_x;\n    float fps_y;\n    float fps_w;\n    float fps_h;\n    float fps_on;\n    float fps_ax;\n    float fps_ay;\n    float fps_rot;\n    float custom1_x;\n    float custom1_y;\n    float custom1_w;\n    float custom1_h;\n    float custom1_on;\n    float custom1_ax;\n    float custom1_ay;\n    float custom1_rot;\n    float custom2_x;\n    float custom2_y;\n    float custom2_w;\n    float custom2_h;\n    float custom2_on;\n    float custom2_ax;\n    float custom2_ay;\n    float custom2_rot;\n    float corner_radius;\n    float color_r;\n    float color_g;\n    float color_b;\n    float bg_opacity;\n\n  void define() \{\n    defineParam(clip_x, \"clip_x\", 0.0f);\n    defineParam(clip_y, \"clip_y\", 0.0f);\n    defineParam(clip_w, \"clip_w\", 0.0f);\n    defineParam(clip_h, \"clip_h\", 0.0f);\n    defineParam(clip_on, \"clip_on\", 0.0f);\n    defineParam(clip_ax, \"clip_ax\", 0.0f);\n    defineParam(clip_ay, \"clip_ay\", 0.0f);\n    defineParam(clip_rot, \"clip_rot\", 0.0f);\n    defineParam(cspace_x, \"cspace_x\", 0.0f);\n    defineParam(cspace_y, \"cspace_y\", 0.0f);\n    defineParam(cspace_w, \"cspace_w\", 0.0f);\n    defineParam(cspace_h, \"cspace_h\", 0.0f);\n    defineParam(cspace_on, \"cspace_on\", 0.0f);\n    defineParam(cspace_ax, \"cspace_ax\", 0.0f);\n    defineParam(cspace_ay, \"cspace_ay\", 0.0f);\n    defineParam(cspace_rot, \"cspace_rot\", 0.0f);\n    defineParam(res_x, \"res_x\", 0.0f);\n    defineParam(res_y, \"res_y\", 0.0f);\n    defineParam(res_w, \"res_w\", 0.0f);\n    defineParam(res_h, \"res_h\", 0.0f);\n    defineParam(res_on, \"res_on\", 0.0f);\n    defineParam(res_ax, \"res_ax\", 0.0f);\n    defineParam(res_ay, \"res_ay\", 0.0f);\n    defineParam(res_rot, \"res_rot\", 0.0f);\n    defineParam(frame_x, \"frame_x\", 0.0f);\n    defineParam(frame_y, \"frame_y\", 0.0f);\n    defineParam(frame_w, \"frame_w\", 0.0f);\n    defineParam(frame_h, \"frame_h\", 0.0f);\n    defineParam(frame_on, \"frame_on\", 0.0f);\n    defineParam(frame_ax, \"frame_ax\", 0.0f);\n    defineParam(frame_ay, \"frame_ay\", 0.0f);\n    defineParam(frame_rot, \"frame_rot\", 0.0f);\n    defineParam(tc_x, \"tc_x\", 0.0f);\n    defineParam(tc_y, \"tc_y\", 0.0f);\n    defineParam(tc_w, \"tc_w\", 0.0f);\n    defineParam(tc_h, \"tc_h\", 0.0f);\n    defineParam(tc_on, \"tc_on\", 0.0f);\n    defineParam(tc_ax, \"tc_ax\", 0.0f);\n    defineParam(tc_ay, \"tc_ay\", 0.0f);\n    defineParam(tc_rot, \"tc_rot\", 0.0f);\n    defineParam(fps_x, \"fps_x\", 0.0f);\n    defineParam(fps_y, \"fps_y\", 0.0f);\n    defineParam(fps_w, \"fps_w\", 0.0f);\n    defineParam(fps_h, \"fps_h\", 0.0f);\n    defineParam(fps_on, \"fps_on\", 0.0f);\n    defineParam(fps_ax, \"fps_ax\", 0.0f);\n    defineParam(fps_ay, \"fps_ay\", 0.0f);\n    defineParam(fps_rot, \"fps_rot\", 0.0f);\n    defineParam(custom1_x, \"custom1_x\", 0.0f);\n    defineParam(custom1_y, \"custom1_y\", 0.0f);\n    defineParam(custom1_w, \"custom1_w\", 0.0f);\n    defineParam(custom1_h, \"custom1_h\", 0.0f);\n    defineParam(custom1_on, \"custom1_on\", 0.0f);\n    defineParam(custom1_ax, \"custom1_ax\", 0.0f);\n    defineParam(custom1_ay, \"custom1_ay\", 0.0f);\n    defineParam(custom1_rot, \"custom1_rot\", 0.0f);\n    defineParam(custom2_x, \"custom2_x\", 0.0f);\n    defineParam(custom2_y, \"custom2_y\", 0.0f);\n    defineParam(custom2_w, \"custom2_w\", 0.0f);\n    defineParam(custom2_h, \"custom2_h\", 0.0f);\n    defineParam(custom2_on, \"custom2_on\", 0.0f);\n    defineParam(custom2_ax, \"custom2_ax\", 0.0f);\n    defineParam(custom2_ay, \"custom2_ay\", 0.0f);\n    defineParam(custom2_rot, \"custom2_rot\", 0.0f);\n    defineParam(corner_radius, \"corner_radius\", 30.0f);\n    defineParam(color_r, \"color_r\", 0.0f);\n    defineParam(color_g, \"color_g\", 0.0f);\n    defineParam(color_b, \"color_b\", 0.0f);\n    defineParam(bg_opacity, \"bg_opacity\", 0.8f);\n  \}\n\n  void process(int2 pos) \{\n    SampleType(src) input = src();\n    float ppx = float(pos.x);\n    float ppy = float(pos.y);\n    float a = 0.0f;\n\n    // panel clip\n    if (clip_on > 0.5f && clip_w > 0.0f && clip_h > 0.0f) \{\n      float cx = clip_x + clip_w * 0.5f;\n      float cy = clip_y + clip_h * 0.5f;\n      float ca = cos(clip_rot);\n      float sa = sin(clip_rot);\n      float rx = ppx - clip_ax;\n      float ry = ppy - clip_ay;\n      float lx = ca * rx + sa * ry + clip_ax - cx;\n      float ly = -sa * rx + ca * ry + clip_ay - cy;\n      float r = min(corner_radius, min(clip_w, clip_h) * 0.5f);\n      float dx = fabs(lx) - (clip_w * 0.5f - r);\n      float dy = fabs(ly) - (clip_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel cspace\n    if (cspace_on > 0.5f && cspace_w > 0.0f && cspace_h > 0.0f) \{\n      float cx = cspace_x + cspace_w * 0.5f;\n      float cy = cspace_y + cspace_h * 0.5f;\n      float ca = cos(cspace_rot);\n      float sa = sin(cspace_rot);\n      float rx = ppx - cspace_ax;\n      float ry = ppy - cspace_ay;\n      float lx = ca * rx + sa * ry + cspace_ax - cx;\n      float ly = -sa * rx + ca * ry + cspace_ay - cy;\n      float r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);\n      float dx = fabs(lx) - (cspace_w * 0.5f - r);\n      float dy = fabs(ly) - (cspace_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel res\n    if (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) \{\n      float cx = res_x + res_w * 0.5f;\n      float cy = res_y + res_h * 0.5f;\n      float ca = cos(res_rot);\n      float sa = sin(res_rot);\n      float rx = ppx - res_ax;\n      float ry = ppy - res_ay;\n      float lx = ca * rx + sa * ry + res_ax - cx;\n      float ly = -sa * rx + ca * ry + res_ay - cy;\n      float r = min(corner_radius, min(res_w, res_h) * 0.5f);\n      float dx = fabs(lx) - (res_w * 0.5f - r);\n      float dy = fabs(ly) - (res_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel frame\n    if (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) \{\n      float cx = frame_x + frame_w * 0.5f;\n      float cy = frame_y + frame_h * 0.5f;\n      float ca = cos(frame_rot);\n      float sa = sin(frame_rot);\n      float rx = ppx - frame_ax;\n      float ry = ppy - frame_ay;\n      float lx = ca * rx + sa * ry + frame_ax - cx;\n      float ly = -sa * rx + ca * ry + frame_ay - cy;\n      float r = min(corner_radius, min(frame_w, frame_h) * 0.5f);\n      float dx = fabs(lx) - (frame_w * 0.5f - r);\n      float dy = fabs(ly) - (frame_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel tc\n    if (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) \{\n      float cx = tc_x + tc_w * 0.5f;\n      float cy = tc_y + tc_h * 0.5f;\n      float ca = cos(tc_rot);\n      float sa = sin(tc_rot);\n      float rx = ppx - tc_ax;\n      float ry = ppy - tc_ay;\n      float lx = ca * rx + sa * ry + tc_ax - cx;\n      float ly = -sa * rx + ca * ry + tc_ay - cy;\n      float r = min(corner_radius, min(tc_w, tc_h) * 0.5f);\n      float dx = fabs(lx) - (tc_w * 0.5f - r);\n      float dy = fabs(ly) - (tc_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel fps\n    if (fps_on > 0.5f && fps_w > 0.0f && fps_h > 0.0f) \{\n      float cx = fps_x + fps_w * 0.5f;\n      float cy = fps_y + fps_h * 0.5f;\n      float ca = cos(fps_rot);\n      float sa = sin(fps_rot);\n      float rx = ppx - fps_ax;\n      float ry = ppy - fps_ay;\n      float lx = ca * rx + sa * ry + fps_ax - cx;\n      float ly = -sa * rx + ca * ry + fps_ay - cy;\n      float r = min(corner_radius, min(fps_w, fps_h) * 0.5f);\n      float dx = fabs(lx) - (fps_w * 0.5f - r);\n      float dy = fabs(ly) - (fps_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel custom1\n    if (custom1_on > 0.5f && custom1_w > 0.0f && custom1_h > 0.0f) \{\n      float cx = custom1_x + custom1_w * 0.5f;\n      float cy = custom1_y + custom1_h * 0.5f;\n      float ca = cos(custom1_rot);\n      float sa = sin(custom1_rot);\n      float rx = ppx - custom1_ax;\n      float ry = ppy - custom1_ay;\n      float lx = ca * rx + sa * ry + custom1_ax - cx;\n      float ly = -sa * rx + ca * ry + custom1_ay - cy;\n      float r = min(corner_radius, min(custom1_w, custom1_h) * 0.5f);\n      float dx = fabs(lx) - (custom1_w * 0.5f - r);\n      float dy = fabs(ly) - (custom1_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    // panel custom2\n    if (custom2_on > 0.5f && custom2_w > 0.0f && custom2_h > 0.0f) \{\n      float cx = custom2_x + custom2_w * 0.5f;\n      float cy = custom2_y + custom2_h * 0.5f;\n      float ca = cos(custom2_rot);\n      float sa = sin(custom2_rot);\n      float rx = ppx - custom2_ax;\n      float ry = ppy - custom2_ay;\n      float lx = ca * rx + sa * ry + custom2_ax - cx;\n      float ly = -sa * rx + ca * ry + custom2_ay - cy;\n      float r = min(corner_radius, min(custom2_w, custom2_h) * 0.5f);\n      float dx = fabs(lx) - (custom2_w * 0.5f - r);\n      float dy = fabs(ly) - (custom2_h * 0.5f - r);\n      float qx = max(dx, 0.0f);\n      float qy = max(dy, 0.0f);\n      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;\n      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));\n    \}\n\n    a = a * bg_opacity;\n    float4 panel = float4(color_r, color_g, color_b, 1.0f);\n    dst() = input * (1.0f - a) + panel * a;\n  \}\n\};\n"
   rebuild ""
   rebuild_finalise ""
   name Blink_Panels
@@ -100,14 +150,14 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_clip_x*width+parent.bi_text_pad"} {"parent.bi_clip_y*height"} {"width"} {"parent.bi_clip_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
+  box {{"parent.bi_clip_x*width+parent.bi_text_pad"} {"parent.bi_clip_y*height"} {"width"} {"parent.bi_clip_y*height+100*parent.bi_scale*parent.bi_clip_size/100*1.3+parent.bi_text_pad"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{parent.bi_scale}}
+  global_font_scale {{parent.bi_scale*parent.bi_clip_size/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -132,7 +182,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"0"} {"parent.bi_cspace_y*height"} {"2*parent.bi_cspace_x*width"} {"parent.bi_cspace_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
+  box {{"0"} {"parent.bi_cspace_y*height"} {"2*parent.bi_cspace_x*width"} {"parent.bi_cspace_y*height+100*parent.bi_scale*parent.bi_cspace_size/100*1.3+parent.bi_text_pad"}}
   xjustify center
   yjustify center
   cliptype none
@@ -140,7 +190,7 @@ Gizmo {
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{parent.bi_scale}}
+  global_font_scale {{parent.bi_scale*parent.bi_cspace_size/100}}
   scale {1 1}
   center {1024 778}
   cursor_initialised true
@@ -166,7 +216,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"0"} {"parent.bi_res_y*height"} {"parent.bi_res_x*width-parent.bi_text_pad"} {"parent.bi_res_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
+  box {{"0"} {"parent.bi_res_y*height"} {"parent.bi_res_x*width-parent.bi_text_pad"} {"parent.bi_res_y*height+100*parent.bi_scale*parent.bi_res_size/100*1.3+parent.bi_text_pad"}}
   xjustify right
   yjustify center
   cliptype none
@@ -174,7 +224,7 @@ Gizmo {
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{parent.bi_scale}}
+  global_font_scale {{parent.bi_scale*parent.bi_res_size/100}}
   scale {1 1}
   center {1024 778}
   cursor_initialised true
@@ -200,14 +250,14 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_frame_x*width+parent.bi_text_pad"} {"parent.bi_frame_y*height"} {"width"} {"parent.bi_frame_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
+  box {{"parent.bi_frame_x*width+parent.bi_text_pad"} {"parent.bi_frame_y*height"} {"width"} {"parent.bi_frame_y*height+100*parent.bi_scale*parent.bi_frame_size/100*1.3+parent.bi_text_pad"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{parent.bi_scale}}
+  global_font_scale {{parent.bi_scale*parent.bi_frame_size/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -232,14 +282,14 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"parent.bi_tc_x*width+parent.bi_text_pad"} {"parent.bi_tc_y*height"} {"width"} {"parent.bi_tc_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
+  box {{"parent.bi_tc_x*width+parent.bi_text_pad"} {"parent.bi_tc_y*height"} {"width"} {"parent.bi_tc_y*height+100*parent.bi_scale*parent.bi_tc_size/100*1.3+parent.bi_text_pad"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{parent.bi_scale}}
+  global_font_scale {{parent.bi_scale*parent.bi_tc_size/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -264,7 +314,7 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"0"} {"parent.bi_fps_y*height"} {"parent.bi_fps_x*width-parent.bi_text_pad"} {"parent.bi_fps_y*height+100*parent.bi_scale*1.3+parent.bi_text_pad"}}
+  box {{"0"} {"parent.bi_fps_y*height"} {"parent.bi_fps_x*width-parent.bi_text_pad"} {"parent.bi_fps_y*height+100*parent.bi_scale*parent.bi_fps_size/100*1.3+parent.bi_text_pad"}}
   xjustify right
   yjustify center
   cliptype none
@@ -272,7 +322,7 @@ Gizmo {
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{parent.bi_scale}}
+  global_font_scale {{parent.bi_scale*parent.bi_fps_size/100}}
   scale {1 1}
   center {1024 778}
   cursor_initialised true
@@ -288,9 +338,77 @@ Gizmo {
   xpos -217
   ypos 400
  }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('custom1', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"0"} {"parent.bi_custom1_y*height"} {"2*parent.bi_custom1_x*width"} {"parent.bi_custom1_y*height+100*parent.bi_scale*parent.bi_custom1_size/100*1.3+parent.bi_text_pad"}}
+  xjustify center
+  yjustify center
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font]"
+  cursor_position 74
+  global_font_scale {{parent.bi_scale*parent.bi_custom1_size/100}}
+  scale {1 1}
+  center {1024 778}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: 0 items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  disable {{1-parent.bi_custom1_on}}
+  name Text_Custom1
+  xpos -217
+  ypos 448
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('custom2', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"0"} {"parent.bi_custom2_y*height"} {"2*parent.bi_custom2_x*width"} {"parent.bi_custom2_y*height+100*parent.bi_scale*parent.bi_custom2_size/100*1.3+parent.bi_text_pad"}}
+  xjustify center
+  yjustify center
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font]"
+  cursor_position 74
+  global_font_scale {{parent.bi_scale*parent.bi_custom2_size/100}}
+  scale {1 1}
+  center {1024 778}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: 0 items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  disable {{1-parent.bi_custom2_on}}
+  name Text_Custom2
+  xpos -217
+  ypos 496
+ }
  Output {
   name Output1
   xpos -217
-  ypos 448
+  ypos 544
  }
 end_group

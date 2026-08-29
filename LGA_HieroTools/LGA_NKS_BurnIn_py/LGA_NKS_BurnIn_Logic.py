@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.03 | Lega
+  LGA_NKS_BurnIn_Logic v1.04 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,10 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.04: 8 campos (agrega custom1/custom2, texto libre del usuario) y
+         tamano POR CAMPO (bi_<f>_size en %): _font_px(parent, field) mide
+         con el px efectivo (scale global x size del campo). PANEL_ANCHOR
+         cubre los custom (center).
   v1.03: El ancho del panel se mide con las metricas AFM de Nuke
          (plugins/fonts/UtopiaRegular.afm), no con QFontMetrics: en NKS
          Qt sustituye "Utopia" por otra fuente mas ancha e inflaba el
@@ -32,6 +36,7 @@ ____________________________________________________________________
 """
 
 import os
+import sys
 import time
 
 import LGA_NKS_BurnIn_Config as bi_config
@@ -310,6 +315,12 @@ def bi_text(field, parent, frame=None):
             result = "TC: {}".format(tc) if tc else ""
         elif field == "cspace":
             result = _clip_colorspace(parent)
+        elif field in ("custom1", "custom2"):
+            # Texto libre que escribe el usuario en el knob del campo.
+            try:
+                result = str(parent["bi_%s_text" % field].value() or "")
+            except Exception:
+                result = ""
         elif field == "frametc":
             # Compatibilidad con instancias viejas del gizmo (campo unificado).
             frame_str = _meta(parent, "input/frame", frame)
@@ -354,56 +365,87 @@ def bi_ok(field, parent, frame=None):
 
 # ── Geometria de los paneles de fondo (medida del texto real) ─────────────────
 #
-# El panel de cada campo ABRAZA a su texto. El ancho se mide con las METRICAS
-# REALES de Nuke: los .afm de las fuentes Type1 que Nuke usa para maquetar
-# (plugins/fonts/UtopiaRegular.afm). NO se usa QFontMetrics: medido en NKS,
-# Qt no encuentra "Utopia" (es una fuente de Nuke, no del sistema) y sustituye
-# con otra mas ancha, inflando el panel. El AFM da el ancho exacto del render.
-# Para frame/tc los digitos se normalizan a '0' (ancho estable por frame).
-# Lo llaman las expresiones del BlinkScript, una vez por frame: todo cacheado.
+# El panel de cada campo ABRAZA a su texto. La fuente del burn-in es Inter (la
+# del pack). Para que el ancho medido coincida con lo que Nuke RENDERIZA se mide
+# con QFontMetrics cargando EL MISMO archivo TTF que Nuke usa: se le pregunta a
+# nuke.getFonts() el path de (family, style) y se carga ESE en Qt. Asi la
+# medicion y el render usan el mismo TTF, aunque Qt "Inter" sustituiria distinto.
+# El peso (Regular/SemiBold/Bold) cambia el TTF y por lo tanto las metricas: el
+# panel se recalcula solo al cambiar de peso. Para frame/tc los digitos se
+# normalizan a '0' (ancho estable por frame). Todo cacheado.
+# VERIFICADO en NKS (sonda 29-08): render Inter + paneles abrazan.
 
 _measure_cache = {}
+_qt_family_cache = {}  # (family, style) -> familia que informa Qt (carga 1 vez)
 
-# Anchos por caracter (1/1000 em) de la fuente, parseados del .afm de Nuke.
-# La fuente default del burn-in es Utopia Regular; si se elige otra, el AFM
-# no coincide y el panel puede no abrazar perfecto (limitacion conocida v1).
-_afm_wx = None
+# El TTF del repo, fallback cuando no hay `nuke` (banco) o la fuente no esta en
+# getFonts. LGA_NKS_Shared/fonts/ tiene los tres pesos de Inter.
+_FONT_DIR_REPO = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "LGA_NKS_Shared", "fonts")
+)
+_INTER_REPO_TTF = {
+    "Regular": "Inter-400.ttf",
+    "SemiBold": "Inter-600.ttf",
+    "Bold": "Inter-700.ttf",
+}
+_WEIGHT_BY_INDEX = ["Regular", "SemiBold", "Bold"]
+_DEFAULT_STYLE = "SemiBold"
 
-_AFM_CANDIDATES = [
-    r"C:\Program Files\Nuke17.0v4\plugins\fonts\UtopiaRegular.afm",
-    r"C:\Program Files\Nuke16.0v4\plugins\fonts\UtopiaRegular.afm",
-    r"C:\Program Files\Nuke15.1v6\plugins\fonts\UtopiaRegular.afm",
-]
+
+def _weight_style(parent):
+    """Estilo de Inter del knob bi_weight (Enumeration: value() da el LABEL,
+    que ES el estilo: Regular/SemiBold/Bold). Default SemiBold."""
+    try:
+        style = str(parent["bi_weight"].value())
+        if style in _WEIGHT_BY_INDEX:
+            return style
+    except Exception:
+        pass
+    return _DEFAULT_STYLE
 
 
-def _load_afm():
-    global _afm_wx
-    if _afm_wx is not None:
-        return _afm_wx
-    wx = {}
-    for path in _AFM_CANDIDATES:
-        if not os.path.exists(path):
-            continue
+def _font_path(family, style):
+    """Path del TTF que Nuke usa para (family, style); si no, el TTF del repo.
+
+    Usa `nuke` SOLO si ya esta importado (en NKS): un `import nuke` en un
+    python suelto dispara el chequeo de licencia y cuelga el banco.
+    """
+    nuke = sys.modules.get("nuke")
+    if nuke is not None:
         try:
-            with open(path, "r", encoding="latin-1") as f:
-                for line in f:
-                    if not line.startswith("C "):
-                        continue
-                    parts = line.split(";")
-                    code = int(parts[0].split()[1])
-                    for p in parts:
-                        p = p.strip()
-                        if p.startswith("WX "):
-                            if code >= 0:
-                                wx[code] = float(p.split()[1])
-                            break
-            if wx:
-                _log("AFM cargado: {} ({} chars)".format(path, len(wx)))
-                break
+            for f in nuke.getFonts():
+                if len(f) >= 3 and str(f[0]) == family and str(f[1]) == style:
+                    return str(f[2])
+        except Exception:
+            pass
+    fname = _INTER_REPO_TTF.get(style)
+    if fname:
+        p = os.path.join(_FONT_DIR_REPO, fname)
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _qt_family(family, style):
+    """Familia que Qt asigna al TTF de (family, style). Cacheada. '' si falla."""
+    key = (family, style)
+    if key in _qt_family_cache:
+        return _qt_family_cache[key]
+    fam = ""
+    path = _font_path(family, style)
+    if path:
+        try:
+            from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
+
+            fid = QtGui.QFontDatabase.addApplicationFont(path)
+            if fid != -1:
+                fams = list(QtGui.QFontDatabase.applicationFontFamilies(fid))
+                fam = fams[0] if fams else ""
         except Exception as exc:
-            _log_error_once("afm:" + path, str(exc))
-    _afm_wx = wx
-    return wx
+            _log_error_once("qtfont:" + family + style, str(exc))
+    _qt_family_cache[key] = fam
+    return fam
+
 
 PANEL_ANCHOR = {
     "clip": "left",
@@ -412,6 +454,8 @@ PANEL_ANCHOR = {
     "frame": "left",
     "tc": "left",
     "fps": "right",
+    "custom1": "center",
+    "custom2": "center",
 }
 
 
@@ -428,28 +472,40 @@ def _digit_template(text):
     return "".join("0" if ch.isdigit() else ch for ch in str(text))
 
 
-def _font_px(parent):
-    """Tamano en px del texto de Text2: base 100 x global_font_scale."""
+def _font_px(parent, field):
+    """Tamano en px del texto de Text2: base 100 x scale global x size del campo.
+    Debe coincidir con el global_font_scale del Text2 (scale*size/100)."""
     try:
         scale = float(parent["bi_scale"].value())
     except Exception:
         scale = 0.5
-    return max(8, int(round(100.0 * scale)))
+    try:
+        size = float(parent["bi_%s_size" % field].value())
+    except Exception:
+        size = 100.0
+    return max(8, int(round(100.0 * scale * size / 100.0)))
 
 
-def _measure_text(text, px):
-    """Ancho en px del texto segun las metricas AFM de Nuke (Utopia Regular)."""
-    key = (text, px)
+def _measure_text(text, px, style):
+    """Ancho en px del texto en Inter <style> a <px>, con QFontMetrics del TTF real."""
+    key = (text, px, style)
     cached = _measure_cache.get(key)
     if cached is not None:
         return cached
-    wx = _load_afm()
-    if wx:
-        # 500 = ancho de fallback (medio em) para un caracter sin metrica.
-        em = sum(wx.get(ord(c), 500.0) for c in text) / 1000.0
-        width = em * px
-    else:
-        # Sin AFM disponible: estimacion gruesa (0.5 em promedio por caracter).
+    width = None
+    fam = _qt_family("Inter", style)
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
+
+        ft = QtGui.QFont()
+        if fam:
+            ft.setFamily(fam)
+        ft.setPixelSize(max(1, int(round(px))))
+        width = float(QtGui.QFontMetricsF(ft).horizontalAdvance(text))
+    except Exception as exc:
+        _log_error_once("measure", str(exc))
+    if not width:
+        # Sin Qt/fuente: estimacion gruesa (0.5 em promedio por caracter).
         width = px * 0.5 * len(text)
     _measure_cache[key] = width
     return width
@@ -468,7 +524,7 @@ def panel_geo(field, comp, parent, frame=None):
         if not text:
             return 0.0
         pad = float(parent["bi_text_pad"].value())
-        width = _measure_text(text, _font_px(parent))
+        width = _measure_text(text, _font_px(parent, field), _weight_style(parent))
         width += 2.0 * pad
         if comp == "w":
             return width

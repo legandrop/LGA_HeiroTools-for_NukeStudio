@@ -1,10 +1,12 @@
 # LGA_BurnIn — soft effect de burn-in con metadata del clip visible
 
-> Estado (29 ago 2026): **LGA_BurnIn** VALIDADO EN NKS REAL (efecto desde
-> el menu Effects, paneles medidos en el viewer, rojo condicional, ventana
-> desde el boton, presets) con capturas. La version anterior queda como
-> **LGA_BurnIn_v0** (solo Text2), registrada aparte en el mismo menu.
-> Pendiente: commit de esta ronda cuando Lega lo pida.
+> Estado (29 ago 2026): **LGA_BurnIn** con el rediseno grande — 8 campos (con
+> 2 custom text), tamano por campo, peso de Inter (Bold incluido, via
+> `NUKE_FONT_PATH` al fonts del repo), Properties pelado a un boton y ventana
+> propia rediseniada (tabla + detalle, drag-sliders, paint-toggle, seleccion
+> multiple). Validado en NKS por dev-link + capturas del harness. Rotacion por
+> campo: investigada, NO es posible (ver Limitaciones). La version anterior
+> queda como **LGA_BurnIn_v0** (solo Text2) en el mismo menu.
 
 ## Que es
 
@@ -25,14 +27,22 @@ coincide con el objetivo del proyecto.
 | frame | `Frame: <input/frame>` | no |
 | timecode | `TC: <input/timecode>` | no |
 | fps | `input/frame_rate` | si: difiere del objetivo |
+| custom 1 | texto libre del usuario (`bi_custom1_text`) | no |
+| custom 2 | texto libre del usuario (`bi_custom2_text`) | no |
 
 Objetivos: `res_target` y `fps_target` — `"timeline"` (formato/fps de la
 secuencia) o explicitos (`"3840x2160"`, `24`).
 
-Layout: **los paneles ABRAZAN a su texto** — el ancho se mide con
-QFontMetrics del contenido real (con los digitos normalizados a "8" para
-que frame/TC no cambien de ancho) mas `text padding`; el alto sale de una
-formula compartida con los box de los Text2 (centrado vertical exacto).
+Cada campo tiene ademas **tamano propio** (`bi_<f>_size`, en %) que escala
+su fuente sin tocar a los demas.
+
+Layout: **los paneles ABRAZAN a su texto** — el ancho se mide con las
+metricas del **TTF real de Inter que usa Nuke** (QFontMetrics cargando ese
+mismo archivo; medir con el nombre de familia crudo daba distinto porque Qt
+sustituye la fuente). Para frame/TC los digitos se normalizan a "0" (ancho
+estable por frame); el resto se mide exacto. El ancho suma `text padding` y
+el alto sale de una formula compartida con los box de los Text2 (centrado
+vertical exacto); ambos dependen del tamano por campo.
 Cada campo tiene un ANCLA (x, y en fracciones del formato; izquierda,
 centro o derecha segun el campo). Default: dos filas balanceadas — arriba
 `clip | colorspace | res`, abajo `frame | tc | fps`. Un campo sin texto no
@@ -41,8 +51,18 @@ dibuja panel.
 ## Arquitectura del gizmo
 
 ```
-Input -> Dot -> BlinkScript (Blink_Panels) -> 6x Text2 -> Output
+Input -> Dot -> BlinkScript (Blink_Panels) -> 8x Text2 -> Output
 ```
+
+**Fuente**: es **Inter**, fija (la del pack); el usuario elige solo el PESO
+(Regular/SemiBold/Bold via `bi_weight`, que setea el `bi_font` invisible por
+`apply_font()`). Para no depender de que Inter este instalada en la maquina,
+el startup (`LGA_HieroTools_Startup.py`) antepone el fonts dir del repo
+(`LGA_NKS_Shared/fonts/`, con los tres pesos) a `NUKE_FONT_PATH`, que Nuke
+lee al escanear las fuentes (una vez, al arrancar; no en runtime). Asi Nuke
+descubre el Inter del repo —incluido Bold, que el Inter de Windows no trae—
+sin instalar nada. Al cambiar el peso, el fondo se recalcula (mide con el
+TTF del peso nuevo).
 
 - **Blink_Panels**: kernel `LGA_RoundedPanels.blink` (SDF de rounded box,
   antialiasing 1px, los 6 paneles en UNA pasada, params solo float). Su
@@ -51,11 +71,12 @@ Input -> Dot -> BlinkScript (Blink_Panels) -> 6x Text2 -> Output
   timeline) y ata cada parametro a los knobs del gizmo padre por expresion
   (los knobs del kernel recien existen tras compilar, prefijados con el
   nombre del kernel).
-- **Text2 x6**: anatomia calcada del BurnIn nativo (blobs de estado
-  incluidos — sin ellos el GPU los dibuja en el origen). Cada message llama
-  a `LGA_NKS_BurnIn_Logic.bi_text()` con `[frame]`; res y fps llevan el
-  color condicional via `bi_ok()` en los canales g/b. El texto se centra
-  verticalmente dentro de su panel (`yjustify center`) con `text padding`.
+- **Text2 x8** (6 de metadata + custom1/custom2): anatomia calcada del
+  BurnIn nativo (blobs de estado incluidos — sin ellos el GPU los dibuja en
+  el origen). Cada message llama a `LGA_NKS_BurnIn_Logic.bi_text()` con
+  `[frame]`; res y fps llevan el color condicional via `bi_ok()` en los
+  canales g/b. El texto se centra verticalmente dentro de su panel
+  (`yjustify center`) con `text padding`.
 - El gizmo se REGENERA con
   `+Building_Blocks/BurnIn/gen_LGA_BurnIn_gizmo.py` (tabla de layout +
   kernel + plantilla Text2). No editar el `.gizmo` a mano.
@@ -82,14 +103,20 @@ LGA_HieroTools/
 
 ## Panel propio (Open LGA Panel)
 
-El properties panel de Nuke no se puede re-estilar, pero el render solo lee
-knobs: la ventana `LGA_NKS_BurnIn_Panel` (estilo del pack, `Style.FORM`,
-captura en `UI_Captures/BurnIn_Panel.png`) edita en vivo el efecto —
-campos, fondos, colores, opacidades, radio, padding — y los objetivos del
-proyecto, con dos guardados:
+El properties del gizmo quedo **pelado a un solo boton** (Open LGA Panel);
+todo se edita en la ventana `LGA_NKS_BurnIn_Panel` (estilo del pack,
+`Style.FORM`, captura en `UI_Captures/BurnIn_Panel.png`), rediseniada a
+**tabla + detalle**:
 
-- **Layout (% of format)**: posicion X/Y de cada campo en porcentaje,
-  editada en vivo sobre el efecto.
+- **Tabla**, una fila por campo: nombre, ON, BG, y **X / Y / SIZE** con
+  drag-sliders estilo Nuke (click-drag cambia, click escribe). Los checkbox
+  ON/BG tienen **paint-toggle** (click+drag tilda/destilda varios). Las
+  filas son de **seleccion multiple**.
+- **Detalle** (opera sobre TODA la seleccion): ancla 3x3 que manda X/Y a una
+  esquina/centro, y el texto de los campos custom (con un unico custom
+  seleccionado). No hay rotacion (ver Limitaciones).
+- **Style global**: text color, peso de Inter, opacidades, radio, padding.
+- **Keep on top** (default ON) abajo a la izquierda.
 - **Presets**: guardan campos+layout+estilo con nombre en el BurnIn.json
   de AppData; Load los aplica al efecto y nudgea.
 - **Save Targets to Project**: tag `LGA_BurnIn_Settings` en el `tagsBin()`
@@ -124,12 +151,15 @@ y al cambiar el mtime del JSON.
 - Comparacion de resolucion solo para plates (EXR por default).
 - El costo GPU del kernel es una pasada full-frame por instancia; con "Use
   GPU if available" activo es despreciable frente a un Denoise.
+- **La rotacion por campo todavia no esta cableada** (los knobs `bi_<f>_rot`
+  existen pero inertes; sin control en el panel). El transform tab del Text2 no
+  renderiza en soft effects, PERO rotar el GRUPO "root transform" del Text2 SI:
+  seleccionarlo y escribir la rotacion como literal en la posicion [10] de
+  `animation_layers`. Falta la pasada de wiring (write del literal + centro por
+  campo + trigger de re-render). Detalle en `Docu_SoftEffects_Aprendizajes.md`.
 
 ## Pendientes
 
-- Validacion visual final en NKS (efecto nuevo + boton del panel).
-- Layouts verticales (campos rotados 90): mecanismo probado via blob
-  `animation_layers` + `fromScript`, no integrado.
 - Aplicar defaults de config a instancias nuevas (hoy los defaults viven en
   el gizmo generado).
 

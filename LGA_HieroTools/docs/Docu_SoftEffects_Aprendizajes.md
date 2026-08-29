@@ -161,3 +161,47 @@ camino onCreate+Load en vez de embeberlo).
   recien desde **17.0v3** (release note ID 224896); en 15.x/16.x solo presets.
 - El mecanismo de registro (`registerAction` + `foundry.timeline.effect.*`)
   es identico al menos desde Nuke 13 hasta 17.x.
+
+## Rotacion del texto por campo: pendiente (medido, 29-08)
+
+Se quiere rotar cada campo (texto + fondo) por separado —para burn-ins
+verticales a los costados—. Estado: **no integrada todavia**. Los caminos
+directos NO rotan, pero hay una via prometedora (blob `animation_layers`) que
+quedo sin verificar bien. Pruebas en NKS 16, con capturas del viewer:
+
+1. El transform tab del Text2 (`translate`, `rotate`) NO renderiza: mover
+   `translate` 400px no movio el texto; `rotate` 90 no lo roto. El Text2 se
+   posiciona solo por su `box` + `xjustify`/`yjustify`.
+2. El blob `animation_layers` (que en un comp guarda el transform real del
+   texto) con la ranura de rotacion en 90 tampoco roto nada en el timeline.
+3. Un nodo **Transform** SI renderiza dentro del gizmo: uno antes del Output
+   roto TODA la imagen (footage + burn-in). Pero un Transform sobre la salida
+   AISLADA de un Text2 (Text2 dibujado sobre negro) NO rota el texto, ni
+   siquiera con un pixel-op (Grade) forzando el raster antes del Transform.
+4. Un Transform sobre el composite final SI rota (probado), pero rota todo
+   junto (global), no por campo.
+
+**LO QUE SI FUNCIONA (mecanismo encontrado):** rotar el GRUPO "root transform"
+del propio Text2. En la UI: tab **Groups** -> seleccionar "root transform" ->
+rotar. Eso escribe la rotacion en el blob `animation_layers` y RENDERIZA.
+Serializado, el layer es:
+
+    {1 11 <cx> <cy> <tx> <ty> <sx> <sy> <skewX> <skewY> <ROT> <?>}
+
+o sea la **rotacion esta en la posicion [10]** (indice 0), y hay que tener el
+grupo **SELECCIONADO** (`group_animations ... selected: 0`). Capturado de un
+Text2 rotado a mano (rotate 59 -> `... 0 0 59 0` en [10]).
+
+Trampas medidas al intentar cablearlo:
+- La rotacion tiene que ir como **LITERAL**. Una expresion `{parent.bi_x_rot}`
+  en el blob NO se evalua (rompe el layer y el texto no renderiza).
+- **Setear el blob por API (`fromScript`/`setValue`) NO dispara el re-render**
+  del soft effect (queda el frame cacheado). La edicion interactiva de la UI y
+  un cambio de frame SI. Para el panel: escribir el literal y refrescar por
+  cambio de frame, o encontrar el trigger que usa la UI.
+- El **centro** de la rotacion (posiciones [2][3] del layer) hay que ajustarlo
+  por campo para que rote SOBRE SI MISMO; con el default queda descentrado.
+
+PENDIENTE: cablear una `apply_rotation()` que, leyendo `bi_<f>_rot`, escriba el
+literal en [10] con el grupo seleccionado y el centro correcto por campo, y que
+refresque. Los knobs `bi_<f>_rot` ya existen (inertes por ahora).

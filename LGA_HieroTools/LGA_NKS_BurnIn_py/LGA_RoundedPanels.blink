@@ -1,9 +1,8 @@
-// LGA_RoundedPanels v0.03 | Lega
-// Kernel de produccion de LGA_BurnIn: fondos redondeados de los seis
-// campos en una pasada. SDF de rounded box + antialiasing de 1px.
-// v0.03: sin funcion miembro, logica inline por campo (la funcion no
-//        compilaba en el contexto del timeline).
-// v0.02: una declaracion por linea.
+// LGA_RoundedPanels v0.04 | Lega
+// Fondos redondeados de los campos del burn-in, en una pasada.
+// SDF de rounded box + antialiasing 1px, con rotacion por campo.
+// v0.04: rotacion por campo (ax,ay = ancla; rot en radianes).
+// v0.03: sin funcion miembro, logica inline por campo.
 
 kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
 {
@@ -16,31 +15,65 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     float clip_w;
     float clip_h;
     float clip_on;
-    float res_x;
-    float res_y;
-    float res_w;
-    float res_h;
-    float res_on;
-    float frame_x;
-    float frame_y;
-    float frame_w;
-    float frame_h;
-    float frame_on;
-    float tc_x;
-    float tc_y;
-    float tc_w;
-    float tc_h;
-    float tc_on;
+    float clip_ax;
+    float clip_ay;
+    float clip_rot;
     float cspace_x;
     float cspace_y;
     float cspace_w;
     float cspace_h;
     float cspace_on;
+    float cspace_ax;
+    float cspace_ay;
+    float cspace_rot;
+    float res_x;
+    float res_y;
+    float res_w;
+    float res_h;
+    float res_on;
+    float res_ax;
+    float res_ay;
+    float res_rot;
+    float frame_x;
+    float frame_y;
+    float frame_w;
+    float frame_h;
+    float frame_on;
+    float frame_ax;
+    float frame_ay;
+    float frame_rot;
+    float tc_x;
+    float tc_y;
+    float tc_w;
+    float tc_h;
+    float tc_on;
+    float tc_ax;
+    float tc_ay;
+    float tc_rot;
     float fps_x;
     float fps_y;
     float fps_w;
     float fps_h;
     float fps_on;
+    float fps_ax;
+    float fps_ay;
+    float fps_rot;
+    float custom1_x;
+    float custom1_y;
+    float custom1_w;
+    float custom1_h;
+    float custom1_on;
+    float custom1_ax;
+    float custom1_ay;
+    float custom1_rot;
+    float custom2_x;
+    float custom2_y;
+    float custom2_w;
+    float custom2_h;
+    float custom2_on;
+    float custom2_ax;
+    float custom2_ay;
+    float custom2_rot;
     float corner_radius;
     float color_r;
     float color_g;
@@ -53,31 +86,65 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     defineParam(clip_w, "clip_w", 0.0f);
     defineParam(clip_h, "clip_h", 0.0f);
     defineParam(clip_on, "clip_on", 0.0f);
-    defineParam(res_x, "res_x", 0.0f);
-    defineParam(res_y, "res_y", 0.0f);
-    defineParam(res_w, "res_w", 0.0f);
-    defineParam(res_h, "res_h", 0.0f);
-    defineParam(res_on, "res_on", 0.0f);
-    defineParam(frame_x, "frame_x", 0.0f);
-    defineParam(frame_y, "frame_y", 0.0f);
-    defineParam(frame_w, "frame_w", 0.0f);
-    defineParam(frame_h, "frame_h", 0.0f);
-    defineParam(frame_on, "frame_on", 0.0f);
-    defineParam(tc_x, "tc_x", 0.0f);
-    defineParam(tc_y, "tc_y", 0.0f);
-    defineParam(tc_w, "tc_w", 0.0f);
-    defineParam(tc_h, "tc_h", 0.0f);
-    defineParam(tc_on, "tc_on", 0.0f);
+    defineParam(clip_ax, "clip_ax", 0.0f);
+    defineParam(clip_ay, "clip_ay", 0.0f);
+    defineParam(clip_rot, "clip_rot", 0.0f);
     defineParam(cspace_x, "cspace_x", 0.0f);
     defineParam(cspace_y, "cspace_y", 0.0f);
     defineParam(cspace_w, "cspace_w", 0.0f);
     defineParam(cspace_h, "cspace_h", 0.0f);
     defineParam(cspace_on, "cspace_on", 0.0f);
+    defineParam(cspace_ax, "cspace_ax", 0.0f);
+    defineParam(cspace_ay, "cspace_ay", 0.0f);
+    defineParam(cspace_rot, "cspace_rot", 0.0f);
+    defineParam(res_x, "res_x", 0.0f);
+    defineParam(res_y, "res_y", 0.0f);
+    defineParam(res_w, "res_w", 0.0f);
+    defineParam(res_h, "res_h", 0.0f);
+    defineParam(res_on, "res_on", 0.0f);
+    defineParam(res_ax, "res_ax", 0.0f);
+    defineParam(res_ay, "res_ay", 0.0f);
+    defineParam(res_rot, "res_rot", 0.0f);
+    defineParam(frame_x, "frame_x", 0.0f);
+    defineParam(frame_y, "frame_y", 0.0f);
+    defineParam(frame_w, "frame_w", 0.0f);
+    defineParam(frame_h, "frame_h", 0.0f);
+    defineParam(frame_on, "frame_on", 0.0f);
+    defineParam(frame_ax, "frame_ax", 0.0f);
+    defineParam(frame_ay, "frame_ay", 0.0f);
+    defineParam(frame_rot, "frame_rot", 0.0f);
+    defineParam(tc_x, "tc_x", 0.0f);
+    defineParam(tc_y, "tc_y", 0.0f);
+    defineParam(tc_w, "tc_w", 0.0f);
+    defineParam(tc_h, "tc_h", 0.0f);
+    defineParam(tc_on, "tc_on", 0.0f);
+    defineParam(tc_ax, "tc_ax", 0.0f);
+    defineParam(tc_ay, "tc_ay", 0.0f);
+    defineParam(tc_rot, "tc_rot", 0.0f);
     defineParam(fps_x, "fps_x", 0.0f);
     defineParam(fps_y, "fps_y", 0.0f);
     defineParam(fps_w, "fps_w", 0.0f);
     defineParam(fps_h, "fps_h", 0.0f);
     defineParam(fps_on, "fps_on", 0.0f);
+    defineParam(fps_ax, "fps_ax", 0.0f);
+    defineParam(fps_ay, "fps_ay", 0.0f);
+    defineParam(fps_rot, "fps_rot", 0.0f);
+    defineParam(custom1_x, "custom1_x", 0.0f);
+    defineParam(custom1_y, "custom1_y", 0.0f);
+    defineParam(custom1_w, "custom1_w", 0.0f);
+    defineParam(custom1_h, "custom1_h", 0.0f);
+    defineParam(custom1_on, "custom1_on", 0.0f);
+    defineParam(custom1_ax, "custom1_ax", 0.0f);
+    defineParam(custom1_ay, "custom1_ay", 0.0f);
+    defineParam(custom1_rot, "custom1_rot", 0.0f);
+    defineParam(custom2_x, "custom2_x", 0.0f);
+    defineParam(custom2_y, "custom2_y", 0.0f);
+    defineParam(custom2_w, "custom2_w", 0.0f);
+    defineParam(custom2_h, "custom2_h", 0.0f);
+    defineParam(custom2_on, "custom2_on", 0.0f);
+    defineParam(custom2_ax, "custom2_ax", 0.0f);
+    defineParam(custom2_ay, "custom2_ay", 0.0f);
+    defineParam(custom2_rot, "custom2_rot", 0.0f);
     defineParam(corner_radius, "corner_radius", 30.0f);
     defineParam(color_r, "color_r", 0.0f);
     defineParam(color_g, "color_g", 0.0f);
@@ -93,50 +160,17 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
 
     // panel clip
     if (clip_on > 0.5f && clip_w > 0.0f && clip_h > 0.0f) {
-      float r = min(corner_radius, min(clip_w, clip_h) * 0.5f);
       float cx = clip_x + clip_w * 0.5f;
       float cy = clip_y + clip_h * 0.5f;
-      float dx = fabs(ppx - cx) - (clip_w * 0.5f - r);
-      float dy = fabs(ppy - cy) - (clip_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel res
-    if (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) {
-      float r = min(corner_radius, min(res_w, res_h) * 0.5f);
-      float cx = res_x + res_w * 0.5f;
-      float cy = res_y + res_h * 0.5f;
-      float dx = fabs(ppx - cx) - (res_w * 0.5f - r);
-      float dy = fabs(ppy - cy) - (res_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel frame
-    if (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) {
-      float r = min(corner_radius, min(frame_w, frame_h) * 0.5f);
-      float cx = frame_x + frame_w * 0.5f;
-      float cy = frame_y + frame_h * 0.5f;
-      float dx = fabs(ppx - cx) - (frame_w * 0.5f - r);
-      float dy = fabs(ppy - cy) - (frame_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel tc
-    if (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) {
-      float r = min(corner_radius, min(tc_w, tc_h) * 0.5f);
-      float cx = tc_x + tc_w * 0.5f;
-      float cy = tc_y + tc_h * 0.5f;
-      float dx = fabs(ppx - cx) - (tc_w * 0.5f - r);
-      float dy = fabs(ppy - cy) - (tc_h * 0.5f - r);
+      float ca = cos(clip_rot);
+      float sa = sin(clip_rot);
+      float rx = ppx - clip_ax;
+      float ry = ppy - clip_ay;
+      float lx = ca * rx + sa * ry + clip_ax - cx;
+      float ly = -sa * rx + ca * ry + clip_ay - cy;
+      float r = min(corner_radius, min(clip_w, clip_h) * 0.5f);
+      float dx = fabs(lx) - (clip_w * 0.5f - r);
+      float dy = fabs(ly) - (clip_h * 0.5f - r);
       float qx = max(dx, 0.0f);
       float qy = max(dy, 0.0f);
       float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
@@ -145,11 +179,74 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
 
     // panel cspace
     if (cspace_on > 0.5f && cspace_w > 0.0f && cspace_h > 0.0f) {
-      float r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);
       float cx = cspace_x + cspace_w * 0.5f;
       float cy = cspace_y + cspace_h * 0.5f;
-      float dx = fabs(ppx - cx) - (cspace_w * 0.5f - r);
-      float dy = fabs(ppy - cy) - (cspace_h * 0.5f - r);
+      float ca = cos(cspace_rot);
+      float sa = sin(cspace_rot);
+      float rx = ppx - cspace_ax;
+      float ry = ppy - cspace_ay;
+      float lx = ca * rx + sa * ry + cspace_ax - cx;
+      float ly = -sa * rx + ca * ry + cspace_ay - cy;
+      float r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);
+      float dx = fabs(lx) - (cspace_w * 0.5f - r);
+      float dy = fabs(ly) - (cspace_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel res
+    if (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) {
+      float cx = res_x + res_w * 0.5f;
+      float cy = res_y + res_h * 0.5f;
+      float ca = cos(res_rot);
+      float sa = sin(res_rot);
+      float rx = ppx - res_ax;
+      float ry = ppy - res_ay;
+      float lx = ca * rx + sa * ry + res_ax - cx;
+      float ly = -sa * rx + ca * ry + res_ay - cy;
+      float r = min(corner_radius, min(res_w, res_h) * 0.5f);
+      float dx = fabs(lx) - (res_w * 0.5f - r);
+      float dy = fabs(ly) - (res_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel frame
+    if (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) {
+      float cx = frame_x + frame_w * 0.5f;
+      float cy = frame_y + frame_h * 0.5f;
+      float ca = cos(frame_rot);
+      float sa = sin(frame_rot);
+      float rx = ppx - frame_ax;
+      float ry = ppy - frame_ay;
+      float lx = ca * rx + sa * ry + frame_ax - cx;
+      float ly = -sa * rx + ca * ry + frame_ay - cy;
+      float r = min(corner_radius, min(frame_w, frame_h) * 0.5f);
+      float dx = fabs(lx) - (frame_w * 0.5f - r);
+      float dy = fabs(ly) - (frame_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel tc
+    if (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) {
+      float cx = tc_x + tc_w * 0.5f;
+      float cy = tc_y + tc_h * 0.5f;
+      float ca = cos(tc_rot);
+      float sa = sin(tc_rot);
+      float rx = ppx - tc_ax;
+      float ry = ppy - tc_ay;
+      float lx = ca * rx + sa * ry + tc_ax - cx;
+      float ly = -sa * rx + ca * ry + tc_ay - cy;
+      float r = min(corner_radius, min(tc_w, tc_h) * 0.5f);
+      float dx = fabs(lx) - (tc_w * 0.5f - r);
+      float dy = fabs(ly) - (tc_h * 0.5f - r);
       float qx = max(dx, 0.0f);
       float qy = max(dy, 0.0f);
       float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
@@ -158,11 +255,55 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
 
     // panel fps
     if (fps_on > 0.5f && fps_w > 0.0f && fps_h > 0.0f) {
-      float r = min(corner_radius, min(fps_w, fps_h) * 0.5f);
       float cx = fps_x + fps_w * 0.5f;
       float cy = fps_y + fps_h * 0.5f;
-      float dx = fabs(ppx - cx) - (fps_w * 0.5f - r);
-      float dy = fabs(ppy - cy) - (fps_h * 0.5f - r);
+      float ca = cos(fps_rot);
+      float sa = sin(fps_rot);
+      float rx = ppx - fps_ax;
+      float ry = ppy - fps_ay;
+      float lx = ca * rx + sa * ry + fps_ax - cx;
+      float ly = -sa * rx + ca * ry + fps_ay - cy;
+      float r = min(corner_radius, min(fps_w, fps_h) * 0.5f);
+      float dx = fabs(lx) - (fps_w * 0.5f - r);
+      float dy = fabs(ly) - (fps_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel custom1
+    if (custom1_on > 0.5f && custom1_w > 0.0f && custom1_h > 0.0f) {
+      float cx = custom1_x + custom1_w * 0.5f;
+      float cy = custom1_y + custom1_h * 0.5f;
+      float ca = cos(custom1_rot);
+      float sa = sin(custom1_rot);
+      float rx = ppx - custom1_ax;
+      float ry = ppy - custom1_ay;
+      float lx = ca * rx + sa * ry + custom1_ax - cx;
+      float ly = -sa * rx + ca * ry + custom1_ay - cy;
+      float r = min(corner_radius, min(custom1_w, custom1_h) * 0.5f);
+      float dx = fabs(lx) - (custom1_w * 0.5f - r);
+      float dy = fabs(ly) - (custom1_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel custom2
+    if (custom2_on > 0.5f && custom2_w > 0.0f && custom2_h > 0.0f) {
+      float cx = custom2_x + custom2_w * 0.5f;
+      float cy = custom2_y + custom2_h * 0.5f;
+      float ca = cos(custom2_rot);
+      float sa = sin(custom2_rot);
+      float rx = ppx - custom2_ax;
+      float ry = ppy - custom2_ay;
+      float lx = ca * rx + sa * ry + custom2_ax - cx;
+      float ly = -sa * rx + ca * ry + custom2_ay - cy;
+      float r = min(corner_radius, min(custom2_w, custom2_h) * 0.5f);
+      float dx = fabs(lx) - (custom2_w * 0.5f - r);
+      float dy = fabs(ly) - (custom2_h * 0.5f - r);
       float qx = max(dx, 0.0f);
       float qy = max(dy, 0.0f);
       float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;

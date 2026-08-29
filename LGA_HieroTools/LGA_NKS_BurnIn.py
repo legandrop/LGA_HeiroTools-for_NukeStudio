@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.01 | Lega
+  LGA_NKS_BurnIn v1.02 | Lega
 
   Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
@@ -14,6 +14,9 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.02: addKnobChanged por nodeClass LGA_BurnIn: al cambiar el peso
+         de la fuente (bi_weight) re-aplica apply_font() para que el
+         fondo se recalcule con las metricas del nuevo peso de Inter.
   v1.01: Registra LGA_BurnIn (version BlinkScript con paneles
          redondeados) y renombra la version solo-Text2 a LGA_BurnIn_v0.
   v1.00: Version inicial.
@@ -68,6 +71,21 @@ def _register():
     action_v0.setToolTip(_tooltip("effect_v0"))
     action_v0.setData("LGA_BurnIn_v0")
     registerAction(action_v0)
+
+    # Al cambiar el peso (bi_weight) hay que reasignar la fuente Inter del
+    # gizmo (el FreeType_Knob se setea por codigo, no por expresion).
+    def _on_knob_changed():
+        n = nuke.thisNode()
+        k = nuke.thisKnob()
+        if n is not None and k is not None and k.name() == "bi_weight":
+            try:
+                import LGA_NKS_BurnIn_Blink as bi_blink
+
+                bi_blink.apply_font(n)
+            except Exception:
+                pass
+
+    nuke.addKnobChanged(_on_knob_changed, nodeClass="LGA_BurnIn")
 
     # La config cacheada por proyecto se invalida en los eventos de proyecto:
     # al cargar (los tags ya estan disponibles), al guardar (por si la ventana
