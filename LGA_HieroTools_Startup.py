@@ -12,6 +12,7 @@ if TOOLS_DIR not in sys.path:
 
 MODULES = [
     "LGA_NKS_Assignee_Panel",
+    "LGA_NKS_BurnIn",
     "LGA_NKS_ClipColor_Panel",
     "LGA_NKS_Coordination_Panel",
     "LGA_NKS_Edit_Panel",

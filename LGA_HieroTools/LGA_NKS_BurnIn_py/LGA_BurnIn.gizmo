@@ -1,0 +1,341 @@
+Gizmo {
+ addUserKnob {20 lga_burnin_tab l "LGA BurnIn"}
+ addUserKnob {19 bi_color l "color" t "Color del texto"}
+ bi_color {1.0}
+ addUserKnob {7 bi_opacity l "opacity" t "Opacidad del texto" R 0.0 1.0}
+ bi_opacity 1.0
+ addUserKnob {84 bi_font l "font"}
+ addUserKnob {84 bi_font_digits l "font digits"}
+ addUserKnob {26 bi_font_digits_help l "" +STARTLINE T "font digits: fuente para frame y timecode. Elegir una monoespaciada (ej. Courier New) para que el fondo no cambie de ancho al cambiar los digitos."}
+ addUserKnob {7 bi_scale l "text scale" R 0.0 2.0}
+ bi_scale 0.5
+ addUserKnob {26 ""}
+ addUserKnob {6 bi_clip_on l "clip name" t "Muestra el nombre del clip visible" +STARTLINE}
+ bi_clip_on true
+ addUserKnob {6 bi_res_on l "resolution" t "Muestra la resolucion del clip visible; rojo si difiere del objetivo del proyecto (solo plates EXR)" +STARTLINE}
+ bi_res_on true
+ addUserKnob {6 bi_frame_on l "frame" t "Muestra el numero de frame del clip visible" +STARTLINE}
+ bi_frame_on true
+ addUserKnob {6 bi_tc_on l "timecode" t "Muestra el timecode del clip visible" +STARTLINE}
+ bi_tc_on true
+ addUserKnob {6 bi_fps_on l "fps" t "Muestra los fps del clip visible; rojo si difieren del objetivo del proyecto" +STARTLINE}
+ bi_fps_on true
+ addUserKnob {6 bi_cspace_on l "colorspace" t "Muestra el espacio de color del clip visible" +STARTLINE}
+ bi_cspace_on true
+ addUserKnob {26 ""}
+ addUserKnob {26 bi_bg_label l "" +STARTLINE T "Background"}
+ addUserKnob {6 bi_clip_bg l "bg clip" t "Rectangulo de fondo detras del nombre del clip" +STARTLINE}
+ bi_clip_bg false
+ addUserKnob {6 bi_res_bg l "bg resolution" t "Rectangulo de fondo detras de la resolucion" +STARTLINE}
+ bi_res_bg false
+ addUserKnob {6 bi_frame_bg l "bg frame" t "Rectangulo de fondo detras del frame" +STARTLINE}
+ bi_frame_bg false
+ addUserKnob {6 bi_tc_bg l "bg timecode" t "Rectangulo de fondo detras del timecode" +STARTLINE}
+ bi_tc_bg false
+ addUserKnob {6 bi_fps_bg l "bg fps" t "Rectangulo de fondo detras de los fps" +STARTLINE}
+ bi_fps_bg false
+ addUserKnob {6 bi_cspace_bg l "bg colorspace" t "Rectangulo de fondo detras del espacio de color" +STARTLINE}
+ bi_cspace_bg false
+ addUserKnob {19 bi_bg_color l "bg color" t "Color del rectangulo de fondo"}
+ bi_bg_color {0.0 0.0 0.0 1.0}
+ addUserKnob {7 bi_bg_opacity l "bg opacity" t "Opacidad del rectangulo de fondo" R 0.0 1.0}
+ bi_bg_opacity 0.8
+ addUserKnob {7 bi_bg_border_x l "bg x-border" t "Padding horizontal del fondo respecto del texto" R 0 50}
+ bi_bg_border_x 12
+ addUserKnob {7 bi_bg_border_y l "bg y-border" t "Padding vertical del fondo respecto del texto" R 0 50}
+ bi_bg_border_y 6
+ addUserKnob {20 bi_layout_tab l "Layout"}
+ addUserKnob {26 bi_layout_help l "" +STARTLINE T "Posiciones en fraccion del formato (0-1). Cada campo ancla su texto a su caja segun su esquina."}
+ addUserKnob {7 bi_clip_x1 l "clip x1" R 0 1}
+ bi_clip_x1 0.02
+ addUserKnob {7 bi_clip_y1 l "clip y1" R 0 1}
+ bi_clip_y1 0.9
+ addUserKnob {7 bi_clip_x2 l "clip x2" R 0 1}
+ bi_clip_x2 0.6
+ addUserKnob {7 bi_clip_y2 l "clip y2" R 0 1}
+ bi_clip_y2 0.96
+ addUserKnob {7 bi_res_x1 l "res x1" R 0 1}
+ bi_res_x1 0.6
+ addUserKnob {7 bi_res_y1 l "res y1" R 0 1}
+ bi_res_y1 0.9
+ addUserKnob {7 bi_res_x2 l "res x2" R 0 1}
+ bi_res_x2 0.98
+ addUserKnob {7 bi_res_y2 l "res y2" R 0 1}
+ bi_res_y2 0.96
+ addUserKnob {7 bi_frame_x1 l "frame x1" R 0 1}
+ bi_frame_x1 0.02
+ addUserKnob {7 bi_frame_y1 l "frame y1" R 0 1}
+ bi_frame_y1 0.04
+ addUserKnob {7 bi_frame_x2 l "frame x2" R 0 1}
+ bi_frame_x2 0.3
+ addUserKnob {7 bi_frame_y2 l "frame y2" R 0 1}
+ bi_frame_y2 0.2
+ addUserKnob {7 bi_tc_x1 l "tc x1" R 0 1}
+ bi_tc_x1 0.3
+ addUserKnob {7 bi_tc_y1 l "tc y1" R 0 1}
+ bi_tc_y1 0.04
+ addUserKnob {7 bi_tc_x2 l "tc x2" R 0 1}
+ bi_tc_x2 0.6
+ addUserKnob {7 bi_tc_y2 l "tc y2" R 0 1}
+ bi_tc_y2 0.2
+ addUserKnob {7 bi_cspace_x1 l "cspace x1" R 0 1}
+ bi_cspace_x1 0.6
+ addUserKnob {7 bi_cspace_y1 l "cspace y1" R 0 1}
+ bi_cspace_y1 0.04
+ addUserKnob {7 bi_cspace_x2 l "cspace x2" R 0 1}
+ bi_cspace_x2 0.75
+ addUserKnob {7 bi_cspace_y2 l "cspace y2" R 0 1}
+ bi_cspace_y2 0.2
+ addUserKnob {7 bi_fps_x1 l "fps x1" R 0 1}
+ bi_fps_x1 0.6
+ addUserKnob {7 bi_fps_y1 l "fps y1" R 0 1}
+ bi_fps_y1 0.04
+ addUserKnob {7 bi_fps_x2 l "fps x2" R 0 1}
+ bi_fps_x2 0.98
+ addUserKnob {7 bi_fps_y2 l "fps y2" R 0 1}
+ bi_fps_y2 0.2
+ help "LGA BurnIn: un solo soft effect con la metadata del clip visible.\n\nresolution y fps se pintan de rojo si no coinciden con el objetivo del proyecto (config en AppData + tag del proyecto). Posiciones en la pestana Layout, en fracciones del formato."
+}
+ Input {
+  inputs 0
+  name Input1
+  xpos -217
+  ypos 47
+ }
+ Dot {
+  name Dot2
+  xpos -183
+  ypos 98
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('clip', nuke.thisParent(), \[frame\])]"
+  old_message {{48}
+    }
+  old_expression_markers {{0 0}
+    }
+  box {{"parent.bi_clip_x1*width"} {"parent.bi_clip_y1*height"} {"parent.bi_clip_x2*width"} {"parent.bi_clip_y2*height"}}
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font]"
+  font_size_values {{0 100}
+    }
+  cursor_position 0
+  global_font_scale {{parent.bi_scale}}
+  scale {1 1}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  enable_background {{parent.bi_clip_bg}}
+  background_color {{parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color}}
+  background_opacity {{parent.bi_bg_opacity}}
+  background_border_x {{parent.bi_bg_border_x}}
+  background_border_y {{parent.bi_bg_border_y}}
+  disable {{1-parent.bi_clip_on}}
+  name Text_Clip
+  xpos -217
+  ypos 148
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('res', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"parent.bi_res_x1*width"} {"parent.bi_res_y1*height"} {"parent.bi_res_x2*width"} {"parent.bi_res_y2*height"}}
+  xjustify right
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font]"
+  cursor_position 88
+  global_font_scale {{parent.bi_scale}}
+  scale {1 1}
+  center {1024 778}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: 0 items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color.r} {"\[python \{__import__('LGA_NKS_BurnIn_Logic').bi_ok('res', nuke.thisParent(), nuke.frame())\}]"} {"\[python \{__import__('LGA_NKS_BurnIn_Logic').bi_ok('res', nuke.thisParent(), nuke.frame())\}]"} {parent.bi_color.a}}
+  enable_background {{parent.bi_res_bg}}
+  background_color {{parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color}}
+  background_opacity {{parent.bi_bg_opacity}}
+  background_border_x {{parent.bi_bg_border_x}}
+  background_border_y {{parent.bi_bg_border_y}}
+  disable {{1-parent.bi_res_on}}
+  name Text_Res
+  xpos -217
+  ypos 196
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('frame', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"parent.bi_frame_x1*width"} {"parent.bi_frame_y1*height"} {"parent.bi_frame_x2*width"} {"parent.bi_frame_y2*height"}}
+  yjustify bottom
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font_digits]"
+  cursor_position 74
+  global_font_scale {{parent.bi_scale}}
+  scale {1 1}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  enable_background {{parent.bi_frame_bg}}
+  background_color {{parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color}}
+  background_opacity {{parent.bi_bg_opacity}}
+  background_border_x {{parent.bi_bg_border_x}}
+  background_border_y {{parent.bi_bg_border_y}}
+  disable {{1-parent.bi_frame_on}}
+  name Text_Frame
+  xpos -217
+  ypos 244
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('tc', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"parent.bi_tc_x1*width"} {"parent.bi_tc_y1*height"} {"parent.bi_tc_x2*width"} {"parent.bi_tc_y2*height"}}
+  yjustify bottom
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font_digits]"
+  cursor_position 74
+  global_font_scale {{parent.bi_scale}}
+  scale {1 1}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  enable_background {{parent.bi_tc_bg}}
+  background_color {{parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color}}
+  background_opacity {{parent.bi_bg_opacity}}
+  background_border_x {{parent.bi_bg_border_x}}
+  background_border_y {{parent.bi_bg_border_y}}
+  disable {{1-parent.bi_tc_on}}
+  name Text_TC
+  xpos -217
+  ypos 292
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('cspace', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"parent.bi_cspace_x1*width"} {"parent.bi_cspace_y1*height"} {"parent.bi_cspace_x2*width"} {"parent.bi_cspace_y2*height"}}
+  yjustify bottom
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font]"
+  cursor_position 74
+  global_font_scale {{parent.bi_scale}}
+  scale {1 1}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  enable_background {{parent.bi_cspace_bg}}
+  background_color {{parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color}}
+  background_opacity {{parent.bi_bg_opacity}}
+  background_border_x {{parent.bi_bg_border_x}}
+  background_border_y {{parent.bi_bg_border_y}}
+  disable {{1-parent.bi_cspace_on}}
+  name Text_Cspace
+  xpos -217
+  ypos 340
+ }
+ Text2 {
+  font_size_toolbar 100
+  font_width_toolbar 100
+  font_height_toolbar 100
+  opacity {{parent.bi_opacity}}
+  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('fps', nuke.thisParent(), \[frame\])]"
+  old_message {{48 49 58 48 48 58 48 48 58 48 48}
+    }
+  old_expression_markers {{0 10}
+    }
+  box {{"parent.bi_fps_x1*width"} {"parent.bi_fps_y1*height"} {"parent.bi_fps_x2*width"} {"parent.bi_fps_y2*height"}}
+  xjustify right
+  yjustify bottom
+  cliptype none
+  transforms {{0 2}
+    }
+  font "\[value parent.bi_font]"
+  cursor_position 91
+  global_font_scale {{parent.bi_scale}}
+  scale {1 1}
+  center {1024 778}
+  cursor_initialised true
+  autofit_bbox false
+  initial_cursor_position {{0 1556}
+    }
+  group_animations {{0} imported: 0 selected: 0 items: "root transform/"}
+  animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
+    }
+  color {{parent.bi_color.r} {"\[python \{__import__('LGA_NKS_BurnIn_Logic').bi_ok('fps', nuke.thisParent(), nuke.frame())\}]"} {"\[python \{__import__('LGA_NKS_BurnIn_Logic').bi_ok('fps', nuke.thisParent(), nuke.frame())\}]"} {parent.bi_color.a}}
+  enable_background {{parent.bi_fps_bg}}
+  background_color {{parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color} {parent.bi_bg_color}}
+  background_opacity {{parent.bi_bg_opacity}}
+  background_border_x {{parent.bi_bg_border_x}}
+  background_border_y {{parent.bi_bg_border_y}}
+  disable {{1-parent.bi_fps_on}}
+  name Text_Fps
+  xpos -217
+  ypos 388
+ }
+ Output {
+  name Output1
+  xpos -217
+  ypos 436
+ }
+end_group
