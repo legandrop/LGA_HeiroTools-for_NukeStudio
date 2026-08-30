@@ -14,7 +14,7 @@ Gizmo {
  addUserKnob {7 bi_bg_opacity l "bg opacity" +INVISIBLE R 0.0 1.0}
  bi_bg_opacity 0.65
  addUserKnob {7 bi_bg_radius l "bg corner radius" +INVISIBLE R 0 120}
- bi_bg_radius 30
+ bi_bg_radius 11
  addUserKnob {7 bi_text_pad l "text padding" +INVISIBLE R 0 120}
  bi_text_pad 28
  addUserKnob {6 bi_clip_on l "clip name" +INVISIBLE}
@@ -29,6 +29,10 @@ Gizmo {
  bi_clip_size 100
  addUserKnob {7 bi_clip_rot l "rot" +INVISIBLE R 0 360}
  bi_clip_rot 0
+ addUserKnob {7 bi_clip_ax l "ax" +INVISIBLE R 0 10000}
+ bi_clip_ax 0
+ addUserKnob {7 bi_clip_ay l "ay" +INVISIBLE R 0 10000}
+ bi_clip_ay 0
  addUserKnob {6 bi_cspace_on l "colorspace" +INVISIBLE}
  bi_cspace_on true
  addUserKnob {6 bi_cspace_bg l "bg" +INVISIBLE}
@@ -41,6 +45,10 @@ Gizmo {
  bi_cspace_size 100
  addUserKnob {7 bi_cspace_rot l "rot" +INVISIBLE R 0 360}
  bi_cspace_rot 0
+ addUserKnob {7 bi_cspace_ax l "ax" +INVISIBLE R 0 10000}
+ bi_cspace_ax 0
+ addUserKnob {7 bi_cspace_ay l "ay" +INVISIBLE R 0 10000}
+ bi_cspace_ay 0
  addUserKnob {6 bi_res_on l "resolution" +INVISIBLE}
  bi_res_on true
  addUserKnob {6 bi_res_bg l "bg" +INVISIBLE}
@@ -53,6 +61,10 @@ Gizmo {
  bi_res_size 100
  addUserKnob {7 bi_res_rot l "rot" +INVISIBLE R 0 360}
  bi_res_rot 0
+ addUserKnob {7 bi_res_ax l "ax" +INVISIBLE R 0 10000}
+ bi_res_ax 0
+ addUserKnob {7 bi_res_ay l "ay" +INVISIBLE R 0 10000}
+ bi_res_ay 0
  addUserKnob {6 bi_frame_on l "frame" +INVISIBLE}
  bi_frame_on true
  addUserKnob {6 bi_frame_bg l "bg" +INVISIBLE}
@@ -65,6 +77,10 @@ Gizmo {
  bi_frame_size 100
  addUserKnob {7 bi_frame_rot l "rot" +INVISIBLE R 0 360}
  bi_frame_rot 0
+ addUserKnob {7 bi_frame_ax l "ax" +INVISIBLE R 0 10000}
+ bi_frame_ax 0
+ addUserKnob {7 bi_frame_ay l "ay" +INVISIBLE R 0 10000}
+ bi_frame_ay 0
  addUserKnob {6 bi_tc_on l "timecode" +INVISIBLE}
  bi_tc_on true
  addUserKnob {6 bi_tc_bg l "bg" +INVISIBLE}
@@ -77,6 +93,10 @@ Gizmo {
  bi_tc_size 100
  addUserKnob {7 bi_tc_rot l "rot" +INVISIBLE R 0 360}
  bi_tc_rot 0
+ addUserKnob {7 bi_tc_ax l "ax" +INVISIBLE R 0 10000}
+ bi_tc_ax 0
+ addUserKnob {7 bi_tc_ay l "ay" +INVISIBLE R 0 10000}
+ bi_tc_ay 0
  addUserKnob {6 bi_fps_on l "fps" +INVISIBLE}
  bi_fps_on true
  addUserKnob {6 bi_fps_bg l "bg" +INVISIBLE}
@@ -89,6 +109,10 @@ Gizmo {
  bi_fps_size 100
  addUserKnob {7 bi_fps_rot l "rot" +INVISIBLE R 0 360}
  bi_fps_rot 0
+ addUserKnob {7 bi_fps_ax l "ax" +INVISIBLE R 0 10000}
+ bi_fps_ax 0
+ addUserKnob {7 bi_fps_ay l "ay" +INVISIBLE R 0 10000}
+ bi_fps_ay 0
  addUserKnob {6 bi_custom1_on l "custom 1" +INVISIBLE}
  bi_custom1_on false
  addUserKnob {6 bi_custom1_bg l "bg" +INVISIBLE}
@@ -101,6 +125,10 @@ Gizmo {
  bi_custom1_size 100
  addUserKnob {7 bi_custom1_rot l "rot" +INVISIBLE R 0 360}
  bi_custom1_rot 0
+ addUserKnob {7 bi_custom1_ax l "ax" +INVISIBLE R 0 10000}
+ bi_custom1_ax 0
+ addUserKnob {7 bi_custom1_ay l "ay" +INVISIBLE R 0 10000}
+ bi_custom1_ay 0
  addUserKnob {1 bi_custom1_text l "text" +INVISIBLE}
  bi_custom1_text ""
  addUserKnob {6 bi_custom2_on l "custom 2" +INVISIBLE}
@@ -115,6 +143,10 @@ Gizmo {
  bi_custom2_size 100
  addUserKnob {7 bi_custom2_rot l "rot" +INVISIBLE R 0 360}
  bi_custom2_rot 0
+ addUserKnob {7 bi_custom2_ax l "ax" +INVISIBLE R 0 10000}
+ bi_custom2_ax 0
+ addUserKnob {7 bi_custom2_ay l "ay" +INVISIBLE R 0 10000}
+ bi_custom2_ay 0
  addUserKnob {1 bi_custom2_text l "text" +INVISIBLE}
  bi_custom2_text ""
  addUserKnob {22 bi_open_panel l "Open LGA Panel" t "Abre el panel de LGA BurnIn con el estilo del pack" T "__import__('LGA_NKS_BurnIn_Panel').show_panel()" +STARTLINE}

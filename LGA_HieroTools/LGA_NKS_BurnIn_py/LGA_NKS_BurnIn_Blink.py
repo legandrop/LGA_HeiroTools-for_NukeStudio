@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Blink v1.03 | Lega
+  LGA_NKS_BurnIn_Blink v1.04 | Lega
 
   Setup del nodo BlinkScript interno del gizmo LGA_BurnIn. Lo llama el
   onCreate del nodo al instanciarse el efecto en el timeline (y al
@@ -16,6 +16,10 @@ ____________________________________________________________________
      de compilar, con el nombre del kernel como prefijo, asi que no se
      pueden escribir en el archivo del gizmo).
 
+  v1.04: El pivote pasa a knobs literales del gizmo (bi_<f>_ax/ay),
+         escritos por apply_rotation y leidos por el kernel: UNA sola
+         fuente para texto y fondo (antes cada uno lo calculaba por su
+         lado y podian divergir). Radio default de esquinas 11.
   v1.03: Rotacion por campo CABLEADA: apply_rotation() escribe el
          literal en animation_layers[10] del grupo "root transform" de
          cada Text2 (con el grupo seleccionado), pivote = centro del
@@ -84,12 +88,13 @@ def _bindings():
         binds["%s_w" % f] = _py_geo(f, "w")
         binds["%s_h" % f] = _h_expr(f)
         binds["%s_on" % f] = "parent.bi_%s_on*parent.bi_%s_bg" % (f, f)
-        # Pivote de rotacion (ax, ay) = CENTRO del panel, el mismo que usa el
-        # texto (apply_rotation escribe ese centro en animation_layers): asi
-        # texto y fondo giran juntos y el rect rota sobre si mismo. Con rot=0
-        # el kernel se reduce a la SDF axis-aligned y el pivote es indiferente.
-        binds["%s_ax" % f] = _py_geo(f, "cx")
-        binds["%s_ay" % f] = "parent.bi_%s_y*height+(%s)/2" % (f, _h_expr(f))
+        # Pivote de rotacion (ax, ay): knobs literales del gizmo, escritos por
+        # apply_rotation() — LA MISMA fuente que usa el blob del Text2. Si el
+        # kernel lo calculara por expresion y el texto por python, cualquier
+        # divergencia (formato del stream, medicion) separa el fondo del texto
+        # al rotar. Con rot=0 el kernel es la SDF axis-aligned y no se usan.
+        binds["%s_ax" % f] = "parent.bi_%s_ax" % f
+        binds["%s_ay" % f] = "parent.bi_%s_ay" % f
         binds["%s_rot" % f] = "parent.bi_%s_rot*%s" % (f, _DEG2RAD)
     binds["corner_radius"] = "parent.bi_bg_radius"
     binds["color_r"] = "parent.bi_bg_color.r"
@@ -271,6 +276,12 @@ def apply_rotation(gizmo, fields=None):
                 '{0} imported: 0 selected: 0 items: "root transform"'
             )
             text_node["animation_layers"].fromScript(blob)
+            # El kernel usa EL MISMO pivote via los knobs bi_<f>_ax/ay.
+            try:
+                gizmo["bi_%s_ax" % f].setValue(round(cx, 4))
+                gizmo["bi_%s_ay" % f].setValue(round(cy, 4))
+            except Exception:
+                pass
         except Exception as exc:
             _log("ERROR rotando campo {}: {}".format(f, exc))
 

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v2.00 | Lega
+  LGA_NKS_BurnIn_Panel v2.02 | Lega
 
   Editor de LGA BurnIn con el estilo del pack. Rediseno "tabla +
   detalle": una fila por campo (nombre, ON, BG, X, Y, SIZE) con
@@ -19,6 +19,11 @@ ____________________________________________________________________
   transform"; ver Docu_SoftEffects_Aprendizajes.md). Si el viewer no
   refresca solo, el boton Refresh Timeline del ViewerTL lo fuerza.
 
+  v2.02: Fixes medidos con drags reales de mouse: el paint-toggle
+         pintaba el estado viejo (QCheckBox togglea al release) y
+         salteaba checkboxes en drags rapidos (Qt agrupa moves; ahora
+         interpola la linea). El ancla 3x3 y los sliders X/Y/Size
+         re-sincronizan el pivote de rotacion del campo.
   v2.01: Rotacion por campo cableada (RotationBar en el detalle,
          aplica a la seleccion; presets guardan/cargan rot).
   v2.00: Rediseno completo. Tabla con drag-sliders (click-drag cambia,
@@ -128,59 +133,99 @@ class PaintController(object):
         self.active = False
         self.target = False
         self.boxes = []
+        self._last = None
 
     def register(self, box):
         self.boxes.append(box)
 
-    def begin(self, target):
+    def begin(self, target, global_pos=None):
         self.active = True
         self.target = target
+        self._last = global_pos
 
     def end(self):
         self.active = False
+        self._last = None
 
     def paint_at(self, global_pos):
+        """Pinta desde la ULTIMA posicion hasta esta, interpolando: Qt agrupa
+        mouse moves y un drag rapido salteaba checkboxes (medido con drags
+        reales); muestrear la linea cada ~6px no pierde ninguno."""
         if not self.active:
             return
+        points = [global_pos]
+        if self._last is not None:
+            dx = global_pos.x() - self._last.x()
+            dy = global_pos.y() - self._last.y()
+            dist = max(abs(dx), abs(dy))
+            steps = max(1, int(dist / 6))
+            points = [
+                type(global_pos)(
+                    self._last.x() + dx * s // steps,
+                    self._last.y() + dy * s // steps,
+                )
+                for s in range(1, steps + 1)
+            ]
+        self._last = global_pos
         for box in self.boxes:
             try:
                 if not box.isVisible():
                     continue
                 top_left = box.mapToGlobal(box.rect().topLeft())
                 bottom_right = box.mapToGlobal(box.rect().bottomRight())
-                inside = (
-                    top_left.x() <= global_pos.x() <= bottom_right.x()
-                    and top_left.y() <= global_pos.y() <= bottom_right.y()
-                )
-                if inside and box.isChecked() != self.target:
-                    box.setChecked(self.target)
+                for p in points:
+                    if (top_left.x() <= p.x() <= bottom_right.x()
+                            and top_left.y() <= p.y() <= bottom_right.y()):
+                        if box.isChecked() != self.target:
+                            box.setChecked(self.target)
+                        break
             except Exception:
                 continue
 
 
 class PaintCheckBox(QtWidgets.QCheckBox):
     """Checkbox que participa del paint-toggle. No lleva QSS propio: hereda la
-    hoja de la ventana (Style.FORM); solo agrega el comportamiento de pintado."""
+    hoja de la ventana (Style.FORM); solo agrega el comportamiento de pintado.
+
+    El press/release se maneja SIN el super: QCheckBox recien togglea en el
+    mouseRELEASE (y lo cancela si el release cae afuera), asi que leyendo
+    isChecked() tras el press se pintaba el estado VIEJO y el checkbox inicial
+    quedaba sin pintar (medido con drags reales). Aca el press togglea YA y
+    fija ese estado como el que pinta el drag."""
 
     def __init__(self, controller, parent=None):
         super(PaintCheckBox, self).__init__(parent)
         self._paint = controller
         controller.register(self)
 
+    def _global_pos(self, event):
+        try:
+            return event.globalPosition().toPoint()
+        except AttributeError:  # PySide2
+            return event.globalPos()
+
     def mousePressEvent(self, event):
-        super(PaintCheckBox, self).mousePressEvent(event)
         if event.button() == Qt.LeftButton:
-            # El estado ya cambio en el super: pintamos con el estado NUEVO.
-            self._paint.begin(self.isChecked())
+            target = not self.isChecked()
+            self.setChecked(target)
+            self._paint.begin(target, self._global_pos(event))
+            event.accept()
+            return
+        super(PaintCheckBox, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        super(PaintCheckBox, self).mouseMoveEvent(event)
         if self._paint.active:
-            self._paint.paint_at(QtGui.QCursor.pos())
+            self._paint.paint_at(self._global_pos(event))
+            event.accept()
+            return
+        super(PaintCheckBox, self).mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self._paint.active:
+            self._paint.end()
+            event.accept()
+            return
         super(PaintCheckBox, self).mouseReleaseEvent(event)
-        self._paint.end()
 
 
 class DragSlider(QtWidgets.QLineEdit):
@@ -667,6 +712,8 @@ class BurnInPanel(QtWidgets.QDialog):
             sl.valueChanged.connect(self._hacer_setter("bi_%s_size" % key))
         else:
             sl.valueChanged.connect(self._hacer_setter_pct("bi_%s_%s" % (key, comp)))
+        # X/Y/Size corren el pivote de un campo rotado: re-sincronizarlo.
+        sl.valueChanged.connect(lambda _v, k=key: self._resync_pivote(k))
         cont = QtWidgets.QWidget()
         cont.setStyleSheet("background: transparent;")
         caja = QtWidgets.QHBoxLayout(cont)
@@ -1011,13 +1058,27 @@ class BurnInPanel(QtWidgets.QDialog):
     def _on_anchor(self, x, y):
         if self._loading:
             return
-        for key in self._selected_keys():
+        keys = self._selected_keys()
+        for key in keys:
             self.ctl.set("bi_%s_x" % key, x / 100.0)
             self.ctl.set("bi_%s_y" % key, y / 100.0)
             self.slider_x[key].setValue(x, emit=False)
             self.slider_y[key].setValue(y, emit=False)
+        # Mover el ancla corre el pivote de rotacion: re-aplicar SIEMPRE (si
+        # rot=0 es un write inocuo) para que texto y fondo no se separen.
+        self.ctl.apply_rotation(fields=tuple(keys) or None)
         self.anchor.highlight(x, y)
-        self.ctl.nudge_all()
+
+    def _resync_pivote(self, key):
+        """Tras mover X/Y/Size de un campo ROTADO, reescribe su pivote (si
+        rot=0 no hace nada: no hay pivote que sincronizar)."""
+        if self._loading:
+            return
+        try:
+            if float(self.ctl.get("bi_%s_rot" % key, 0.0)) != 0.0:
+                self.ctl.apply_rotation(fields=(key,))
+        except Exception:
+            pass
 
     def _on_rotation(self, deg):
         if self._loading:
