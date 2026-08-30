@@ -1112,8 +1112,14 @@ class BurnInPanel(QtWidgets.QDialog):
             flags |= Qt.WindowStaysOnTopHint
         else:
             flags &= ~Qt.WindowStaysOnTopHint
+        # setWindowFlags recrea el handle y el show() posterior RESTAURA el
+        # estado maximizado si la ventana lo tuvo alguna vez (medido): guardar
+        # la geometria normal y re-mostrar SIEMPRE sin maximizar.
+        geo = self.normalGeometry() if self.isMaximized() else self.geometry()
         self.setWindowFlags(flags)
         if self.isVisible():
+            self.setWindowState(Qt.WindowNoState)
+            self.setGeometry(geo)
             self.show()
 
     def _all_fields(self, on):
@@ -1322,6 +1328,9 @@ def show_panel():
     ctl.attach()
     _panel = BurnInPanel(ctl)
     apply_ui_font(_panel)
+    # Nunca abrir maximizada: es una ventana de edicion, no un workspace
+    # (el estado maximizado puede venir pegado del handle anterior).
+    _panel.setWindowState(Qt.WindowNoState)
     _panel.show()
     _panel.raise_()
     return _panel

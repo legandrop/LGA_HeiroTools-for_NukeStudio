@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.05 | Lega
+  LGA_NKS_BurnIn_Logic v1.06 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,10 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.06: _font_path() valida que el path de getFonts exista antes de
+         usarlo (getFonts puede traer paths relativos rotos si el ":"
+         de la unidad partio NUKE_FONT_PATH; medido) y cae al TTF del
+         repo.
   v1.05: panel_geo() suma el comp 'cx' (centro horizontal del panel):
          es el pivote de la rotacion por campo, compartido entre el
          kernel (bind de ax) y el texto (apply_rotation del Blink).
@@ -418,7 +422,13 @@ def _font_path(family, style):
         try:
             for f in nuke.getFonts():
                 if len(f) >= 3 and str(f[0]) == family and str(f[1]) == style:
-                    return str(f[2])
+                    p = str(f[2])
+                    # getFonts puede traer un path RELATIVO roto (el ":" de la
+                    # unidad parte NUKE_FONT_PATH; medido): usarlo solo si
+                    # existe de verdad, si no caer al TTF del repo.
+                    if os.path.isfile(p):
+                        return p
+                    break
         except Exception:
             pass
     fname = _INTER_REPO_TTF.get(style)

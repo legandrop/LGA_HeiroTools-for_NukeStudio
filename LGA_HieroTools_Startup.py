@@ -16,12 +16,20 @@ if TOOLS_DIR not in sys.path:
 # al arrancar), no en runtime; por eso va aca, lo mas temprano posible. Se
 # antepone para que el Inter del repo gane sobre un Inter de sistema si existe
 # (asi la medicion y el render usan el MISMO Inter en toda maquina).
+#
+# MEDIDO: Nuke parte NUKE_FONT_PATH por ":" (estilo Unix) incluso en Windows,
+# asi que el ":" de la letra de unidad ROMPE el path: getFonts registraba
+# "Tools/LGA_NKS_Shared/..." (relativo, invalido) y el render caia a la fuente
+# default en silencio. El path va SIN la letra de unidad ("/Users/...", valido
+# en Windows contra el drive del proceso) y con barras normales.
 _FONTS_DIR = os.path.join(TOOLS_DIR, "LGA_NKS_Shared", "fonts")
 if os.path.isdir(_FONTS_DIR):
+    _fonts_nuke = os.path.splitdrive(_FONTS_DIR)[1].replace("\\", "/")
     _prev = os.environ.get("NUKE_FONT_PATH", "")
-    _parts = _prev.split(os.pathsep) if _prev else []
-    if _FONTS_DIR not in _parts:
-        os.environ["NUKE_FONT_PATH"] = os.pathsep.join([_FONTS_DIR] + _parts)
+    if _fonts_nuke not in _prev.split(":"):
+        os.environ["NUKE_FONT_PATH"] = (
+            _fonts_nuke + (":" + _prev if _prev else "")
+        )
 
 MODULES = [
     "LGA_NKS_Assignee_Panel",
