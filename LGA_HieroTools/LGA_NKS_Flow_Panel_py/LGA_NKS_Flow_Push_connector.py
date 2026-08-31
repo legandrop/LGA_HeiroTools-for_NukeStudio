@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.10 | Lega
+  LGA_NKS_Flow_Push_connector v1.11 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,13 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.11: La nota del push ahora escribe subject y tasks. La columna "Tasks"
+         del Notes page es el campo propio Note.tasks, distinto de note_links,
+         y Note.subject lo arma el cliente web, no el servidor: creada por API
+         sin esos dos campos, la nota quedaba sin subject y sin aparecer al
+         filtrar por task. La Task sale del task_id que el push ya tenia
+         resuelto, y el subject replica el formato de la web para links
+         [Shot, Version]: "<nombre de pila>'s Note on <version> and <shot>".
   v1.10: El debug por consola queda apagado por default.
   v1.09: La Version destino se desempata por NOMBRE. El filtro por token y por
          numero puede matchear mas de una Version cuando conviven dos
@@ -218,12 +225,38 @@ def version_filter_token(task_name, extracted_task):
 class ShotGridManager:
     def __init__(self, url, login, password):
         debug_print("Inicializando conexion a ShotGrid")
+        self.login = login
+        # El nombre de pila del usuario autenticado se usa para el subject de
+        # las notas. Se resuelve una sola vez por sesion (None = todavia no se
+        # consulto, "" = se consulto y no se pudo resolver).
+        self._author_firstname = None
         try:
             self.sg = shotgun_api3.Shotgun(url, login=login, password=password)
             debug_print("Conexion a ShotGrid inicializada exitosamente")
         except Exception as e:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
             self.sg = None
+
+    def get_author_firstname(self):
+        """Nombre de pila del usuario autenticado, cacheado.
+
+        Es el autor con el que Flow registra las notas que crea el push, y es
+        lo que la web usa para armar el subject ("Nombre's Note on ...").
+        """
+        if self._author_firstname is not None:
+            return self._author_firstname
+        self._author_firstname = ""
+        if not self.sg or not self.login:
+            return self._author_firstname
+        try:
+            user = self.sg.find_one(
+                "HumanUser", [["login", "is", self.login]], ["firstname"]
+            )
+            if user and user.get("firstname"):
+                self._author_firstname = str(user["firstname"]).strip()
+        except Exception as e:
+            debug_print(f"No se pudo resolver el nombre del autor de la nota: {e}")
+        return self._author_firstname
 
     def find_shot_and_tasks(self, project_name, shot_code):
         if not self.sg:
@@ -586,7 +619,16 @@ class ShotGridManager:
             return []
 
     def add_comment_to_version(
-        self, version_id, project_id, comment, user_id, task_assignee_ids=None, shot_id=None
+        self,
+        version_id,
+        project_id,
+        comment,
+        user_id,
+        task_assignee_ids=None,
+        shot_id=None,
+        task_id=None,
+        version_code=None,
+        shot_code=None,
     ):
         if not self.sg:
             debug_print("ShotGrid no inicializado")
@@ -614,6 +656,22 @@ class ShotGridManager:
                 "note_links": note_links,
                 "addressings_to": addressings_to,
             }
+
+            # La columna "Tasks" del Notes page es el campo propio Note.tasks,
+            # que no se llena solo con note_links. La web lo completa porque la
+            # nota se crea parado en la Task; por API hay que escribirlo.
+            if task_id:
+                note_data["tasks"] = [{"type": "Task", "id": task_id}]
+
+            # Note.subject tampoco lo genera el servidor: lo arma el cliente web
+            # al crear la nota. Se replica su formato para que una nota pusheada
+            # no se distinga de una dejada desde la web.
+            firstname = self.get_author_firstname()
+            if firstname and version_code and shot_code:
+                note_data["subject"] = (
+                    f"{firstname}'s Note on {version_code} and {shot_code}"
+                )
+
             created_note = self.sg.create("Note", note_data)
             return created_note
         except Exception as e:
@@ -1138,6 +1196,9 @@ def execute_full_push_operation(
                     user_id,
                     task_assignee_ids,
                     shot["id"],
+                    task_id,
+                    sg_specific_version.get("code"),
+                    shot.get("code"),
                 )
 
                 # Adjuntar imagenes si se creo la nota. Son dos listas: las
