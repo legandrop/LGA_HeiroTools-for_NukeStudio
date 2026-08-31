@@ -1,11 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v1.98 | Lega
+  LGA_NKS_Flow_Shot_info v1.99 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v1.99: Shift+Click sobre el thumbnail de una nota fuerza la redescarga de TODOS
+         sus attachments desde Flow, corriendo refresh_note_attachments.py de la
+         instalacion de PipeSync en un QRunnable (no bloquea la UI de Hiero). La DB
+         destino se fija con PIPESYNC_CACHE_DIR segun el contexto: sin eso, en Client
+         el script escribia en la base de Studio, donde ese mismo note-id es OTRA nota.
+         Solo Windows: en macOS no hay raiz de instalacion confirmada y queda inerte.
   v1.98: La ventana usa la fuente del pack. Con la franja de Task
          history ya en Inter y el resto en la del host, salia mezclada.
   v1.97: SHOT_INFO_QSS migra al modulo de estilo LGA_UI_Style_HieroTools:
@@ -78,6 +84,8 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QS
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color as UIColor
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import apply_ui_font
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import is_client_context
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import load_flow_users
 from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
     active_at as history_active_at,
@@ -103,6 +111,10 @@ QCoreApplication = QApplication  # Para compatibilidad
 Qt = QtCore.Qt
 QSize = QtCore.QSize
 Signal = QtCore.Signal
+QRunnable = QtCore.QRunnable
+QThreadPool = QtCore.QThreadPool
+QObject = QtCore.QObject
+Slot = QtCore.Slot
 QFontMetrics = QtGui.QFontMetrics
 QKeySequence = QtGui.QKeySequence
 QPixmap = QtGui.QPixmap
@@ -866,11 +878,17 @@ class ThumbnailContainerWidget(QWidget):
 
 
 class ThumbnailButton(QPushButton):
-    """QPushButton que muestra un thumbnail de imagen y lo abre al hacer clic."""
+    """QPushButton que muestra un thumbnail de imagen y lo abre al hacer clic.
 
-    def __init__(self, image_path, parent=None):
+    Shift+Click no abre la imagen: dispara `refresh_callback(note_db_id)` para
+    forzar la redescarga de los attachments de la nota desde Flow.
+    """
+
+    def __init__(self, image_path, parent=None, note_db_id=None, refresh_callback=None):
         super().__init__(parent)
         self.image_path = image_path
+        self.note_db_id = note_db_id
+        self.refresh_callback = refresh_callback
         self.setObjectName("flowVersionCommentThumbnail")
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setFlat(True)
@@ -884,8 +902,29 @@ class ThumbnailButton(QPushButton):
         self.setIcon(QIcon(pix))
         self.setIconSize(pix.size())
         self.setFixedSize(pix.size())
-        self.setToolTip(f"Clic para abrir: {os.path.basename(image_path)}")
+        self.setToolTip(
+            f"Clic para abrir: {os.path.basename(image_path)}\n"
+            "Shift+Click: Forzar descarga del thumbnail desde FLOW"
+        )
         self.clicked.connect(self._open_image)
+
+    def mousePressEvent(self, event):
+        # Shift+Click: forzar refresh de attachments en vez de abrir la imagen.
+        # No se llama a super() en este caso para que el click no llegue a
+        # disparar la señal `clicked` (y por lo tanto `_open_image`).
+        if event.button() == Qt.LeftButton and (event.modifiers() & Qt.ShiftModifier):
+            self._request_refresh()
+            return
+        super().mousePressEvent(event)
+
+    def _request_refresh(self):
+        if not self.note_db_id or not self.refresh_callback:
+            debug_print(
+                "Shift+Click sobre thumbnail sin note_db_id/callback asociado, se ignora.",
+                level="warning",
+            )
+            return
+        self.refresh_callback(self.note_db_id)
 
     def _open_image(self):
         debug_print(f"Abriendo imagen: {self.image_path}")
@@ -898,6 +937,181 @@ class ThumbnailButton(QPushButton):
                 subprocess.Popen(["xdg-open", self.image_path])
         except Exception as exc:
             debug_print(f"Error al abrir imagen: {exc}")
+
+
+def _resolve_pipesync_install_root():
+    """Raiz de instalacion de PipeSync (python_runtime/, py_scr/) para el contexto actual.
+
+    Windows: Studio -> C:/Portable/LGA/PipeSync. Client -> C:/Portable/LGA/PipeSync_Client
+    cuando existe en disco; si no, cae a la de Studio para el interprete y el
+    script. Ese fallback de binarios NO mezcla datos de contexto: la DB
+    efectiva la fija por separado _resolve_pipesync_cache_dir() via
+    PIPESYNC_CACHE_DIR, que siempre apunta al cache correcto del contexto
+    (create_database.get_db_path() la respeta por encima de todo lo demas).
+
+    macOS: PENDIENTE a proposito, devuelve None. Los candidatos de mac en
+    _resolve_pipesync_python_interpreter() no comparten una raiz de
+    instalacion consistente: el primero apunta a un checkout de desarrollo
+    (~/Desktop/Codin/LGA_PipeSync_2/deploy-MacOS-OLD/PipeSync.app/...) y el
+    resto usa ~/Portable/LGA/PipeSync/python_runtime/macos/... sin ninguna
+    variante Client. Devolver una ruta ahi seria adivinar una instalacion
+    que no esta confirmada; el llamador loguea y no ejecuta el refresh en
+    esta plataforma hasta que se defina la instalacion real de mac.
+    """
+    if platform.system() == "Windows":
+        studio_root = Path(r"C:\Portable\LGA\PipeSync")
+        if is_client_context():
+            client_root = Path(r"C:\Portable\LGA\PipeSync_Client")
+            if client_root.exists():
+                return client_root
+            debug_print(
+                f"WARNING: contexto Client pero no existe {client_root}, "
+                "se usan intérprete y script de la instalacion Studio "
+                "(la DB sigue siendo la de Client via PIPESYNC_CACHE_DIR).",
+                level="warning",
+            )
+        return studio_root
+
+    return None
+
+
+def _resolve_pipesync_cache_dir():
+    """Directorio de cache de PipeSync del contexto ACTUAL (Studio o Client).
+
+    Es el mismo directorio que ya usa este panel para leer la DB
+    (get_pipesync_db_path -> LGA_NKS_PipeSyncPaths._installed_cache_dir):
+    no reimplementa la logica Studio/Client, solo toma el dirname.
+    """
+    return os.path.dirname(get_pipesync_db_path("pipesync.db"))
+
+
+def _resolve_pipesync_python_interpreter(install_root):
+    """Resuelve el interprete de Python de la instalacion de PipeSync.
+
+    Mismo patron de resolucion que `delegate_to_flow_connector` en
+    LGA_NKS_Flow_Push.py (ruta fija por plataforma, fallback a candidatos
+    de macOS y en ultima instancia al python3 del sistema), pero la ruta de
+    Windows se arma sobre `install_root` (Studio o Client segun contexto)
+    en vez de hardcodear siempre la de Studio.
+    """
+    import shutil
+
+    if platform.system() == "Windows":
+        windows_python_path = str(
+            install_root / "python_runtime" / "windows" / "python.exe"
+        )
+        if os.path.exists(windows_python_path):
+            return windows_python_path
+
+        studio_python_path = r"C:\Portable\LGA\PipeSync\python_runtime\windows\python.exe"
+        if windows_python_path != studio_python_path and os.path.exists(studio_python_path):
+            debug_print(
+                f"WARNING: Python no encontrado en {windows_python_path}, "
+                f"se usa el de la instalacion Studio: {studio_python_path}",
+                level="warning",
+            )
+            return studio_python_path
+
+        debug_print(
+            f"WARNING: Python personalizado no encontrado en {windows_python_path}",
+            level="warning",
+        )
+        return shutil.which("python3")
+
+    if platform.system() == "Darwin":
+        MACOS_PYTHON_PATH = (
+            "/Users/leg4/Desktop/Codin/LGA_PipeSync_2/deploy-MacOS-OLD/PipeSync.app/"
+            "Contents/Resources/python_runtime/macos/python3/bin/python3"
+        )
+        possible_paths = [
+            MACOS_PYTHON_PATH,
+            "/Users/leg4/Desktop/Codin/LGA_PipeSync_2/deploy-MacOS-OLD/PipeSync.app/Contents/Resources/python_runtime/macos/python3/bin/python3.10",
+            "/Users/leg4/Portable/LGA/PipeSync/python_runtime/macos/bin/python3",
+            "/Users/leg4/Portable/LGA/PipeSync/python_runtime/macos/bin/python",
+            os.path.expanduser("~/Portable/LGA/PipeSync/python_runtime/macos/python"),
+            os.path.expanduser("~/Portable/LGA/PipeSync/python_runtime/macos/bin/python3"),
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return shutil.which("python3")
+
+    return shutil.which("python3")
+
+
+def _resolve_refresh_note_attachments_script(install_root):
+    """Ruta de refresh_note_attachments.py dentro de install_root/py_scr/."""
+    return str(install_root / "py_scr" / "refresh_note_attachments.py")
+
+
+class RefreshNoteAttachmentsSignals(QObject):
+    """Señales para comunicar el resultado del refresh de attachments de una nota."""
+
+    result_ready = Signal(object)  # dict parseado de la ultima linea JSON del stdout
+    error = Signal(str, object)  # mensaje de error, note_db_id
+
+
+class RefreshNoteAttachmentsWorker(QRunnable):
+    """Corre refresh_note_attachments.py en un hilo secundario sin bloquear la UI."""
+
+    def __init__(self, note_db_id, python_path, script_path, cache_dir):
+        super(RefreshNoteAttachmentsWorker, self).__init__()
+        self.note_db_id = note_db_id
+        self.python_path = python_path
+        self.script_path = script_path
+        self.cache_dir = cache_dir
+        self.signals = RefreshNoteAttachmentsSignals()
+
+    @Slot()
+    def run(self):
+        cmd = [self.python_path, self.script_path, "--note-id", str(self.note_db_id)]
+        debug_print(
+            f"Refrescando attachments: {' '.join(cmd)} "
+            f"(PIPESYNC_CACHE_DIR={self.cache_dir})"
+        )
+        # PIPESYNC_CACHE_DIR fuerza al script a resolver la MISMA DB que este
+        # panel esta mostrando (create_database.get_db_path() la respeta por
+        # encima de la deteccion Studio/Client propia del script). Sin esto,
+        # en contexto Client el script resolveria la DB de Studio y el
+        # --note-id (id local de sqlite) pisaria una nota ajena en silencio.
+        env = os.environ.copy()
+        env["PIPESYNC_CACHE_DIR"] = self.cache_dir
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60, env=env
+            )
+        except Exception as exc:
+            self.signals.error.emit(str(exc), self.note_db_id)
+            return
+
+        # Ultima linea de stdout que sea JSON valido Y un objeto (dict): el
+        # contrato del script es un objeto {"status": ..., ...}, pero
+        # json.loads tambien acepta 123 / "x" / true / null / [..] como JSON
+        # valido, y eso rompe el .get() del lado UI si se cuela.
+        result = None
+        for line in reversed((proc.stdout or "").splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            result = parsed
+            break
+
+        if result is None:
+            stderr_tail = (proc.stderr or "").strip()[:500]
+            self.signals.error.emit(
+                f"No se pudo parsear la salida de refresh_note_attachments.py "
+                f"(exit={proc.returncode}): {stderr_tail}",
+                self.note_db_id,
+            )
+            return
+
+        self.signals.result_ready.emit(result)
 
 
 app = None
@@ -1157,6 +1371,7 @@ class ShotGridManager:
 
                     comments.append(
                         {
+                            "note_db_id": n["id"],
                             "user": n["created_by"] or "",
                             "text": n["content"] or "",
                             "date": n["created_on"],
@@ -1353,6 +1568,10 @@ class GUIWindow(QWidget):
         self.hiero_ops = hiero_ops
         self._wrapping_labels = []
         self._assignment_spans = []
+        # Widgets de thumbnails vivos, indexados por note_db_id, para poder
+        # reconstruirlos in-place cuando el Shift+Click sobre un thumbnail
+        # trae attachments nuevos desde refresh_note_attachments.py.
+        self._thumbnail_widgets_by_note = {}
         self.initUI()
 
     def initUI(self):
@@ -1672,7 +1891,11 @@ class GUIWindow(QWidget):
         attachments = comment.get("attachments", []) or []
         frame_texts = self._frame_texts_from_attachment_info(comment.get("attachment_info"))
         if attachments:
-            wl.addWidget(self.create_thumbnails_widget(attachments, frame_texts))
+            wl.addWidget(
+                self.create_thumbnails_widget(
+                    attachments, frame_texts, comment.get("note_db_id")
+                )
+            )
 
         for reply in comment.get("replies", []) or []:
             wl.addWidget(self.create_reply_widget(reply, from_playlist=from_playlist))
@@ -1732,16 +1955,24 @@ class GUIWindow(QWidget):
                 out.append("Sin Frame Number")
         return out
 
-    def create_thumbnails_widget(self, attachment_paths, frame_texts=None):
-        """Layout horizontal de thumbnails con label "Frame N" debajo de cada uno."""
+    def _populate_thumbnails_widget(self, thumbs_w, attachment_paths, frame_texts, note_db_id=None):
+        """(Re)llena el layout horizontal de thumbnails de `thumbs_w`.
+
+        Separado de create_thumbnails_widget para poder reconstruir los
+        thumbnails de una nota in-place (mismo objectName, mismo ancho 150,
+        mismo filtro de extensiones y mismo label de frame) cuando el
+        Shift+Click sobre un thumbnail trae attachments nuevos desde Flow.
+        """
         if frame_texts is None:
             frame_texts = []
 
-        thumbs_w = QWidget()
-        thumbs_w.setObjectName("flowVersionCommentThumbnails")
-        tl = QHBoxLayout(thumbs_w)
-        tl.setContentsMargins(12, 8, 0, 8)
-        tl.setSpacing(8)
+        tl = thumbs_w.layout()
+        while tl.count():
+            item = tl.takeAt(0)
+            child = item.widget()
+            if child is not None:
+                child.setParent(None)
+                child.deleteLater()
 
         valid_idx = 0
         for path in attachment_paths:
@@ -1752,7 +1983,9 @@ class GUIWindow(QWidget):
             cl.setContentsMargins(0, 0, 0, 0)
             cl.setSpacing(4)
 
-            btn = ThumbnailButton(path)
+            btn = ThumbnailButton(
+                path, note_db_id=note_db_id, refresh_callback=self._on_thumbnail_shift_click
+            )
             cl.addWidget(btn)
 
             frame_text = (
@@ -1768,7 +2001,177 @@ class GUIWindow(QWidget):
             valid_idx += 1
 
         tl.addStretch(1)
+
+    def create_thumbnails_widget(self, attachment_paths, frame_texts=None, note_db_id=None):
+        """Layout horizontal de thumbnails con label "Frame N" debajo de cada uno."""
+        thumbs_w = QWidget()
+        thumbs_w.setObjectName("flowVersionCommentThumbnails")
+        tl = QHBoxLayout(thumbs_w)
+        tl.setContentsMargins(12, 8, 0, 8)
+        tl.setSpacing(8)
+
+        self._populate_thumbnails_widget(thumbs_w, attachment_paths, frame_texts, note_db_id)
+
+        if note_db_id:
+            self._thumbnail_widgets_by_note[note_db_id] = thumbs_w
+
         return thumbs_w
+
+    def _on_thumbnail_shift_click(self, note_db_id):
+        """Dispara el refresh de attachments de una nota desde Flow (Shift+Click)."""
+        if not note_db_id:
+            return
+
+        install_root = _resolve_pipesync_install_root()
+        if install_root is None:
+            # macOS (u otra plataforma no-Windows): sin raiz de instalacion
+            # confiable todavia (ver docstring de _resolve_pipesync_install_root).
+            # No es un caso de "actualizar PipeSync": es una plataforma sin
+            # soporte implementado aun, asi que no se muestra el modal de
+            # "Update PipeSync" (seria un mensaje enganoso en Studio con
+            # PipeSync al dia). Se loguea y no se hace nada mas.
+            debug_print(
+                f"Shift+Click: refresh de attachments no soportado todavia en "
+                f"{platform.system()} (falta definir la raiz de instalacion de mac).",
+                level="warning",
+            )
+            return
+
+        script_path = _resolve_refresh_note_attachments_script(install_root)
+        if not os.path.exists(script_path):
+            debug_print(
+                f"refresh_note_attachments.py no encontrado en {script_path}. "
+                "Hace falta actualizar PipeSync a una version que lo incluya.",
+                level="warning",
+            )
+            show_warning(
+                self,
+                "PipeSync Update Required",
+                "Update PipeSync to use this feature.",
+            )
+            return
+
+        python_path = _resolve_pipesync_python_interpreter(install_root)
+        if not python_path:
+            debug_print(
+                "No se encontro un interprete de Python valido para refrescar attachments.",
+                level="error",
+            )
+            return
+
+        cache_dir = _resolve_pipesync_cache_dir()
+        debug_print(
+            f"Shift+Click: forzando refresh de attachments para note_id={note_db_id} "
+            f"(install_root={install_root}, cache_dir={cache_dir})"
+        )
+        worker = RefreshNoteAttachmentsWorker(note_db_id, python_path, script_path, cache_dir)
+        worker.signals.result_ready.connect(self._handle_refresh_note_attachments_result)
+        worker.signals.error.connect(self._handle_refresh_note_attachments_error)
+        QThreadPool.globalInstance().start(worker)
+
+    def _rebuild_note_thumbnails(self, note_id, attachment_paths, frame_texts, success_log):
+        """Reconstruye in-place los thumbnails de note_id (o vacia la fila con listas vacias).
+
+        Comun a los status repoblables ("downloaded"/"partial" con paths nuevos,
+        y "no_attachments" con listas vacias): busca el widget vivo y lo
+        repuebla, o loguea si ya no existe (ventana cerrada/refrescada entre
+        el Shift+Click y la respuesta del script).
+        """
+        thumbs_w = self._thumbnail_widgets_by_note.get(note_id)
+        if thumbs_w is None:
+            debug_print(
+                f"No se encontro el widget de thumbnails para note_id={note_id} "
+                "(la ventana pudo haberse refrescado o cerrado mientras corria el refresh).",
+                level="warning",
+            )
+            return
+
+        try:
+            self._populate_thumbnails_widget(thumbs_w, attachment_paths, frame_texts, note_id)
+            debug_print(success_log)
+        except RuntimeError:
+            # El widget C++ ya fue destruido (p.ej. se cerro el panel entre el
+            # Shift+Click y la respuesta del script).
+            debug_print(
+                f"Widget de thumbnails de note_id={note_id} ya no existe, se descarta el refresh.",
+                level="warning",
+            )
+
+    def _handle_refresh_note_attachments_result(self, result):
+        """Slot (hilo principal): reconstruye los thumbnails de la nota con el JSON del script."""
+        if not isinstance(result, dict):
+            debug_print(
+                f"Refresh de attachments devolvio un JSON valido pero no es un objeto: {result!r}",
+                level="error",
+            )
+            return
+
+        note_id = result.get("note_id")
+        status = result.get("status")
+        message = result.get("message") or ""
+
+        if status == "error":
+            # El script NO toca archivos/DB en este caso (no borra lo viejo ni
+            # vacia la fila), asi que tampoco tocamos la UI: sigue mostrando
+            # lo que ya habia, que sigue siendo valido.
+            debug_print(
+                f"Error refrescando attachments de note_id={note_id}: {message}",
+                level="error",
+            )
+            return
+
+        if status in ("no_sg_id", "stale_note"):
+            # no_sg_id: nota escrita localmente por el Push, todavia sin volver
+            # de Flow. stale_note: la nota fue reemplazada por un sync de Flow
+            # mientras corria el refresh. En los dos casos no hay nada
+            # confiable para reconstruir; no se toca la UI.
+            debug_print(
+                f"Refresh de attachments para note_id={note_id}: {status} ({message}). "
+                "Nada que reconstruir."
+            )
+            return
+
+        if status == "no_attachments":
+            # Flow ya no tiene attachments para esta nota: el script vacio
+            # attachment_info/local_attachment_paths en la DB. Si no se
+            # repuebla aca, quedan ThumbnailButton viejos en pantalla
+            # mostrando imagenes que la DB ya no referencia.
+            self._rebuild_note_thumbnails(
+                note_id,
+                [],
+                [],
+                f"Thumbnails de note_id={note_id} vaciados (Flow ya no tiene attachments).",
+            )
+            return
+
+        if status not in ("downloaded", "partial"):
+            debug_print(
+                f"Refresh de attachments para note_id={note_id}: status desconocido '{status}'.",
+                level="warning",
+            )
+            return
+
+        attachment_paths = result.get("local_attachment_paths") or []
+        attachment_info_raw = json.dumps(result.get("attachment_info") or [])
+        frame_texts = self._frame_texts_from_attachment_info(attachment_info_raw)
+        self._rebuild_note_thumbnails(
+            note_id,
+            attachment_paths,
+            frame_texts,
+            f"Thumbnails de note_id={note_id} reconstruidos in-place (status={status}).",
+        )
+
+    def _handle_refresh_note_attachments_error(self, error_msg, note_db_id):
+        """Slot (hilo principal, misma conexion en cola que result_ready)."""
+        debug_print(
+            f"Error refrescando attachments de note_id={note_db_id}: {error_msg}",
+            level="error",
+        )
+        show_warning(
+            self,
+            "Refresh Failed",
+            "Could not refresh attachments.",
+        )
 
     def display_results(self, results):
         """Muestra los resultados recopilados en el scroll area."""
@@ -1781,6 +2184,7 @@ class GUIWindow(QWidget):
                 child.setParent(None)
         self._wrapping_labels = []
         self._assignment_spans = []
+        self._thumbnail_widgets_by_note = {}
 
         if not results:
             no_results_label = QLabel("No se encontraron resultados")
