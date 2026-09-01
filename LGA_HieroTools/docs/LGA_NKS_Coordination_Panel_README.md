@@ -57,6 +57,11 @@ El panel de Coordination proporciona herramientas esenciales para operaciones de
 - **Función**: Sube el shot a Wasabi S3
 - **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
 
+### 11. Download AMF
+- **Función**: Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado desde Wasabi S3 (los `.amf`/`.cdl`/`.clf` necesarios para ver bien los renders de comp)
+- **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py`
+- **Comportamiento**: No chequea si la carpeta existe localmente; siempre dispara la descarga vía FileManagerS3 CLI sobre `<shot>/_input/Look_Files`
+
 ## Compatibilidad de Nomenclatura
 
 El panel es compatible con ambos sistemas de nomenclatura utilizados en la empresa:
@@ -87,7 +92,8 @@ El sistema detecta automáticamente el formato utilizado sin necesidad de config
 7. **FileManagerS3** - Abre carpeta del shot en FileManagerS3
 8. **Download Shot** - Descarga el shot desde Wasabi S3
 9. **Upload Shot** - Sube el shot a Wasabi S3
-10. **Reveal in Flow** - `Ctrl+Shift+F` - Abre la task comp en Chrome
+10. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado
+11. **Reveal in Flow** - `Ctrl+Shift+F` - Abre la task comp en Chrome
 
 ## Requisitos
 
@@ -122,4 +128,5 @@ El sistema detecta automáticamente el formato utilizado sin necesidad de config
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py` - Funcionalidad de FileManagerS3 (Open)
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py` - Funcionalidad de Download Shot
 - `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py` - Funcionalidad de Upload Shot
+- `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py` - Funcionalidad de Download AMF (carpeta `_input/Look_Files`)
 - `LGA_NKS_Flow/LGA_NKS_Flow_NamingUtils.py` - Utilidades compartidas de nomenclatura (usado por los scripts de producción)

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.26 | Lega
+  LGA_NKS_Flow_FlowProd_Panel v1.27 | Lega
   Panel para operaciones de producción con Flow:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -10,6 +10,9 @@ ________________________________________________________________________________
   - Integración con FileManagerS3 (Open, Download, Upload)
 
 
+  v1.27: Agregado boton "Download AMF" para descargar la carpeta
+         _input/Look_Files del shot del clip seleccionado, con los .amf/.cdl
+         que hacen falta para ver bien los renders de comp.
   v1.26: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.25: Invertido comportamiento del boton Download Clip:
@@ -300,6 +303,13 @@ class FlowProdPanel(QtWidgets.QWidget):
                 "gradient_magenta_violet",
                 None,
                 "Click: Descargar ultima version del clip\nShift+Click: Descargar clip seleccionado",
+            ),
+            (
+                "Download AMF",
+                self.download_amf_from_filemanagers3,
+                "gradient_magenta_violet",
+                None,
+                "Descargar la carpeta Look_Files del shot (los .amf para ver bien los renders)",
             ),
             (
                 "Reveal in Flow",
@@ -885,6 +895,35 @@ class FlowProdPanel(QtWidgets.QWidget):
             if spec is None or spec.loader is None:
                 raise ImportError(
                     "No se pudo cargar el módulo LGA_NKS_FileManagerS3_Upload.py"
+                )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Llamar a la función principal
+            module.main()
+        except Exception as e:
+            show_warning(self, "Error al ejecutar", str(e))
+
+    def download_amf_from_filemanagers3(self):
+        """Llama al script FileManagerS3 para descargar la carpeta Look_Files del shot seleccionado"""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_DownloadAmf.py"
+        )
+        if not os.path.exists(script_path):
+            show_warning(
+                self,
+                "Script no encontrado",
+                f"No se encontró el script en la ruta: {script_path}",
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_FileManagerS3_DownloadAmf", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    "No se pudo cargar el módulo LGA_NKS_FileManagerS3_DownloadAmf.py"
                 )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
