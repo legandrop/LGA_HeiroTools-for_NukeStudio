@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.06 | Lega
+  LGA_NKS_CreateNKScript v1.07 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,12 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.07: El boton del cartel final abre la carpeta con el explorador POR
+         DEFAULT del sistema, sin nombrar explorer.exe. El TimeClip del
+         EditRef recibe first/last del rango ya colocado (1001 + handle),
+         no la duracion cruda del mov. Y todo lo que puede salir mal
+         -sin CDL, sin LUT, sin AMF, sin publish v000, EditRef no medible,
+         plates sin frames- se junta y se muestra en el cartel final.
   v1.06: Si el v000 ya existe se pregunta si sobreescribir en vez de
          abortar; el .nk que estaba se conserva como .nk~ y el boton de
          la ventana de rango pasa a decir Overwrite.
@@ -138,6 +144,38 @@ class CreateNKError(Exception):
 # ============================
 
 
+def _warn(log, warnings, message):
+    """Aviso que el usuario TIENE que ver: va al log Y al cartel final.
+
+    El texto va en ingles porque termina a la vista en el cartel; el log
+    lo envuelve con su propia marca.
+    """
+    log.append("  AVISO: %s" % message)
+    if message not in warnings:
+        warnings.append(message)
+
+
+def find_amf(shot_root):
+    """(ruta con extension .amf o None, ruta con sufijo _amf o None).
+
+    Se devuelven por separado a proposito: Apply AMF busca por extension
+    (.amf) y NO reconoce la forma vieja con sufijo, asi que un shot que solo
+    tenga _amf hay que avisarlo distinto a uno que no tenga ninguno.
+    """
+    look_dir = os.path.join(shot_root, INPUT_DIR_NAME, LOOK_DIR_NAME)
+    con_extension = None
+    con_sufijo = None
+    if os.path.isdir(look_dir):
+        for entry in sorted(os.listdir(look_dir)):
+            low = entry.lower()
+            ruta = os.path.join(look_dir, entry).replace("\\", "/")
+            if low.endswith(".amf") and con_extension is None:
+                con_extension = ruta
+            elif low.endswith("_amf") and con_sufijo is None:
+                con_sufijo = ruta
+    return con_extension, con_sufijo
+
+
 def get_version(name):
     """Ultima ocurrencia de _v<NN> en el nombre, o 0."""
     versions = re.findall(r"_v(\d+)", name, re.IGNORECASE)
@@ -206,7 +244,7 @@ def best_sequence(folders, warnings, what):
         if info is not None:
             if i > 0:
                 warnings.append(
-                    "%s: version mas alta sin EXR (%s), uso %s"
+                    "%s: newest version has no EXR frames (%s), using %s"
                     % (what, os.path.basename(folders[0]), os.path.basename(folder))
                 )
             return info
@@ -272,7 +310,7 @@ def scan_shot(shot_root):
     for token in letters:
         info = best_sequence(plates[token], unknown, token_to_key(token))
         if info is None:
-            unknown.append(token + " (sin EXR)")
+            unknown.append("%s: folder has no EXR frames" % token_to_key(token))
             continue
         columns.append({"key": token_to_key(token), "token": token, "kind": "plate", "info": info})
         den_folders = find_denoised_folders(prerender_root, os.path.basename(info["folder"]))
@@ -285,7 +323,7 @@ def scan_shot(shot_root):
     for token in specials:
         info = best_sequence(plates[token], unknown, token_to_key(token))
         if info is None:
-            unknown.append(token + " (sin EXR)")
+            unknown.append("%s: folder has no EXR frames" % token_to_key(token))
             continue
         columns.append({"key": token_to_key(token), "token": token, "kind": "plate", "info": info})
 
@@ -302,7 +340,10 @@ def scan_shot(shot_root):
                 continue
             m = PLATE_FOLDER_RE.search(entry)
             if m and m.group(1).upper() not in plate_tokens_upper:
-                unknown.append("denoised huerfano sin plate en _input: %s" % entry)
+                unknown.append(
+                    "Orphan denoised render with no plate in %s: %s"
+                    % (INPUT_DIR_NAME, entry)
+                )
     return columns, unknown
 
 
@@ -427,6 +468,23 @@ def set_chunk_knob(chunk, knob, value):
         m = pat.match(line)
         if m:
             chunk[i] = "%s%s %s" % (m.group(1), knob, value)
+            return True
+    return False
+
+
+def set_or_add_chunk_knob(chunk, knob, value):
+    """Setea el knob y, si el nodo no lo trae, lo agrega.
+
+    Nuke omite al guardar los knobs que estan en su valor default, asi
+    que un TimeClip sin 'first' es lo normal: hay que insertarlo.
+    """
+    if set_chunk_knob(chunk, knob, value):
+        return True
+    pat = _knob_re("name")
+    for index, line in enumerate(chunk):
+        match = pat.match(line)
+        if match:
+            chunk.insert(index, "%s%s %s" % (match.group(1), knob, value))
             return True
     return False
 
@@ -619,6 +677,7 @@ def build_script(
     project_last=None,
     editref_frames=None,
     editref_start=None,
+    warnings=None,
 ):
     """Genera el texto del .nk nuevo a partir del template.
 
@@ -626,6 +685,7 @@ def build_script(
     project_first/last: rango del proyecto (default: rango del aPlate).
     editref_frames: duracion del EditRef en frames (default: ffprobe).
     editref_start: frame de inicio del EditRef (default: centrado)."""
+    warnings = warnings if warnings is not None else []
     shot_root = shot_root.rstrip("\\/")
     shot_name = os.path.basename(shot_root)
     if not SHOT_NAME_RE.match(shot_name):
@@ -752,9 +812,33 @@ def build_script(
         if target:
             set_chunk_knob(chunk, "file", quote_if_needed(target))
     if not cdl:
-        log.append("  AVISO: no encontre CDL de aPlate en Look_Files")
+        _warn(
+            log, warnings,
+            "No aPlate .cdl found in %s/%s: the CDL nodes keep the template path"
+            % (INPUT_DIR_NAME, LOOK_DIR_NAME),
+        )
     if not clf:
-        log.append("  AVISO: no encontre .clf en Look_Files")
+        _warn(
+            log, warnings,
+            "No .clf LUT found in %s/%s: the LUT nodes keep the template path"
+            % (INPUT_DIR_NAME, LOOK_DIR_NAME),
+        )
+    amf_con_extension, amf_con_sufijo = find_amf(shot_root)
+    if not amf_con_extension:
+        if amf_con_sufijo:
+            _warn(
+                log, warnings,
+                "The .amf files in %s/%s have no extension (%s): Apply AMF "
+                "looks for .amf and will not find them"
+                % (INPUT_DIR_NAME, LOOK_DIR_NAME,
+                   os.path.basename(amf_con_sufijo)),
+            )
+        else:
+            _warn(
+                log, warnings,
+                "No .amf found in %s/%s: Apply AMF will not find the look chain"
+                % (INPUT_DIR_NAME, LOOK_DIR_NAME),
+            )
 
     # 5. Rango de proyecto: por parametro o rango del aPlate
     a_info = col_by_key["aPlate"]["info"]
@@ -769,7 +853,15 @@ def build_script(
             set_chunk_knob(chunk, "frame", str(range_first))
             break
 
-    # 5a. Read del publish v000 (CHECK vs EDIT): rango de proyecto
+    # 5a. Read del publish v000 (CHECK vs EDIT): rango de proyecto. Si la
+    # secuencia todavia no existe, el Read va a dar error al abrir: se
+    # avisa, porque es lo que hace Create EXR v000 y puede faltar.
+    if publish_v000_info(shot_root, shot_name) is None:
+        _warn(
+            log, warnings,
+            "No comp_v000 publish yet: the CHECK vs EDIT Read will show an "
+            "error until you run Create EXR v000",
+        )
     for chunk in chunks:
         if chunk_class(chunk) == "Read" and "_comp_v000" in (
             chunk_knob(chunk, "file") or ""
@@ -782,9 +874,15 @@ def build_script(
     # 5b. EditRef: duracion real del mov, inicio explicito (timeline) o
     # centrado en el rango (resto impar al lado out, como el import de shots).
     # El write de review se acota a esa ventana.
+    editref_mov = find_editref(shot_root)
     if editref_frames is None:
-        editref_mov = find_editref(shot_root)
         editref_frames = probe_mov_frames(editref_mov) if editref_mov else None
+    if not editref_mov:
+        _warn(
+            log, warnings,
+            "No EditRef .mov found in %s: the Read keeps the template path and "
+            "will error" % INPUT_DIR_NAME,
+        )
     if editref_frames:
         range_len = range_last - range_first + 1
         if editref_start is None:
@@ -794,11 +892,22 @@ def build_script(
         for chunk in chunks:
             cls = chunk_class(chunk)
             if cls == "Read" and "editref" in (chunk_knob(chunk, "file") or "").lower():
+                # La ruta REAL del mov, no la del template con el shot
+                # cambiado: el reemplazo global no toca la VERSION, asi que
+                # un shot con EditRef_v002 quedaba apuntando al v001 del
+                # template y el Read nacia roto.
+                if editref_mov:
+                    set_chunk_knob(chunk, "file", quote_if_needed(editref_mov))
                 set_chunk_knob(chunk, "last", str(editref_frames))
                 set_chunk_knob(chunk, "origlast", str(editref_frames))
             elif cls == "TimeClip":
-                set_chunk_knob(chunk, "last", str(editref_frames))
-                set_chunk_knob(chunk, "origlast", str(editref_frames))
+                # El rango del TimeClip es el del EditRef YA colocado en el
+                # script (1001 + handle), no la duracion cruda del mov: su
+                # propio label muestra [knob first] - [knob last].
+                set_or_add_chunk_knob(chunk, "first", str(editref_start))
+                set_or_add_chunk_knob(chunk, "last", str(editref_end))
+                set_or_add_chunk_knob(chunk, "origfirst", str(editref_start))
+                set_or_add_chunk_knob(chunk, "origlast", str(editref_end))
                 set_chunk_knob(chunk, "frame", str(editref_start))
             elif cls == "Write" and (chunk_knob(chunk, "name") or "").startswith(
                 "WRITE_DNXHD"
@@ -808,8 +917,13 @@ def build_script(
         log.append(
             "  EditRef: %d frames, %d-%d" % (editref_frames, editref_start, editref_end)
         )
-    else:
-        log.append("  AVISO: no pude medir el EditRef; queda el rango del template")
+    elif editref_mov:
+        # Solo si el mov EXISTE pero no se pudo medir: si no existe, ya se
+        # aviso arriba y dos lineas para la misma causa es ruido.
+        _warn(
+            log, warnings,
+            "Could not read the EditRef duration: the review range is the template's, check it by hand",
+        )
 
     # 6. reconstruir texto: sin borrados, con clones insertados tras el trio
     # de fDenoised (las posiciones visuales ya estan recalculadas)
@@ -861,6 +975,8 @@ def build_script(
     leftover_placeholder = text.count("PLACEHOLDER")
     if leftover_placeholder:
         raise CreateNKError("Quedaron %d PLACEHOLDER sin resolver" % leftover_placeholder)
+    # Un plate que el template contempla y el shot no tiene NO es aviso:
+    # es el caso normal y su columna se borra.
     if not same_shot and re.search(re.escape(source_shot), text, re.IGNORECASE):
         raise CreateNKError("Quedaron menciones al shot de origen del template")
 
@@ -1153,15 +1269,22 @@ def prompt_template_selection(template_paths, on_choice):
 
 
 def reveal_in_file_manager(path):
-    """Abre el explorador del sistema con el archivo seleccionado."""
+    """Abre la carpeta del archivo con el explorador POR DEFAULT.
+
+    NUNCA se nombra explorer.exe: el usuario puede tener otro file
+    manager y hay que respetar el suyo. En Windows eso lo da
+    os.startfile() sobre la CARPETA (sobre el archivo lo abriria con su
+    programa asociado, que para un .nk seria Nuke). Es el mismo patron
+    que ya usa el resto del pack.
+    """
+    folder = os.path.dirname(os.path.normpath(path))
     try:
-        normalized = os.path.normpath(path)
         if sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", normalized])
+            subprocess.Popen(["open", folder])
         elif os.name == "nt":
-            subprocess.Popen(["explorer", "/select,", normalized])
+            os.startfile(folder)
         else:
-            subprocess.Popen(["xdg-open", os.path.dirname(normalized)])
+            subprocess.Popen(["xdg-open", folder])
     except (OSError, subprocess.SubprocessError) as error:
         debug_print("  [WARN] No se pudo abrir el explorador:", error)
 
@@ -1183,8 +1306,10 @@ def show_created_dialog(parent, out_path, warnings):
     from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
     from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
         Style,
+        Color,
         colorize_path,
         apply_ui_font,
+        semibold_css,
     )
 
     if QtWidgets.QApplication.instance() is None:
@@ -1209,8 +1334,17 @@ def show_created_dialog(parent, out_path, warnings):
     layout.addWidget(path_label)
 
     if warnings:
-        notes = QtWidgets.QLabel("Warnings:\n- " + "\n- ".join(warnings))
+        # Los avisos son informacion de estado: van con el color del pack
+        # para warning, no en el gris del cuerpo, porque el usuario tiene
+        # que verlos si o si.
+        titulo = QtWidgets.QLabel(
+            "%d warning%s:" % (len(warnings), "" if len(warnings) == 1 else "s")
+        )
+        titulo.setStyleSheet("color: %s; %s" % (Color.WARNING_TEXT, semibold_css()))
+        layout.addWidget(titulo)
+        notes = QtWidgets.QLabel("\n".join("- %s" % w for w in warnings))
         notes.setWordWrap(True)
+        notes.setStyleSheet("color: %s;" % Color.WARNING_TEXT)
         layout.addWidget(notes)
 
     row = QtWidgets.QHBoxLayout()
@@ -1527,7 +1661,7 @@ def _make_controller():
                 self.failed.emit(str(error))
 
     class BuildWorker(QtCore.QThread):
-        done = QtCore.Signal(str)
+        done = QtCore.Signal(str, object)
         failed = QtCore.Signal(str)
 
         def __init__(self, params):
@@ -1538,6 +1672,7 @@ def _make_controller():
             log = []
             try:
                 p = self.params
+                build_warnings = []
                 template_text, _uses_crlf = load_template(p["template_path"])
                 text = build_script(
                     template_text,
@@ -1551,6 +1686,7 @@ def _make_controller():
                     project_last=p["range_last"],
                     editref_frames=p["editref_frames"],
                     editref_start=p["editref_start"],
+                    warnings=build_warnings,
                 )
                 write_script(
                     p["template_path"], text, p["out_path"],
@@ -1559,7 +1695,7 @@ def _make_controller():
                 for line in log:
                     debug_print(line)
                 write_log_file("OK: escrito %s" % p["out_path"], log)
-                self.done.emit(p["out_path"])
+                self.done.emit(p["out_path"], build_warnings)
             except Exception as error:
                 write_log_file("ERROR: %s" % error, log)
                 self.failed.emit(str(error))
@@ -1676,7 +1812,8 @@ def _make_controller():
                     # el offset del timeline cae fuera del rango elegido:
                     # mejor centrar y avisar que escribir un .nk corrido
                     data["unknown"].append(
-                        "offset del EditRef en el timeline (%+d) fuera del rango %d-%d; se centro"
+                        "EditRef offset taken from the timeline (%+d) falls "
+                        "outside %d-%d: centered instead"
                         % (self.editref_offset, range_first, range_last)
                     )
                     editref_start = None
@@ -1699,8 +1836,13 @@ def _make_controller():
             self.build_worker.failed.connect(self._on_failed)
             self.build_worker.start()
 
-        def _on_build_done(self, out_path):
-            warnings = (self.scan_data or {}).get("unknown") or []
+        def _on_build_done(self, out_path, build_warnings):
+            # Todo lo que el usuario tiene que saber, junto: lo que salio
+            # del escaneo del shot y lo que salio de armar el script.
+            warnings = list((self.scan_data or {}).get("unknown") or [])
+            for message in build_warnings or []:
+                if message not in warnings:
+                    warnings.append(message)
             self.created_dialog = show_created_dialog(
                 _get_hiero_main_window(), out_path, warnings
             )
