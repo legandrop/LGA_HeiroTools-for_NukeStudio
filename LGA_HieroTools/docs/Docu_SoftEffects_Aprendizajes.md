@@ -216,3 +216,69 @@ text_pad / weight) y el panel. Dos trampas mas, medidas al cablear:
   un refresh de verdad: ni el nudge de opacity ni un toggle de enable alcanzan
   siempre; el `LGA_NKS_Timeline_Refresh` del pack (cerrar/reabrir el viewer) lo
   garantiza. En interaccion normal de UI el problema no aparece.
+
+
+## Crear y BORRAR soft effects por codigo (medido con Apply AMF)
+
+### Crear: `subTrackIndex` no es opcional
+
+`VideoTrack.createEffect(effectType=..., trackItem=..., subTrackIndex=...)`.
+Pasando `trackItem` el efecto queda LINKEADO al clip y hereda su timing.
+
+La doc dice: *"subTrackIndex - if specified, will be placed on the appropriate
+sub-track, otherwise will be placed on a NEW sub-track"*. O sea que **sin
+pasarlo, CADA llamada abre un subtrack nuevo**.
+
+Sintoma cuando falta: el primer clip con efectos ocupa los subtracks 0 y 1, y
+el segundo clip -que tiene s0 y s1 libres, porque los del primero estan en otro
+rango de tiempo- se va igual a s1 y s2. Queda un s0 vacio debajo de sus
+efectos, que en pantalla se ve como una franja muerta VERTICAL entre el clip y
+su propia cadena, y crece con cada clip. No es un problema de frames: los
+rangos coinciden al frame.
+
+### Borrar: la opcion que evita borrar el CLIP
+
+Un soft effect vive en `track.subTrackItems()` y se elimina con
+`track.removeSubTrackItem(item, opciones)`.
+
+**`removeSubTrackItem` por defecto borra tambien los items LINKEADOS.** Como
+los efectos creados con `createEffect(trackItem=...)` estan linkeados al clip,
+llamarlo sin opciones **borra el clip del timeline**.
+
+La opcion correcta es:
+
+```python
+opciones = hiero.core.TrackBase.RemoveItemOptions.eDontRemoveLinkedItems
+track.removeSubTrackItem(effect, opciones)
+```
+
+Regla: si esa enum no se puede resolver, **cancelar el borrado**. No hay
+fallback a `removeSubTrackItem(effect)` a secas — ese "fallback" es exactamente
+el accidente que se quiere evitar.
+
+### Que se puede borrar sin equivocarse
+
+Coincidir la clase del nodo NO alcanza para decidir que un efecto es tuyo. Un
+`OCIOCDLTransform` puede haberlo puesto el usuario a mano. Apply AMF usa tres
+condiciones juntas:
+
+1. La clase del nodo esta en la lista de las que crea la tool.
+2. Esta linkeado al clip, o cubre exactamente su rango. Un solape PARCIAL
+   queda afuera: puede ser un grade que abarca varios clips del track.
+3. El knob `file` apunta a la carpeta de look del shot.
+
+La 3 es la que distingue lo propio de lo ajeno. Se eligio la ruta en vez de un
+tag propio porque los timelines que ya existen tienen efectos creados por
+versiones anteriores, sin tag, y una marca nueva los dejaria fuera de alcance.
+
+### Seleccion
+
+La API **no permite seleccionar soft effects por codigo** (`setSelection` solo
+acepta `TrackItem`). Por eso se opera directo sobre ellos en vez de
+seleccionarlos primero.
+
+### Habilitar / deshabilitar
+
+`EffectTrackItem.setEnabled()` **no figura en la API documentada de Nuke 16**
+-ni `SubTrackItem` ni `TrackItemBase` la listan- pero existe y es la via buena:
+al llamarla, el knob `disable` del nodo se mueve solo.

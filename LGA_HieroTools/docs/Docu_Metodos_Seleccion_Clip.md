@@ -113,6 +113,60 @@ Estos scripts importan `TRACK_comp_EXR` del módulo `LGA_NKS_GetClip` pero hacen
 
 **Nota:** Estos scripts usan selección manual (Método 1) pero también necesitan identificar el track específico por nombre, por lo que importan `TRACK_comp_EXR` para mantener la centralización del nombre del track.
 
+## Método 3: Playhead en TODOS los tracks, con umbral de selección
+
+### Por qué existe: Hiero autoselecciona
+
+**Hiero autoselecciona el clip que está bajo el playhead.** Parado sobre un
+shot y sin haber hecho click en nada, `te.selection()` ya devuelve UN item.
+
+La consecuencia es que **"un clip seleccionado" y "ningún clip seleccionado"
+son indistinguibles desde la API**. Un script que hace `if seleccionados:` para
+decidir si respetar la selección va a creer que el usuario eligió algo cuando
+en realidad solo movió el playhead.
+
+Este es el motivo de fondo por el que el Método 2 existe como híbrido, y el
+que hay que tener presente al escribir cualquier script nuevo que lea
+`te.selection()`.
+
+### La regla
+
+El umbral es por CANTIDAD, no por presencia:
+
+| Clips seleccionados | Qué se usa |
+|---|---|
+| 2 o más | Solo esos. Seleccionar dos clips no lo hace la autoselección: es deliberado. |
+| 1 o ninguno | Se ignora la selección y se barre el playhead. |
+
+### Diferencia con el Método 2
+
+El Método 2 busca en UN track (por defecto `TRACK_comp_EXR`). Este barre
+**todos** los video tracks bajo el playhead, porque la herramienta actúa sobre
+el shot entero y no sobre un track concreto.
+
+Por eso **no** usa `LGA_NKS_GetClip`: ese módulo está scopeado a un track por
+nombre y no cubre este caso. Si alguna vez se generaliza, este es el candidato
+a absorber.
+
+### Filtro por extensión
+
+Barrer todos los tracks a ciegas se lleva puesto lo que no es un plate (un
+EditRef `.mov`, un audio). Por eso el barrido por playhead filtra por extensión
+(`PLAYHEAD_EXTENSIONS`, hoy solo `.exr`).
+
+**El filtro NO se aplica a la selección explícita**: si el usuario eligió esos
+clips a mano, manda él. El filtro está para el barrido automático, no para
+contradecir una decisión.
+
+### Scripts que usan este método:
+
+- [x] **`LGA_NKS_Edit_Panel_py/LGA_NKS_ApplyAMF.py`** - `get_target_track_items()`,
+  con las constantes `SELECCION_MINIMA` y `PLAYHEAD_EXTENSIONS`.
+- [x] **`LGA_NKS_Edit_Panel_py/LGA_NKS_ToggleAMF.py`** - `find_amf_effects_at_playhead()`
+  barre todos los tracks, pero busca soft effects y no clips, y no mira la selección.
+
+---
+
 ---
 
 ## Módulo Utilitario Centralizado: `LGA_NKS_GetClip`

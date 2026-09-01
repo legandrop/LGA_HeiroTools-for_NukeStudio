@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.05 | Lega
+  LGA_EditToolsPanel v3.07 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.07: Apply AMF toma el atajo Shift+L y el boton Toggle AMF queda
+         comentado como referencia (sin atajo, por si se reactiva).
+  v3.06: Apply AMF pasa a poner y sacar los efectos, y sin seleccion
+         trabaja sobre el playhead. Tooltip actualizado.
   v3.05: Nuevo boton Toggle AMF (Shift+L), debajo de Apply AMF
   v3.04: Nuevo boton Create NK v000, que llama a LGA_NKS_CreateNKScript.py.
          El boton Create v000 pasa a llamarse Create EXR v000.
@@ -319,8 +323,17 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Default | Clip", self.default_clip, "#434c41", None, "Cambia el color transform a default en los clips seleccionados"),
             ("Compositing Log | Clip", self.set_compositing_log, "#434c41", None, "Cambia el color transform a compositing_log en los clips seleccionados"),
             ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Detecta y corrige clips con colorspace rec709 o gamma2.2"),
-            ("Apply AMF", self.apply_amf, "#434c41", None, "Crea los soft effects de color en los clips seleccionados siguiendo el .amf del shot (.cdl y .clf de _input/Look_Files)"),
-            ("Togg&le AMF", self.toggle_amf, "#434c41", "Shift+L", "Shift+L\nHabilita o deshabilita los soft effects de Apply AMF que esten bajo el playhead, en todos los tracks"),
+            ("App&ly AMF", self.apply_amf, "#434c41", "Shift+L", "Shift+L\nPone o saca los soft effects de color del shot segun su .amf (.cdl y .clf de _input/Look_Files).\nSi los clips ya los tienen, los borra.\nCon 2 o mas clips seleccionados trabaja sobre esos; si no, sobre los .exr bajo el playhead en todos los tracks"),
+            # Toggle AMF queda DESACTIVADO a proposito, no borrado: Apply AMF
+            # ahora pone y saca los efectos, asi que tener ademas un boton que
+            # solo los habilita/deshabilita confunde mas de lo que suma. Se
+            # conserva por si algun dia se quiere volver a prender/apagar sin
+            # borrar. El metodo self.toggle_amf y LGA_NKS_ToggleAMF.py siguen
+            # existiendo y funcionando.
+            # OJO: si se reactiva, el atajo Shift+L ya lo tiene Apply AMF. Hay
+            # que darle otro o sacarselo a Apply AMF, no ponerle el mismo: dos
+            # botones con el mismo atajo se pisan en silencio.
+            # ("Toggle AMF", self.toggle_amf, "#434c41", None, "Habilita o deshabilita los soft effects de Apply AMF que esten bajo el playhead, en todos los tracks"),
             ("Import shot", self.import_shot, "#2a4d3a", None, "Importa shots al proyecto"),
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
             ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar una secuencia negra v000 del shot activo"),

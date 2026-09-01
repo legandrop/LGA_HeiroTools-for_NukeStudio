@@ -1,10 +1,33 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.70 | Lega
+  LGA_NKS_ApplyAMF v0.90 | Lega
 
-  Crea los soft effects de color sobre los clips seleccionados del timeline,
-  siguiendo lo que declara el .amf que viene con el shot.
+  Pone y saca los soft effects de color de un shot, siguiendo lo que
+  declara el .amf que viene con el shot.
+
+  Con TOGGLE_CREATE_DELETE en True (el default) el boton es un TOGGLE:
+  si los clips objetivo YA tienen la cadena AMF, la BORRA; si no la
+  tienen, la crea. Tener soft effects colgados en el timeline todo el
+  tiempo estorba, y con un solo boton se ponen y se sacan.
+
+  De donde salen los clips objetivo (regla por CANTIDAD, no por
+  presencia):
+
+    - DOS o mas clips seleccionados -> se opera solo sobre esos.
+    - UNO o ninguno -> se ignora la seleccion y se barren todos los
+      tracks bajo el PLAYHEAD, tomando solo los .exr.
+
+  El umbral esta en dos porque Hiero AUTOSELECCIONA el clip bajo el
+  playhead: parado sobre un shot y sin tocar nada, selection() ya
+  devuelve un item, asi que "uno seleccionado" y "ninguno seleccionado"
+  son el mismo caso desde la API. Ver SELECCION_MINIMA.
+
+  Esa regla NO depende del flag: el flag decide crear o borrar, no de
+  donde salen los clips. Con el flag en False la tool solo crea, nunca
+  borra.
+
+  El boton tiene el atajo Shift+L.
 
   El .amf (ACES Metadata File) describe la cadena entera del plate y es la
   fuente de verdad. De ahi salen tres cosas:
@@ -52,6 +75,20 @@ ____________________________________________________________________
   PENDIENTE: cartel cuando hay mas de un archivo de la misma extension
   en Look_Files. Hoy eso solo avisa por log y usa el primero.
 
+  v0.90: Los clips objetivo salen del playhead salvo que haya DOS o mas
+         seleccionados. Con uno solo la tool creia estar respetando una
+         seleccion del usuario, pero era la autoseleccion de Hiero, y
+         terminaba tocando un solo track en vez del shot entero. Del
+         playhead se toman solo los .exr, para no meterle la cadena a un
+         EditRef. La tool absorbe el atajo Shift+L, que deja de estar en
+         Toggle AMF.
+  v0.80: El boton pasa a ser un toggle de crear/borrar (flag
+         TOGGLE_CREATE_DELETE) y, sin seleccion, opera sobre el
+         playhead en todos los tracks. El borrado va con
+         eDontRemoveLinkedItems: los efectos se crean LINKEADOS al
+         clip, y removeSubTrackItem sin esa opcion se lleva puesto el
+         CLIP del timeline. Solo se borra lo que apunta a Look_Files,
+         asi un efecto de la misma clase puesto a mano no se pierde.
   v0.70: Avisa por cartel cuando no puede resolver un shot, en vez de
          terminar en silencio. UN solo cartel por corrida y agrupado
          por SHOT, no por clip: un shot suele tener clips en aPlate,
@@ -115,6 +152,40 @@ FALLBACK_EFFECTS = (
 # el que falta. Asi el boton es idempotente y no apila efectos al reintentar, ni
 # pisa un archivo que alguien haya cambiado a mano.
 SKIP_IF_EXISTS = True
+
+# El boton como TOGGLE: si los clips objetivo ya tienen la cadena AMF, la borra;
+# si no la tienen, la crea. Ademas, sin seleccion opera sobre el playhead.
+#
+# En False queda el comportamiento viejo -crear sobre la seleccion, nunca
+# borrar-. El codigo de creacion es el mismo en los dos casos: el flag no
+# bifurca la logica de creacion, solo decide si ademas se puede borrar y de
+# donde salen los clips.
+TOGGLE_CREATE_DELETE = True
+
+# Los tipos que pone esta tool. Es la lista que mira el toggle para saber si un
+# clip "ya tiene AMF", y la unica que se borra. Tiene que coincidir con la de
+# LGA_NKS_ToggleAMF: son las dos puntas de la misma herramienta.
+AMF_EFFECT_TYPES = ("OCIOCDLTransform", "OCIOFileTransform")
+
+# Cuantos clips seleccionados hacen falta para creerle a la seleccion.
+#
+# Hiero AUTOSELECCIONA el clip que esta bajo el playhead: parado sobre un shot
+# y sin haber hecho click en nada, selection() ya devuelve UN item. O sea que
+# "un clip seleccionado" y "ningun clip seleccionado" son indistinguibles desde
+# la API, y por eso la tool tomaba la autoseleccion como si fuera una eleccion
+# del usuario y nunca llegaba a mirar los demas tracks.
+#
+# Con DOS o mas, en cambio, la seleccion es deliberada: eso no lo hace solo.
+SELECCION_MINIMA = 2
+
+# Extensiones que se aceptan al barrer por playhead. El barrido mira TODOS los
+# tracks, asi que sin filtro se lleva puesto lo que no es un plate -un EditRef
+# .mov, un audio-, y la cadena del .amf no tiene sentido ahi.
+#
+# NO se aplica a la seleccion explicita: si el usuario eligio esos clips a
+# mano, manda el. El filtro esta para el barrido a ciegas, no para
+# contradecirlo.
+PLAYHEAD_EXTENSIONS = (".exr",)
 
 # La corrida SIEMPRE deja su log, este o no prendido el debug por consola. Sin
 # esto la tool era una caja negra: si no hacia nada, no habia donde mirar por
@@ -913,6 +984,137 @@ def apply_effect(track_item, spec, efectos_existentes, sub_track_index):
 
 
 # ============================
+# Borrado (la otra mitad del toggle)
+# ============================
+
+
+def _remove_options():
+    """La opcion que impide que borrar el efecto se lleve puesto el CLIP.
+
+    Esto NO es defensivo de mas: los efectos de esta tool se crean con
+    createEffect(trackItem=...), o sea LINKEADOS al clip, y
+    removeSubTrackItem por defecto borra tambien lo linkeado. Sin esta
+    opcion, apretar el boton para sacar los efectos borraria el clip del
+    timeline.
+
+    Medido en +Building_Blocks/Hiero/Timeline/LGA_H-DeleteAll_TransformSoftEffects.py.
+
+    Si la enum no esta (otra version de Hiero), se devuelve None y el
+    borrado se CANCELA. No hay fallback a removeSubTrackItem(effect) a
+    secas: ese "fallback" es justamente el accidente.
+    """
+    try:
+        return hiero.core.TrackBase.RemoveItemOptions.eDontRemoveLinkedItems
+    except Exception as e:
+        debug_print("  [ERROR] No se pudo obtener eDontRemoveLinkedItems: %s" % e)
+        return None
+
+
+def _apunta_al_look(info):
+    """True si el efecto carga un archivo de la carpeta de look del shot.
+
+    Es lo que distingue un efecto NUESTRO de uno que el usuario puso a
+    mano: los que crea esta tool siempre quedan con el knob file apuntando
+    a <shot>/_input/Look_Files/. Un OCIOCDLTransform que alguien agrego
+    por su cuenta -para probar un grade, con el archivo vacio o con un
+    .cdl de otro lado- no cae ahi.
+
+    Sin esto alcanzaba con que la clase del nodo coincidiera, y el toggle
+    borraba trabajo ajeno.
+
+    Se prefirio esto antes que marcar los efectos propios con un tag: los
+    timelines que ya existen tienen efectos creados por las versiones
+    anteriores, sin tag, y una marca nueva los dejaria fuera del alcance
+    del boton. La ruta, en cambio, ya esta puesta desde la v0.20.
+    """
+    ruta = info.get("file") or ""
+    if not ruta:
+        return False
+    normalizada = re.sub(r"[\\/]+", "/", str(ruta)).lower()
+    return ("/%s/" % LOOK_DIR_NAME.lower()) in normalizada
+
+
+def collect_amf_effects(track_item):
+    """Los efectos de ESTA tool que hay sobre el clip.
+
+    Tres condiciones, y las tres tienen que darse:
+
+      1. La clase del nodo es una de las que crea la tool.
+      2. Esta linkeado al clip, o cubre exactamente su rango. Un efecto
+         que solapa PARCIAL queda afuera a proposito: puede ser un grade
+         que abarca varios clips del track.
+      3. Apunta a la carpeta de look del shot (ver _apunta_al_look).
+
+    La condicion 3 NO esta del lado de la creacion, y la asimetria es
+    deliberada: para CREAR, un efecto ajeno de la misma clase igual
+    cuenta y frena la creacion, porque apilar dos grades encima del
+    mismo clip es peor que no hacer nada. Los dos lados erran hacia no
+    tocar lo que el usuario puso a mano.
+    """
+    return [
+        info
+        for info in scan_clip_effects(track_item)
+        if info["class"] in AMF_EFFECT_TYPES
+        and (info["linked"] or info["same_range"])
+        and _apunta_al_look(info)
+    ]
+
+
+def clip_has_amf(track_item):
+    """True si el clip ya tiene al menos un efecto de la cadena AMF."""
+    try:
+        return bool(collect_amf_effects(track_item))
+    except Exception as e:
+        debug_print("  [WARN] No se pudo mirar '%s': %s" % (_safe_name(track_item), e))
+        return False
+
+
+def remove_amf_effects(track_items):
+    """Saca la cadena AMF de todos los clips. Devuelve (borrados, errores).
+
+    Los efectos se juntan primero y se borran despues, deduplicados por
+    guid: un mismo efecto puede aparecer al mirar dos clips distintos, y
+    borrarlo dos veces es un error garantizado.
+    """
+    opciones = _remove_options()
+    if opciones is None:
+        debug_print("[ERROR] Borrado cancelado: sin eDontRemoveLinkedItems se borraria el clip.")
+        return 0, 1
+
+    # guid -> (track, effect). El guid es lo unico que identifica al mismo
+    # efecto encontrado desde dos clips.
+    objetivo = {}
+    for track_item in track_items:
+        track = track_item.parent()
+        if not track:
+            continue
+        for info in collect_amf_effects(track_item):
+            effect = info["effect"]
+            clave = _guid(effect)
+            if clave is None:
+                clave = id(effect)
+            if clave not in objetivo:
+                objetivo[clave] = (track, effect, info["class"])
+
+    debug_print("\n  [A BORRAR] %d efecto(s)" % len(objetivo))
+
+    borrados = 0
+    errores = 0
+    for track, effect, clase in objetivo.values():
+        nombre = _safe_name(effect)
+        try:
+            track.removeSubTrackItem(effect, opciones)
+            borrados += 1
+            debug_print("    [OK] borrado %-20s %s" % (clase or "<sin nodo>", nombre))
+        except Exception as e:
+            errores += 1
+            debug_print("    [ERROR] no se pudo borrar '%s': %s" % (nombre, e))
+            debug_print(traceback.format_exc())
+
+    return borrados, errores
+
+
+# ============================
 # Proceso por clip
 # ============================
 
@@ -1065,30 +1267,189 @@ def get_selected_track_items():
     return seq, track_items
 
 
+def get_playhead_time():
+    """Frame del playhead, o None si no hay viewer activo."""
+    try:
+        viewer = hiero.ui.currentViewer()
+        if not viewer:
+            return None
+        return viewer.time()
+    except Exception as e:
+        debug_print("[WARN] No se pudo leer el playhead: %s" % e)
+        return None
+
+
+def _extension_aceptada(track_item):
+    """True si la media del clip es de un tipo al que aplicarle la cadena."""
+    media_path = get_media_path(track_item)
+    if not media_path:
+        return False
+    return str(media_path).lower().endswith(PLAYHEAD_EXTENSIONS)
+
+
+def get_track_items_at_playhead(seq, tiempo):
+    """Los clips bajo el playhead, en TODOS los tracks, filtrados por extension.
+
+    Los descartados por extension se loguean uno por uno: cuando el usuario
+    espera que el boton toque un clip y no lo toca, tiene que poder ver por
+    que en el .log en vez de quedarse con un silencio.
+    """
+    encontrados = []
+    descartados = []
+    for track in seq.videoTracks():
+        try:
+            items = track.items()
+        except Exception:
+            continue
+        for item in items:
+            # track.items() da clips, no efectos, pero el guard no cuesta nada
+            # y esta tool no tiene por que aplicarse sobre otro soft effect.
+            if isinstance(item, hiero.core.EffectTrackItem):
+                continue
+            if not isinstance(item, hiero.core.TrackItem):
+                continue
+            try:
+                if not (item.timelineIn() <= tiempo <= item.timelineOut()):
+                    continue
+            except Exception:
+                continue
+            if _extension_aceptada(item):
+                encontrados.append(item)
+            else:
+                descartados.append(item)
+
+    for item in descartados:
+        debug_print(
+            "  [SALTEADO] '%s' no es %s"
+            % (_safe_name(item), "/".join(PLAYHEAD_EXTENSIONS))
+        )
+
+    return encontrados
+
+
+def get_target_track_items():
+    """Los clips sobre los que hay que trabajar, y de donde salieron.
+
+    La regla es por CANTIDAD, no por presencia, y el motivo es que Hiero
+    autoselecciona el clip bajo el playhead (ver SELECCION_MINIMA):
+
+      - DOS o mas clips seleccionados -> se usan esos y nada mas. Eso solo
+        pasa si el usuario los eligio.
+      - UNO o ninguno -> se ignora la seleccion y se barren todos los
+        tracks bajo el playhead. Con un solo clip no hay forma de saber si
+        lo eligio el usuario o lo puso ahi la autoseleccion, y suponer lo
+        primero dejaba la tool operando sobre un track cuando el gesto
+        natural -parado sobre un shot, sin seleccionar nada- es que opere
+        sobre el shot entero.
+
+    Esta regla NO depende de TOGGLE_CREATE_DELETE: ese flag decide si se
+    crea o se borra, no de donde salen los clips.
+
+    Devuelve (seq, track_items, origen), con origen en {'seleccion',
+    'playhead'} para que el cartel y el log digan de donde salio la lista.
+    """
+    seq, seleccionados = get_selected_track_items()
+    if not seq:
+        return None, [], None
+
+    if len(seleccionados) >= SELECCION_MINIMA:
+        debug_print("[INFO] Seleccion deliberada: %d clips." % len(seleccionados))
+        return seq, seleccionados, "seleccion"
+
+    if len(seleccionados) == 1:
+        debug_print(
+            "[INFO] Un solo clip seleccionado ('%s'): puede ser la autoseleccion "
+            "de Hiero, asi que se barre el playhead." % _safe_name(seleccionados[0])
+        )
+
+    tiempo = get_playhead_time()
+    if tiempo is None:
+        debug_print("[ERROR] No hay viewer activo: no se puede saber donde esta el playhead.")
+        return seq, [], None
+
+    track_items = get_track_items_at_playhead(seq, tiempo)
+    debug_print(
+        "[INFO] %d clip(s) bajo el playhead (frame %s)" % (len(track_items), tiempo)
+    )
+    return seq, track_items, "playhead"
+
+
+def _avisar_sin_clips():
+    """Cartel para cuando no hay nada sobre lo que trabajar."""
+    mensaje = (
+        "Nothing to work on.\n\n"
+        "Place the playhead over a shot, or select two or more clips.\n"
+        "Only %s clips are picked up from the playhead."
+        % "/".join(ext.lstrip(".").upper() for ext in PLAYHEAD_EXTENSIONS)
+    )
+    debug_print("[ERROR] No hay clips ni en la seleccion ni bajo el playhead.")
+    try:
+        from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+
+        show_warning(hiero.ui.mainWindow(), "Apply AMF", mensaje)
+    except Exception as e:
+        debug_print("[WARN] No se pudo mostrar el cartel: %s" % e)
+
+
+def decidir_modo(track_items):
+    """'borrar' si ALGUN clip objetivo ya tiene la cadena AMF; si no, 'crear'.
+
+    La decision se toma UNA vez para toda la tanda, no clip por clip. Con
+    una seleccion mezclada -tres clips con efectos y dos sin- decidir por
+    clip crearia en unos y borraria en otros en la misma pasada, que es
+    justo el resultado que nadie quiere ver.
+
+    Y unifica hacia abajo (alguno prendido -> apagar todos), igual que
+    LGA_NKS_ToggleAMF, para que los dos botones se comporten igual.
+    """
+    for track_item in track_items:
+        if clip_has_amf(track_item):
+            debug_print(
+                "[MODO] BORRAR: '%s' ya tiene la cadena AMF." % _safe_name(track_item)
+            )
+            return "borrar"
+    debug_print("[MODO] CREAR: ningun clip objetivo tiene la cadena AMF.")
+    return "crear"
+
+
 def _main_interno():
     debug_print("\n" + "=" * 70)
     debug_print("  LGA_NKS_ApplyAMF - soft effects de color segun el .amf del shot")
     debug_print(f"  desde {INPUT_DIR_NAME}/{LOOK_DIR_NAME}")
     debug_print("=" * 70)
 
-    seq, track_items = get_selected_track_items()
+    seq, track_items, origen = get_target_track_items()
     if not seq:
         return
 
     if not track_items:
-        mensaje = (
-            "No clips selected.\n\n"
-            "Select the clips you want to apply the AMF chain to."
-        )
-        debug_print("[ERROR] No hay clips seleccionados en el timeline.")
-        try:
-            from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
-
-            show_warning(hiero.ui.mainWindow(), "Apply AMF", mensaje)
-        except Exception as e:
-            debug_print("[WARN] No se pudo mostrar el cartel: %s" % e)
+        _avisar_sin_clips()
         return
 
+    debug_print("  clips objetivo : %d (por %s)" % (len(track_items), origen))
+
+    # --- Rama de BORRADO -------------------------------------------------
+    # Sacar los efectos no necesita ni el shot ni el disco: se trabaja solo
+    # con lo que ya esta en el timeline. Por eso sale por aca antes de todo
+    # el camino de resolucion de rutas.
+    if TOGGLE_CREATE_DELETE and decidir_modo(track_items) == "borrar":
+        project = seq.project()
+        if project:
+            project.beginUndo("Apply AMF - remove")
+        try:
+            borrados, errores = remove_amf_effects(track_items)
+        finally:
+            if project:
+                project.endUndo()
+
+        debug_print("\n" + "=" * 70)
+        debug_print("  RESUMEN (borrado) sobre %d clip(s):" % len(track_items))
+        debug_print("    efectos borrados : %d" % borrados)
+        debug_print("    con error        : %d" % errores)
+        debug_print("=" * 70 + "\n")
+        return
+
+    # --- Rama de CREACION ------------------------------------------------
     project = seq.project()
     total = {"creado": 0, "salteado": 0, "error": 0}
     # shot -> motivo. Se llena en process_track_item y se avisa UNA vez al final.
@@ -1120,6 +1481,29 @@ def _main_interno():
     # El cartel va DESPUES del endUndo y del resumen: primero se termina el
     # trabajo sobre el timeline, despues se le habla al usuario.
     _avisar_fallos(fallos, len(track_items))
+
+    # Salir sin haber hecho NADA y sin nada que avisar es el peor final: el
+    # boton parece roto. Pasa cuando todos los clips ya tenian su cadena, o
+    # cuando tienen un efecto de la misma clase puesto a mano -que frena la
+    # creacion pero no cuenta como nuestro para borrarlo-.
+    if not fallos and total["creado"] == 0 and total["error"] == 0:
+        mensaje = (
+            "Nothing to do: the %d selected clip%s already had their color effects.\n\n"
+            "If you expected them to be removed, they were not created by Apply AMF: "
+            "only effects loading a file from %s are removed."
+            % (
+                len(track_items),
+                "s" if len(track_items) > 1 else "",
+                LOOK_DIR_NAME,
+            )
+        )
+        debug_print("\n[AVISO AL USUARIO] No se creo ni se borro nada.")
+        try:
+            from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info
+
+            show_info(hiero.ui.mainWindow(), "Apply AMF", mensaje)
+        except Exception as e:
+            debug_print("[WARN] No se pudo mostrar el cartel: %s" % e)
 
 
 def main():
