@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.07 | Lega
+  LGA_NKS_CreateNKScript v1.08 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,11 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.08: ffprobe sale del pack y no del PATH del sistema. Se llamaba por
+         nombre pelado, asi que en una maquina sin ffprobe instalado la
+         duracion del EditRef no se podia medir en NINGUN shot y el rango
+         de review quedaba el del template. El aviso ahora distingue si
+         falta ffprobe.
   v1.07: El boton del cartel final abre la carpeta con el explorador POR
          DEFAULT del sistema, sin nombrar explorer.exe. El TimeClip del
          EditRef recibe first/last del rango ya colocado (1001 + handle),
@@ -50,6 +55,7 @@ ____________________________________________________________________
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -370,16 +376,44 @@ def resolve_look_files(shot_root):
     return cdl, clf
 
 
+def ffprobe_path():
+    """Ruta del ffprobe a usar, o None si no hay ninguno.
+
+    Primero el que VIAJA EN EL PACK, con ruta armada desde __file__: es
+    el unico que existe seguro en la maquina de un artista. Confiar en el
+    PATH del sistema era el bug -en la maquina de quien escribio la tool
+    ffprobe estaba instalado aparte, en la de los demas no, y el EditRef
+    no se podia medir en NINGUN shot-. El del PATH queda solo de
+    respaldo, para macOS, donde el pack todavia no trae binarios.
+    """
+    shared = Path(__file__).parent.parent / "LGA_NKS_Shared"
+    if os.name == "nt":
+        del_pack = shared / "FFmpeg_Win" / "bin" / "ffprobe.exe"
+    else:
+        del_pack = shared / "FFmpeg_Mac" / "bin" / "ffprobe"
+    if del_pack.is_file():
+        return str(del_pack)
+    return shutil.which("ffprobe")
+
+
 def probe_mov_frames(mov_path):
     """Cantidad de frames de un mov via ffprobe, o None si no se pudo."""
+    binario = ffprobe_path()
+    if not binario:
+        return None
+    # CREATE_NO_WINDOW: sin esto Windows abre una consola negra por cada
+    # llamada, igual que en Import Shot.
+    extra = {}
+    if os.name == "nt":
+        extra["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         out = subprocess.run(
             [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                binario, "-v", "error", "-select_streams", "v:0",
                 "-show_entries", "stream=nb_frames",
                 "-of", "default=nw=1:nk=1", mov_path,
             ],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=60, **extra
         )
         value = out.stdout.strip()
         return int(value) if value.isdigit() else None
@@ -693,6 +727,7 @@ def build_script(
     seq_folder = os.path.basename(os.path.dirname(shot_root))
     source_shot, source_seq = detect_source_shot(template_text, template_name)
     log.append("Shot: %s (seq %s) | origen del template: %s" % (shot_name, seq_folder, source_shot))
+    log.append("  ffprobe: %s" % (ffprobe_path() or "NO ENCONTRADO"))
 
     if columns is None:
         columns, unknown = scan_shot(shot_root)
@@ -919,11 +954,21 @@ def build_script(
         )
     elif editref_mov:
         # Solo si el mov EXISTE pero no se pudo medir: si no existe, ya se
-        # aviso arriba y dos lineas para la misma causa es ruido.
-        _warn(
-            log, warnings,
-            "Could not read the EditRef duration: the review range is the template's, check it by hand",
-        )
+        # aviso arriba y dos lineas para la misma causa es ruido. Se
+        # distingue la causa: sin ffprobe falla en TODOS los shots y eso
+        # hay que poder leerlo en el cartel, no deducirlo.
+        if not ffprobe_path():
+            _warn(
+                log, warnings,
+                "ffprobe not found: the EditRef duration could not be measured "
+                "in any shot, so the review range is the template's. Reinstall "
+                "the pack: ffprobe ships with it",
+            )
+        else:
+            _warn(
+                log, warnings,
+                "Could not read the EditRef duration: the review range is the template's, check it by hand",
+            )
 
     # 6. reconstruir texto: sin borrados, con clones insertados tras el trio
     # de fDenoised (las posiciones visuales ya estan recalculadas)

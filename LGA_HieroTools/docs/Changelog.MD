@@ -1,3 +1,7 @@
+v3.90:
+
+        - Create NK v000 medía el EditRef con el ffprobe del sistema y fallaba en toda maquina que no lo tuviera (`LGA_NKS_CreateNKScript v1.08`). Se lo invocaba por nombre pelado, confiando en el PATH: en la maquina donde se escribio la tool estaba instalado aparte, asi que el bug no se veia, pero en la de cualquier artista la duracion no se podia medir en NINGUN shot y el rango de review quedaba el del template. Ahora usa el ffprobe que ya viaja en el pack (`LGA_NKS_Shared/FFmpeg_Win`), con ruta armada desde `__file__`; el PATH queda solo de respaldo para macOS, donde todavia no hay binarios propios. El aviso distingue si lo que falta es ffprobe, y el log registra cual se uso. [ HieroTools - ffprobe del pack en Create NK v000 ]
+
 v3.89:
 
         - Coordination Panel suma el boton Download AMF (`LGA_NKS_Coordination_Panel v1.27`, nuevo `LGA_NKS_FileManagerS3_DownloadAmf v1.00`): sin la carpeta _input/Look_Files bajada del shot, faltan los .amf/.cdl que hacen falta para ver bien los renders de comp con el color correcto, y hasta ahora habia que bajar el shot completo entero o buscarla a mano en disco. El boton nuevo, ubicado entre Download Clip y Reveal in Flow, dispara la descarga de esa carpeta puntual via FileManagerS3 CLI, reusando la deteccion de shot y el launcher que ya usa el boton Download Shot. No chequea si la carpeta ya existe en disco: el punto de este boton es bajarla justamente cuando falta. [ HieroTools - Boton Download AMF en el Coordination Panel ]
