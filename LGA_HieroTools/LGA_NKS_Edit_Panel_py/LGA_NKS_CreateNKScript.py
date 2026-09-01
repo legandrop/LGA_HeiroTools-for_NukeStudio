@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.05 | Lega
+  LGA_NKS_CreateNKScript v1.06 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,9 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.06: Si el v000 ya existe se pregunta si sobreescribir en vez de
+         abortar; el .nk que estaba se conserva como .nk~ y el boton de
+         la ventana de rango pasa a decir Overwrite.
   v1.05: Las ventanas dejan de bloquear Hiero (no-modales, como Create
          EXR v000). La caja del handle se agranda y muestra al lado el
          total que da la cuenta. El cartel final trae la ruta coloreada y
@@ -864,10 +867,25 @@ def build_script(
     return text
 
 
-def write_script(template_path, text, out_path):
-    """Escribe el .nk preservando los EOLs del template. Nunca pisa."""
+def write_script(template_path, text, out_path, overwrite=False):
+    """Escribe el .nk preservando los EOLs del template.
+
+    Sin overwrite no pisa nada. Con overwrite, el .nk que estaba se
+    conserva como <nombre>.nk~ antes de escribir: es la misma convencion
+    de respaldo que deja Nuke al guardar, asi que pisar es reversible.
+    """
     if os.path.exists(out_path):
-        raise CreateNKError("Ya existe %s" % out_path)
+        if not overwrite:
+            raise CreateNKError("Ya existe %s" % out_path)
+        backup = out_path + "~"
+        try:
+            if os.path.exists(backup):
+                os.remove(backup)
+            os.replace(out_path, backup)
+        except OSError as error:
+            raise CreateNKError(
+                "No pude respaldar el .nk que estaba (%s): %s" % (backup, error)
+            )
     out_dir = os.path.dirname(out_path)
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
@@ -1230,6 +1248,7 @@ class RangeDialog(object):
         out_path,
         publish_v000=None,
         timeline_counts=None,
+        overwrite=False,
     ):
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
         from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
@@ -1402,7 +1421,8 @@ QRadioButton::indicator:disabled {
         # Create es la accion: unico violeta y ultimo a la derecha.
         cancel_btn = QtWidgets.QPushButton("Cancel")
         cancel_btn.setStyleSheet(Style.BTN_SECONDARY)
-        create_btn = QtWidgets.QPushButton("Create")
+        # El boton nombra lo que va a pasar: si el v000 ya estaba, pisa.
+        create_btn = QtWidgets.QPushButton("Overwrite" if overwrite else "Create")
         create_btn.setStyleSheet(Style.BTN_PRIMARY)
         for btn in (cancel_btn, create_btn):
             btn.setMinimumHeight(28)
@@ -1532,7 +1552,10 @@ def _make_controller():
                     editref_frames=p["editref_frames"],
                     editref_start=p["editref_start"],
                 )
-                write_script(p["template_path"], text, p["out_path"])
+                write_script(
+                    p["template_path"], text, p["out_path"],
+                    overwrite=p.get("overwrite", False),
+                )
                 for line in log:
                     debug_print(line)
                 write_log_file("OK: escrito %s" % p["out_path"], log)
@@ -1609,14 +1632,24 @@ def _make_controller():
                 return
 
             out_path = v000_output(self.shot_root, self.shot_name)
-            if os.path.exists(out_path):
-                show_warning(
+            # Si el v000 ya existe se pregunta, no se aborta: rehacerlo es
+            # un caso normal. Sin recomendada, porque pisar es destructivo
+            # y el cartel no tiene que empujar a ninguna de las dos.
+            self.overwrite = os.path.exists(out_path)
+            if self.overwrite:
+                from LGA_NKS_Shared.LGA_NKS_MessageBox import ask_question
+
+                if not ask_question(
                     _get_hiero_main_window(),
                     "Create NK v000",
-                    "Ya existe el script v000 del shot:\n%s\n\nNo se pisa nada."
+                    "This v000 already exists:\n%s\n\nOverwrite it?\n"
+                    "The current one is kept as .nk~"
                     % out_path.replace("\\", "/"),
-                )
-                return
+                    yes_text="Overwrite",
+                    no_text="Cancel",
+                    recommended=False,
+                ):
+                    return
             # NO-MODAL: Hiero queda usable y el flujo sigue por callback
             self.out_path = out_path
             self.range_dialog = RangeDialog(
@@ -1626,6 +1659,7 @@ def _make_controller():
                 out_path,
                 publish_v000=data.get("publish_v000"),
                 timeline_counts=getattr(self, "timeline_counts", None),
+                overwrite=self.overwrite,
             )
             self.range_dialog.open(self._on_range_chosen)
 
@@ -1658,6 +1692,7 @@ def _make_controller():
                     "range_last": range_last,
                     "editref_frames": data["editref_frames"],
                     "editref_start": editref_start,
+                    "overwrite": getattr(self, "overwrite", False),
                 }
             )
             self.build_worker.done.connect(self._on_build_done)
