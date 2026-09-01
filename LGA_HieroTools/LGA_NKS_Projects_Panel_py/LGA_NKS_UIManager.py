@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.03 | Lega
+  LGA_NKS_UIManager v1.04 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.04: El toggle de contexto invierte el orden visual: studio a la izquierda
+         y client a la derecha. Solo posicion en el layout; el estado activo
+         se sigue pintando por identidad del boton.
   v1.03: Corregida la inicializacion para usuarios sin acceso al toggle Studio/Client:
          setup_connections() ahora conecta sus señales solo cuando ambos botones fueron creados.
   v1.02: El switch Studio/Client pasa a ser un toggle pill (_build_context_toggle) ubicado a la
@@ -222,14 +225,18 @@ class UIManager:
         h.setContentsMargins(2, 2, 2, 2)
         h.setSpacing(2)
 
-        panel.ctx_client_btn = QtWidgets.QPushButton("client")
+        # El orden de creacion sigue al orden VISUAL: studio a la izquierda,
+        # client a la derecha. Es solo posicion; el estado activo lo pinta
+        # _refresh_context_toggle() por identidad del boton, no por su lugar
+        # en el layout, asi que mover estas lineas no toca el comportamiento.
         panel.ctx_studio_btn = QtWidgets.QPushButton("studio")
-        for btn in (panel.ctx_client_btn, panel.ctx_studio_btn):
+        panel.ctx_client_btn = QtWidgets.QPushButton("client")
+        for btn in (panel.ctx_studio_btn, panel.ctx_client_btn):
             btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.setFlat(True)
             btn.setMinimumHeight(22)
-        h.addWidget(panel.ctx_client_btn)
         h.addWidget(panel.ctx_studio_btn)
+        h.addWidget(panel.ctx_client_btn)
 
         panel.context_toggle_widget = container
         if hasattr(panel, "_refresh_context_toggle"):

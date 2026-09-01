@@ -74,6 +74,9 @@
 - Toolbar derecha: `Refresh`, `Settings`, estado, `Reimport` (opcional).
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.
+- Toggle de contexto (pill) a la derecha de la etiqueta inferior, solo visible para el login habilitado (`SWITCH_ALLOWED_LOGIN`). Orden visual: **`studio` a la izquierda, `client` a la derecha**. El activo se pinta violeta.
+  - Lo construye `UIManager._build_context_toggle()`; el estado lo pinta `_refresh_context_toggle()` del panel, que elige el boton por IDENTIDAD (`ctx_studio_btn` / `ctx_client_btn`) y no por su posicion en el layout. Por eso reordenar los `addWidget` es un cambio puramente visual.
+  - Al cambiar de modo, `_write_context_mode()` reescribe `LGA_HieroTools_context.ini` en runtime. Ese archivo es estado de la maquina y NO se versiona: el repo publico lo excluye en `.git/info/exclude` y el contenedor `.nuke` en su `.gitignore`. Sin el archivo, `get_context_mode()` devuelve `studio`.
 - Vista de `Settings`:
   - Dropdown `Auto-refresh interval`: `never`, `5min`, `10min`, `15min`, `30min`, `1h`, `2h`
   - Lista READ-ONLY `Project colors`: nombre, swatch y hex de cada proyecto segun PipeSync. No se edita aca; si la DB no tiene datos se muestra el motivo en vez de una lista vacia. Se repuebla cada vez que se abre la vista.
