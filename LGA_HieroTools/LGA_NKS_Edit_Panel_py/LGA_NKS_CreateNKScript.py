@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.08 | Lega
+  LGA_NKS_CreateNKScript v1.09 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,13 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.09: El log dice que hizo con CADA nodo de color: cual es, si estaba
+         suelto o adentro de un grupo, y si se reemplazo o quedo intacto
+         y por que. Antes no registraba nada y no habia forma de
+         diagnosticar el reporte de un usuario. Ademas el criterio ya no
+         depende solo de que el path diga Look_Files -tambien entra la
+         expresion TCL que resuelve desde root.name- y los nodos que
+         quedan intactos se avisan.
   v1.08: ffprobe sale del pack y no del PATH del sistema. Se llamaba por
          nombre pelado, asi que en una maquina sin ffprobe instalado la
          duracion del EditRef no se podia medir en NINGUN shot y el rango
@@ -523,6 +530,30 @@ def set_or_add_chunk_knob(chunk, knob, value):
     return False
 
 
+def grupo_de_cada_chunk(chunks):
+    """Lista paralela a chunks con el nombre del Group que contiene a cada
+    uno, o None si esta en el nivel de arriba.
+
+    Los Group se anidan (DasGrain trae otro adentro), asi que se rastrea
+    con una pila. Sirve para que el log diga si un nodo estaba suelto o
+    adentro de un grupo, que es justo lo que no se podia saber cuando un
+    usuario reporto que los OCIO del grupo no se le reemplazaban.
+    """
+    pila = []
+    resultado = []
+    for chunk in chunks:
+        primera = chunk[0].strip() if chunk else ""
+        if primera.startswith("end_group"):
+            resultado.append(pila[-1] if pila else None)
+            if pila:
+                pila.pop()
+            continue
+        resultado.append(pila[-1] if pila else None)
+        if chunk_class(chunk) == "Group":
+            pila.append(chunk_knob(chunk, "name") or "?")
+    return resultado
+
+
 def normalized_label(chunk):
     raw = chunk_knob(chunk, "label")
     if raw is None:
@@ -833,19 +864,59 @@ def build_script(
             set_chunk_knob(chunk, "bdwidth", str(last_x + BACKDROP_RIGHT_PAD))
             break
 
-    # 4. OCIO CDL / LUT con rutas reales: todo nodo OCIO cuyo file apunte a
-    # Look_Files (los del output y los internos del grupo VIEWER_INPUT)
+    # 4. OCIO CDL / LUT con rutas reales. Se toca todo nodo de color cuyo
+    # file apunte a Look_Files O sea una expresion TCL que resuelve el look
+    # desde root.name: las dos formas son 'el look del shot'. Un OCIO que
+    # apunte a un archivo fijo puesto a mano NO se pisa.
     cdl, clf = resolve_look_files(shot_root)
-    for chunk in chunks:
+    log.append("  CDL del shot: %s" % (cdl or "NINGUNO"))
+    log.append("  CLF del shot: %s" % (clf or "NINGUNO"))
+    grupos = grupo_de_cada_chunk(chunks)
+    ocio_total = 0
+    ocio_tocados = 0
+    ocio_intactos = []
+    for index, chunk in enumerate(chunks):
         cls = chunk_class(chunk)
         if cls not in ("OCIOCDLTransform", "OCIOFileTransform"):
             continue
+        ocio_total += 1
+        nombre = chunk_knob(chunk, "name") or "?"
+        grupo = grupos[index] if index < len(grupos) else None
+        donde = "en el grupo %s" % grupo if grupo else "suelto"
         current = chunk_knob(chunk, "file") or ""
-        if LOOK_DIR_NAME not in current:
-            continue
         target = cdl if cls == "OCIOCDLTransform" else clf
-        if target:
-            set_chunk_knob(chunk, "file", quote_if_needed(target))
+        es_del_look = (
+            LOOK_DIR_NAME in current
+            or ("root.name" in current and "glob" in current)
+        )
+        if not es_del_look:
+            ocio_intactos.append(nombre)
+            log.append(
+                "  OCIO %s (%s): INTACTO, su file no apunta al look del shot -> %s"
+                % (nombre, donde, current[:120])
+            )
+            continue
+        if not target:
+            # No se suma a ocio_intactos: la falta de CDL/CLF ya tiene su
+            # propio aviso y repetirla por nodo seria ruido.
+            log.append(
+                "  OCIO %s (%s): INTACTO, no hay archivo de look en el shot"
+                % (nombre, donde)
+            )
+            continue
+        set_chunk_knob(chunk, "file", quote_if_needed(target))
+        ocio_tocados += 1
+        log.append("  OCIO %s (%s) -> %s" % (nombre, donde, target))
+    log.append("  OCIO: %d nodos, %d reemplazados" % (ocio_total, ocio_tocados))
+    if ocio_intactos:
+        # Solo llega aca el caso raro: HAY archivo de look pero el nodo no se
+        # reconocio como del look. Es el sintoma que hay que poder ver.
+        _warn(
+            log, warnings,
+            "%d color node(s) were not recognized as look nodes and kept the "
+            "template path (%s): check their CDL/LUT by hand"
+            % (len(ocio_intactos), ", ".join(ocio_intactos)),
+        )
     if not cdl:
         _warn(
             log, warnings,
