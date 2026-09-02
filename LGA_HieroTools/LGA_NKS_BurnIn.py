@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.03 | Lega
+  LGA_NKS_BurnIn v1.04 | Lega
 
   Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
@@ -14,6 +14,20 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.04: Refresco del viewer SIN abrir tabs. Tras cualquier cambio de
+         un knob bi_* (del panel, de un script o de la UI) se programa
+         UN refresh_viewer() diferido (QTimer de 0 ms: una rafaga de
+         writes termina en un solo refresh) que descarta los frames
+         cacheados del viewer actual (Viewer.flushCache) y le pide que
+         se redibuje (hiero.ui.updateViewer). OJO: flushCache ademas
+         PAUSA el cacheo (doc de la API), por eso se llama
+         resumeCaching() enseguida. El nudge de opacidad sigue como
+         respaldo para ensuciar el hash del nodo. Guardia de re-entrada
+         en el knobChanged: apply_rotation escribe bi_<f>_ax/ay y el
+         nudge escribe bi_opacity, y cada write vuelve a disparar el
+         callback. El texto de los custom (bi_<f>_text) tambien
+         re-aplica el pivote (cambia el ancho del panel) y los sufijos
+         de campo se validan contra FIELDS.
   v1.03: el knobChanged tambien re-aplica la rotacion por campo
          (bi_<f>_rot y todo lo que mueve el pivote: x/y/size, scale,
          text_pad) via apply_rotation() del modulo Blink.
@@ -47,6 +61,144 @@ def _tooltip(key, lang="es"):
     return TOOLTIPS.get(lang, {}).get(key, "")
 
 
+def _log(message):
+    """Log al archivo de la logica (DebugPy_LGA_NKS_BurnIn.log)."""
+    try:
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        bi_logic._log("[Registro] " + message)
+    except Exception:
+        pass
+
+
+def _log_once(key, message):
+    try:
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        bi_logic._log_error_once("registro:" + key, message)
+    except Exception:
+        pass
+
+
+# ── Refresco del viewer del timeline ─────────────────────────────────────────
+#
+# Medido en NKS 16: un setValue por API en el gizmo deja al viewer del timeline
+# mostrando frames CACHEADOS con el estado anterior; saltar el playhead o
+# nuke.clearRAMCache() no alcanzan. La API documentada de hiero.ui trae lo que
+# hace falta sin cerrar ni abrir tabs: Viewer.flushCache() ("flush the cache
+# on the viewer and pause caching"), Viewer.resumeCaching() y
+# hiero.ui.updateViewer(). El detalle de que flushCache PAUSA el cacheo es la
+# trampa: sin el resume el viewer deja de cachear para siempre.
+
+# Knobs bi_* que no cambian el render (no disparan refresh).
+_KNOBS_SIN_RENDER = ("bi_open_panel",)
+
+_state = {"in_handler": False, "refresh_pending": False}
+
+
+def refresh_viewer():
+    """Fuerza el re-render del frame actual del viewer del timeline sin abrir
+    tabs. Devuelve True si pudo flushear el viewer actual. Llamar SIEMPRE desde
+    el hilo principal (los metodos del viewer lo exigen)."""
+    _state["refresh_pending"] = False
+    try:
+        import hiero.ui
+    except Exception:
+        return False
+    ok = False
+    try:
+        viewer = hiero.ui.currentViewer()
+        if viewer is not None:
+            was_paused = False
+            try:
+                was_paused = bool(viewer.isCachingPaused())
+            except Exception:
+                pass
+            viewer.flushCache()
+            # flushCache pausa el cacheo: se reanuda salvo que YA estuviera
+            # pausado por el usuario (se respeta su estado).
+            if not was_paused:
+                viewer.resumeCaching()
+            ok = True
+    except Exception as exc:
+        _log_once("flush", "viewer.flushCache fallo: {}".format(exc))
+    # hiero.ui.updateViewer() pide dos argumentos (medido: "expected 2
+    # arguments, got 0"); el flush + el nudge alcanzan para que el viewer
+    # vuelva a pedir el frame, asi que no se llama.
+    return ok
+
+
+def schedule_refresh():
+    """Programa UN refresh_viewer() para cuando el event loop quede libre: una
+    rafaga de writes (el panel escribe varios knobs, apply_rotation escribe
+    ax/ay por campo, el nudge escribe dos veces) termina en un solo flush."""
+    if _state["refresh_pending"]:
+        return
+    _state["refresh_pending"] = True
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore
+
+        QtCore.QTimer.singleShot(0, refresh_viewer)
+    except Exception:
+        refresh_viewer()
+
+
+def _apply_layout_change(gizmo, name):
+    """Re-aplica fuente/rotacion segun el knob bi_* que cambio."""
+    try:
+        import LGA_NKS_BurnIn_Blink as bi_blink
+    except Exception:
+        return
+    if name == "bi_weight":
+        # El peso cambia la fuente Y las metricas: re-aplicar ambas y ensuciar
+        # el nodo (el bi_font seteado por codigo no siempre invalida solo).
+        bi_blink.apply_font(gizmo)
+        bi_blink.apply_rotation(gizmo)
+        bi_blink.nudge(gizmo)
+    elif name.endswith("_rot"):
+        # bi_<campo>_rot: reescribir el literal del campo tocado. El write
+        # del blob animation_layers no ensucia el nodo solo: nudge.
+        field = name[3:-4]
+        if field in bi_blink.FIELDS:
+            bi_blink.apply_rotation(gizmo, fields=(field,))
+            bi_blink.nudge(gizmo)
+    elif name.endswith(("_x", "_y", "_size", "_text")):
+        # Mover el ancla, el tamano o el texto custom corre el pivote (ancho
+        # o centro del panel): re-aplicar el campo (con rot=0 es inocuo).
+        field = name[3:].rsplit("_", 1)[0]
+        if field in bi_blink.FIELDS:
+            bi_blink.apply_rotation(gizmo, fields=(field,))
+    elif name in ("bi_scale", "bi_text_pad"):
+        # Cambian el alto de TODOS los paneles (y sus centros).
+        bi_blink.apply_rotation(gizmo)
+
+
+def _on_knob_changed():
+    """knobChanged de la clase LGA_BurnIn (registrado en _register)."""
+    import nuke
+
+    if _state["in_handler"]:
+        # Re-entrada: los writes que hace este mismo handler (ax/ay del
+        # pivote, el nudge de opacidad) vuelven a disparar el callback.
+        return
+    n = nuke.thisNode()
+    k = nuke.thisKnob()
+    if n is None or k is None:
+        return
+    name = k.name()
+    if not name.startswith("bi_") or name in _KNOBS_SIN_RENDER:
+        return
+    _state["in_handler"] = True
+    try:
+        _apply_layout_change(n, name)
+    except Exception as exc:
+        _log("ERROR en knobChanged {}: {}".format(name, exc))
+    finally:
+        _state["in_handler"] = False
+    # Cualquier knob bi_* cambia el render: un solo refresh diferido.
+    schedule_refresh()
+
+
 def _register():
     import nuke
     from hiero.ui import registerAction
@@ -75,38 +227,8 @@ def _register():
     action_v0.setData("LGA_BurnIn_v0")
     registerAction(action_v0)
 
-    # Al cambiar el peso (bi_weight) hay que reasignar la fuente Inter del
-    # gizmo (el FreeType_Knob se setea por codigo, no por expresion).
-    def _on_knob_changed():
-        n = nuke.thisNode()
-        k = nuke.thisKnob()
-        if n is None or k is None:
-            return
-        name = k.name()
-        try:
-            import LGA_NKS_BurnIn_Blink as bi_blink
-        except Exception:
-            return
-        if name == "bi_weight":
-            # El peso cambia la fuente Y las metricas: re-aplicar ambas.
-            bi_blink.apply_font(n)
-            bi_blink.apply_rotation(n)
-            bi_blink.nudge(n)
-        elif name.startswith("bi_") and name.endswith("_rot"):
-            # bi_<campo>_rot: reescribir el literal del campo tocado.
-            field = name[3:-4]
-            bi_blink.apply_rotation(n, fields=(field,))
-            bi_blink.nudge(n)
-        elif name.startswith("bi_") and name.endswith(("_x", "_y", "_size")):
-            # Mover el ancla o el tamano corre el pivote: re-aplicar el campo
-            # (solo importa si esta rotado; con rot=0 es un write inocuo).
-            field = name[3:].rsplit("_", 1)[0]
-            if field in bi_blink.FIELDS:
-                bi_blink.apply_rotation(n, fields=(field,))
-        elif name in ("bi_scale", "bi_text_pad"):
-            # Cambian el alto de TODOS los paneles (y sus centros).
-            bi_blink.apply_rotation(n)
-
+    # Un cambio de knob del gizmo (panel, script o UI) re-aplica fuente y
+    # rotacion segun corresponda y programa el refresh del viewer.
     nuke.addKnobChanged(_on_knob_changed, nodeClass="LGA_BurnIn")
 
     # La config cacheada por proyecto se invalida en los eventos de proyecto:

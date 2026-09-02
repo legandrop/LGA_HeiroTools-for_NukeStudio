@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v2.02 | Lega
+  LGA_NKS_BurnIn_Panel v2.03 | Lega
 
   Editor de LGA BurnIn con el estilo del pack. Rediseno "tabla +
   detalle": una fila por campo (nombre, ON, BG, X, Y, SIZE) con
@@ -19,6 +19,19 @@ ____________________________________________________________________
   transform"; ver Docu_SoftEffects_Aprendizajes.md). Si el viewer no
   refresca solo, el boton Refresh Timeline del ViewerTL lo fuerza.
 
+  v2.03: El ancla 3x3 posiciona la CAJA VISIBLE del campo, no el knob
+         crudo: tiene en cuenta la justificacion del campo (res/fps son
+         right: X=2% los mandaba fuera de cuadro por la izquierda) y la
+         rotacion (a 90/270 la caja es vertical y el pivote es el centro:
+         la esquina cruda la tiraba fuera de cuadro). El resaltado del
+         ancla usa la inversa. X/Y admiten -100..200 porque el knob de
+         un campo rotado puede caer fuera de 0..100. Paint-toggle solo
+         pinta su propia columna (On o Bg). DragSlider no re-emite el
+         mismo valor (no spamea nudges al tope del rango) y Esc cancela
+         la escritura. Load de preset escribe el valor CLAMPEADO al
+         knob (antes slider y knob quedaban distintos). Ancla y rotacion
+         se ven deshabilitadas sin seleccion. show_panel cierra el panel
+         anterior en vez de dejarlo huerfano.
   v2.02: Fixes medidos con drags reales de mouse: el paint-toggle
          pintaba el estado viejo (QCheckBox togglea al release) y
          salteaba checkboxes en drags rapidos (Qt agrupa moves; ahora
@@ -68,10 +81,38 @@ FIELDS = (
     ("custom2", "Custom 2", True),
 )
 
-# Presets del ancla 3x3: (X%, Y%) por celda. Fila de arriba = borde superior
-# (Y alto), fila de abajo = borde inferior (Y bajo); columnas izq/centro/der.
+# Presets del ancla 3x3, en % del formato. Son bordes de la CAJA VISIBLE del
+# campo, no valores crudos del knob: columna 0 = borde izquierdo en 2%,
+# columna 1 = centro en 50%, columna 2 = borde derecho en 98%. Fila 0 = el
+# borde inferior del panel SIN rotar en 93% (convencion historica del gizmo:
+# bi_y es el borde inferior), fila 1 = centro vertical en 50%, fila 2 = borde
+# inferior en 2.5%. La traduccion a knobs (justificacion + rotacion) la hace
+# BurnInPanel._anchor_knobs; sin metricas del efecto se escriben crudos.
 _ANCHOR_X = (2.0, 50.0, 98.0)
 _ANCHOR_Y = (93.0, 50.0, 2.5)
+
+# Justificacion por campo. Copia de LGA_NKS_BurnIn_Logic.PANEL_ANCHOR, que es
+# la fuente: se importa de ahi en runtime y esto es solo el respaldo para el
+# harness (mantener igual).
+_JUSTIFY_FALLBACK = {
+    "clip": "left",
+    "cspace": "center",
+    "res": "right",
+    "frame": "left",
+    "tc": "left",
+    "fps": "right",
+    "custom1": "center",
+    "custom2": "center",
+}
+
+
+def _justify_of(field):
+    try:
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        return bi_logic.PANEL_ANCHOR.get(field, "left")
+    except Exception:
+        return _JUSTIFY_FALLBACK.get(field, "left")
 
 _WEIGHTS = ("Regular", "SemiBold", "Bold")
 _ROTATIONS = (0, 90, 180, 270)
@@ -132,19 +173,24 @@ class PaintController(object):
     def __init__(self):
         self.active = False
         self.target = False
+        self.group = None
         self.boxes = []
         self._last = None
 
     def register(self, box):
         self.boxes.append(box)
 
-    def begin(self, target, global_pos=None):
+    def begin(self, target, global_pos=None, group=None):
         self.active = True
         self.target = target
+        # Solo se pintan los checkbox de la MISMA columna (On o Bg): un drag
+        # en diagonal no tiene que tocar la otra.
+        self.group = group
         self._last = global_pos
 
     def end(self):
         self.active = False
+        self.group = None
         self._last = None
 
     def paint_at(self, global_pos):
@@ -169,7 +215,9 @@ class PaintController(object):
         self._last = global_pos
         for box in self.boxes:
             try:
-                if not box.isVisible():
+                if not box.isVisible() or not box.isEnabled():
+                    continue
+                if self.group is not None and box.paint_group != self.group:
                     continue
                 top_left = box.mapToGlobal(box.rect().topLeft())
                 bottom_right = box.mapToGlobal(box.rect().bottomRight())
@@ -193,9 +241,10 @@ class PaintCheckBox(QtWidgets.QCheckBox):
     quedaba sin pintar (medido con drags reales). Aca el press togglea YA y
     fija ese estado como el que pinta el drag."""
 
-    def __init__(self, controller, parent=None):
+    def __init__(self, controller, group=None, parent=None):
         super(PaintCheckBox, self).__init__(parent)
         self._paint = controller
+        self.paint_group = group
         controller.register(self)
 
     def _global_pos(self, event):
@@ -208,7 +257,7 @@ class PaintCheckBox(QtWidgets.QCheckBox):
         if event.button() == Qt.LeftButton:
             target = not self.isChecked()
             self.setChecked(target)
-            self._paint.begin(target, self._global_pos(event))
+            self._paint.begin(target, self._global_pos(event), self.paint_group)
             event.accept()
             return
         super(PaintCheckBox, self).mousePressEvent(event)
@@ -260,10 +309,23 @@ class DragSlider(QtWidgets.QLineEdit):
 
     def setValue(self, v, emit=True):
         v = max(self._min, min(self._max, float(v)))
+        changed = v != self._value
         self._value = v
         self.setText(self._fmt(v))
-        if emit:
+        # Solo se emite si el valor CAMBIO: un drag pegado al tope del rango
+        # disparaba un write + nudge del efecto por cada pixel sin cambiar nada.
+        if emit and changed:
             self.valueChanged.emit(v)
+
+    def keyPressEvent(self, event):
+        # Esc en modo escritura: descartar lo tipeado y volver al valor actual.
+        if not self.isReadOnly() and event.key() == Qt.Key_Escape:
+            self.setText(self._fmt(self._value))
+            self.setReadOnly(True)
+            self.clearFocus()
+            event.accept()
+            return
+        super(DragSlider, self).keyPressEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self.isReadOnly():
@@ -330,9 +392,11 @@ class _Clickable(QtWidgets.QFrame):
 
 
 class AnchorPicker(QtWidgets.QWidget):
-    """Grilla 3x3: cada celda manda X/Y de la seleccion a esa esquina/centro."""
+    """Grilla 3x3: cada celda manda la caja visible de la seleccion a esa
+    esquina/centro. Emite (columna, fila); la traduccion a knobs la hace la
+    ventana, que conoce la justificacion y la rotacion de cada campo."""
 
-    picked = QtCore.Signal(float, float)
+    picked = QtCore.Signal(int, int)
 
     def __init__(self, parent=None):
         super(AnchorPicker, self).__init__(parent)
@@ -340,27 +404,41 @@ class AnchorPicker(QtWidgets.QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(4)
         self._cells = []
+        self._hot = None
         for r in range(3):
             for c in range(3):
                 cell = _Clickable()
                 cell.setFixedSize(20, 20)
-                x, y = _ANCHOR_X[c], _ANCHOR_Y[r]
                 cell.clicked.connect(
-                    lambda xx=x, yy=y: self.picked.emit(xx, yy)
+                    lambda cc=c, rr=r: self.picked.emit(cc, rr)
                 )
-                self._paint_cell(cell, False)
                 grid.addWidget(cell, r, c)
-                self._cells.append((cell, x, y))
+                self._cells.append((cell, c, r))
+        self._repaint()
 
     def _paint_cell(self, cell, hot):
-        bg = Color.ACCENT if hot else Color.SURFACE_RAISED
+        if not self.isEnabled():
+            bg = Color.SURFACE
+        else:
+            bg = Color.ACCENT if hot else Color.SURFACE_RAISED
         cell.setStyleSheet(
             "background:%s; border-radius:%dpx;" % (bg, Metric.RADIUS_FIELD - 2)
         )
 
-    def highlight(self, x, y):
-        for cell, cx, cy in self._cells:
-            self._paint_cell(cell, abs(cx - x) < 0.6 and abs(cy - y) < 0.6)
+    def _repaint(self):
+        for cell, c, r in self._cells:
+            self._paint_cell(cell, (c, r) == self._hot)
+
+    def highlight(self, col, row):
+        """(col, fila) de la celda resaltada, o None para ninguna."""
+        self._hot = (col, row) if col is not None and row is not None else None
+        self._repaint()
+
+    def changeEvent(self, event):
+        # Las celdas son QFrame con QSS propio: el :disabled no las apaga solo.
+        if event.type() == QtCore.QEvent.EnabledChange:
+            self._repaint()
+        super(AnchorPicker, self).changeEvent(event)
 
 
 class RotationBar(QtWidgets.QWidget):
@@ -374,6 +452,7 @@ class RotationBar(QtWidgets.QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
         self._cells = []
+        self._sel = None
         for deg in _ROTATIONS:
             cell = _Clickable()
             cell.setFixedSize(40, Metric.ROW_HEIGHT)
@@ -381,24 +460,40 @@ class RotationBar(QtWidgets.QWidget):
             lay.setContentsMargins(0, 0, 0, 0)
             lbl = QtWidgets.QLabel("%d°" % deg)
             lbl.setAlignment(Qt.AlignCenter)
-            lbl.setStyleSheet("background:transparent;")
             lay.addWidget(lbl)
+            cell.label = lbl
             cell.clicked.connect(lambda d=deg: self.picked.emit(d))
-            self._paint_cell(cell, False)
             row.addWidget(cell)
             self._cells.append((cell, deg))
         row.addStretch(1)
+        self._repaint()
 
     def _paint_cell(self, cell, sel):
-        bg = Color.CHECKBOX_ON if sel else Color.CHECKBOX_OFF
+        if not self.isEnabled():
+            bg, fg = Color.SURFACE, Color.TEXT_DIM
+        else:
+            bg = Color.CHECKBOX_ON if sel else Color.CHECKBOX_OFF
+            fg = Color.TEXT
         cell.setStyleSheet(
             "background:%s; border:1px solid %s; border-radius:%dpx;"
             % (bg, Color.CHECKBOX_BORDER, Metric.RADIUS_FIELD - 2)
         )
+        # El QLabel del pack trae su propio color en Style.FORM: el del cell
+        # no le llega, hay que pintarlo aparte.
+        cell.label.setStyleSheet("background:transparent; color:%s;" % fg)
+
+    def _repaint(self):
+        for cell, d in self._cells:
+            self._paint_cell(cell, d == self._sel)
 
     def highlight(self, deg):
-        for cell, d in self._cells:
-            self._paint_cell(cell, d == deg)
+        self._sel = deg
+        self._repaint()
+
+    def changeEvent(self, event):
+        if event.type() == QtCore.QEvent.EnabledChange:
+            self._repaint()
+        super(RotationBar, self).changeEvent(event)
 
 
 # ── Acceso al efecto real (stubbeable para el harness) ────────────────────────
@@ -505,6 +600,34 @@ class HieroController(object):
         except Exception:
             pass
         self.nudge_all()
+
+    def panel_metrics(self, field):
+        """(w, h, fmt_w, fmt_h) en pixeles del panel del campo y del formato
+        del timeline, o None si no se puede medir. Misma formula de alto que
+        LGA_NKS_BurnIn_Blink.apply_rotation (mantener en sincro): es lo que
+        le permite al ancla 3x3 posicionar la caja visible y no el knob."""
+        if self.node is None:
+            return None
+        try:
+            import LGA_NKS_BurnIn_Blink as bi_blink
+            import LGA_NKS_BurnIn_Logic as bi_logic
+
+            fmt = bi_blink._timeline_format(self.node)
+            if not fmt:
+                # Sin secuencia resoluble (Blink v1.05 devuelve None): el
+                # ancla cae al modo crudo en vez de quedar muda.
+                return None
+            fmt_w, fmt_h = fmt
+            w = float(bi_logic.panel_geo(field, "w", self.node, None) or 0.0)
+            scale = float(self.node["bi_scale"].value())
+            size = float(self.node["bi_%s_size" % field].value())
+            pad = float(self.node["bi_text_pad"].value())
+            h = 100.0 * scale * size / 100.0 * 1.3 + pad
+            if fmt_w <= 0 or fmt_h <= 0:
+                return None
+            return (w, h, float(fmt_w), float(fmt_h))
+        except Exception:
+            return None
 
     def field_ok(self, field):
         """1.0/0.0 del campo (res/fps) para pintar el nombre en rojo. Ante
@@ -679,8 +802,11 @@ class BurnInPanel(QtWidgets.QDialog):
 
             tabla.setCellWidget(fila, 1, self._celda_paint(key, "on"))
             tabla.setCellWidget(fila, 2, self._celda_paint(key, "bg"))
-            tabla.setCellWidget(fila, 3, self._celda_slider(key, "x", 0.0, 100.0, 1, 0.25))
-            tabla.setCellWidget(fila, 4, self._celda_slider(key, "y", 0.0, 100.0, 1, 0.25))
+            # X/Y admiten fuera de 0..100: el knob de un campo rotado a 90/270
+            # (el pivote es el centro, el knob es la esquina SIN rotar) puede
+            # caer negativo o pasar de 100 con la caja visible en cuadro.
+            tabla.setCellWidget(fila, 3, self._celda_slider(key, "x", -100.0, 200.0, 1, 0.25))
+            tabla.setCellWidget(fila, 4, self._celda_slider(key, "y", -100.0, 200.0, 1, 0.25))
             tabla.setCellWidget(fila, 5, self._celda_slider(key, "size", 10.0, 400.0, 0, 1.0))
             tabla.setRowHeight(fila, Metric.ROW_HEIGHT)
 
@@ -690,7 +816,7 @@ class BurnInPanel(QtWidgets.QDialog):
         return tabla
 
     def _celda_paint(self, key, kind):
-        chk = PaintCheckBox(self.paint)
+        chk = PaintCheckBox(self.paint, group=kind)
         chk.setToolTip(_tip("field_%s" % kind))
         target = self.chk_on if kind == "on" else self.chk_bg
         target[key] = chk
@@ -731,8 +857,11 @@ class BurnInPanel(QtWidgets.QDialog):
 
         # Ancla 3x3.
         col_anchor = QtWidgets.QVBoxLayout()
-        col_anchor.setSpacing(Metric.SPACING // 2)
+        col_anchor.setSpacing(Metric.SPACING)
         lbl_pos = QtWidgets.QLabel("Position")
+        # Misma altura que la fila de rotacion de al lado, asi "Position" y
+        # "Rotation" quedan en la misma linea y la grilla arranca con "Text".
+        lbl_pos.setFixedHeight(Metric.ROW_HEIGHT)
         col_anchor.addWidget(lbl_pos)
         self.anchor = AnchorPicker()
         self.anchor.setToolTip(_tip("anchor"))
@@ -1027,15 +1156,14 @@ class BurnInPanel(QtWidgets.QDialog):
         self.rotbar.setEnabled(has)
         if keys:
             first = keys[0]
-            x = float(self.ctl.get("bi_%s_x" % first, 0.0)) * 100.0
-            y = float(self.ctl.get("bi_%s_y" % first, 0.0)) * 100.0
-            self.anchor.highlight(x, y)
+            col, row = self._anchor_cell(first)
+            self.anchor.highlight(col, row)
             self.rotbar.highlight(
-                int(round(float(self.ctl.get("bi_%s_rot" % first, 0.0))))
+                int(round(self._num(self.ctl.get("bi_%s_rot" % first, 0.0), 0.0)))
             )
         else:
-            self.anchor.highlight(-1, -1)
-            self.rotbar.highlight(-1)
+            self.anchor.highlight(None, None)
+            self.rotbar.highlight(None)
         # El texto custom aparece solo con un unico campo custom seleccionado.
         custom_keys = [k for k in keys if k in ("custom1", "custom2")]
         single_custom = custom_keys[0] if len(keys) == 1 and custom_keys else None
@@ -1055,19 +1183,132 @@ class BurnInPanel(QtWidgets.QDialog):
             return
         self._sync_detalle()
 
-    def _on_anchor(self, x, y):
+    # -- ancla 3x3: caja visible <-> knobs -----------------------------------
+    #
+    # bi_<f>_x es el ancla del panel SIN rotar segun su justificacion (left:
+    # borde izquierdo, center: centro, right: borde derecho) y bi_<f>_y su
+    # borde inferior. Con rotacion, apply_rotation gira texto y fondo alrededor
+    # del CENTRO del panel. Escribir la esquina cruda en el knob mandaba a
+    # res/fps (right) fuera de cuadro por la izquierda y a cualquier campo
+    # rotado a 90/270 fuera de cuadro por arriba o abajo. Estas dos funciones
+    # son inversas una de la otra: la primera calcula el knob para que la caja
+    # VISIBLE caiga en la celda, la segunda dice en que celda esta la caja.
+
+    def _metrics(self, key):
+        """(w, h, W, H) del campo o None (stub sin metricas / sin efecto)."""
+        fn = getattr(self.ctl, "panel_metrics", None)
+        if fn is None:
+            return None
+        try:
+            m = fn(key)
+        except Exception:
+            return None
+        if not m or len(m) != 4 or m[2] <= 0 or m[3] <= 0:
+            return None
+        return tuple(float(v) for v in m)
+
+    def _visual_box(self, key, m):
+        """Caja visible del campo en px: (cx, cy, vis_w, vis_h)."""
+        w, h, fmt_w, fmt_h = m
+        justify = _justify_of(key)
+        ax = self._num(self.ctl.get("bi_%s_x" % key, 0.0), 0.0) * fmt_w
+        ay = self._num(self.ctl.get("bi_%s_y" % key, 0.0), 0.0) * fmt_h
+        rot = int(round(self._num(self.ctl.get("bi_%s_rot" % key, 0.0), 0.0))) % 360
+        if justify == "left":
+            cx = ax + w / 2.0
+        elif justify == "center":
+            cx = ax
+        else:
+            cx = ax - w / 2.0
+        cy = ay + h / 2.0
+        if rot in (90, 270):
+            return cx, cy, h, w
+        return cx, cy, w, h
+
+    def _anchor_knobs(self, key, col, row):
+        """Valores (X%, Y%) para el knob que dejan la caja visible del campo
+        en la celda (col, row). Sin metricas: los presets crudos."""
+        xa, ya = _ANCHOR_X[col], _ANCHOR_Y[row]
+        m = self._metrics(key)
+        if m is None:
+            return xa, ya
+        w, h, fmt_w, fmt_h = m
+        _cx, _cy, vis_w, vis_h = self._visual_box(key, m)
+        # Centro visual deseado.
+        if col == 0:
+            cx = xa / 100.0 * fmt_w + vis_w / 2.0
+        elif col == 1:
+            cx = xa / 100.0 * fmt_w
+        else:
+            cx = xa / 100.0 * fmt_w - vis_w / 2.0
+        if row == 0:
+            # Arriba: mismo borde superior que tendria el panel sin rotar.
+            cy = ya / 100.0 * fmt_h + h - vis_h / 2.0
+        elif row == 1:
+            cy = ya / 100.0 * fmt_h
+        else:
+            cy = ya / 100.0 * fmt_h + vis_h / 2.0
+        # Centro visual -> ancla del panel sin rotar (inversa de apply_rotation).
+        justify = _justify_of(key)
+        if justify == "left":
+            ax = cx - w / 2.0
+        elif justify == "center":
+            ax = cx
+        else:
+            ax = cx + w / 2.0
+        ay = cy - h / 2.0
+        return ax / fmt_w * 100.0, ay / fmt_h * 100.0
+
+    def _anchor_cell(self, key):
+        """(col, row) de la celda donde esta la caja visible del campo, o
+        (None, None) si no coincide con ninguna."""
+        x = self._num(self.ctl.get("bi_%s_x" % key, 0.0), 0.0) * 100.0
+        y = self._num(self.ctl.get("bi_%s_y" % key, 0.0), 0.0) * 100.0
+        m = self._metrics(key)
+        if m is None:
+            col = next((i for i, v in enumerate(_ANCHOR_X) if abs(v - x) < 0.6), None)
+            row = next((i for i, v in enumerate(_ANCHOR_Y) if abs(v - y) < 0.6), None)
+            return col, row
+        w, h, fmt_w, fmt_h = m
+        cx, cy, vis_w, vis_h = self._visual_box(key, m)
+        tol_x, tol_y = fmt_w * 0.006, fmt_h * 0.006
+        left, right = cx - vis_w / 2.0, cx + vis_w / 2.0
+        bottom, top = cy - vis_h / 2.0, cy + vis_h / 2.0
+        col = None
+        if abs(left - _ANCHOR_X[0] / 100.0 * fmt_w) < tol_x:
+            col = 0
+        elif abs(cx - _ANCHOR_X[1] / 100.0 * fmt_w) < tol_x:
+            col = 1
+        elif abs(right - _ANCHOR_X[2] / 100.0 * fmt_w) < tol_x:
+            col = 2
+        row = None
+        if abs(top - (_ANCHOR_Y[0] / 100.0 * fmt_h + h)) < tol_y:
+            row = 0
+        elif abs(cy - _ANCHOR_Y[1] / 100.0 * fmt_h) < tol_y:
+            row = 1
+        elif abs(bottom - _ANCHOR_Y[2] / 100.0 * fmt_h) < tol_y:
+            row = 2
+        return col, row
+
+    def _on_anchor(self, col, row):
         if self._loading:
             return
         keys = self._selected_keys()
+        if not keys:
+            return
         for key in keys:
-            self.ctl.set("bi_%s_x" % key, x / 100.0)
-            self.ctl.set("bi_%s_y" % key, y / 100.0)
+            x, y = self._anchor_knobs(key, col, row)
+            # Se escribe lo que muestra el slider (clampeado), nunca otra cosa.
             self.slider_x[key].setValue(x, emit=False)
             self.slider_y[key].setValue(y, emit=False)
+            self.ctl.set("bi_%s_x" % key, self.slider_x[key].value() / 100.0)
+            self.ctl.set("bi_%s_y" % key, self.slider_y[key].value() / 100.0)
         # Mover el ancla corre el pivote de rotacion: re-aplicar SIEMPRE (si
-        # rot=0 es un write inocuo) para que texto y fondo no se separen.
-        self.ctl.apply_rotation(fields=tuple(keys) or None)
-        self.anchor.highlight(x, y)
+        # rot=0 es un write inocuo) para que texto y fondo no se separen. El
+        # knobChanged del registro ya lo hizo por cada knob (con el otro eje
+        # viejo a mitad de camino); esta pasada deja el estado final.
+        self.ctl.apply_rotation(fields=tuple(keys))
+        self.anchor.highlight(col, row)
 
     def _resync_pivote(self, key):
         """Tras mover X/Y/Size de un campo ROTADO, reescribe su pivote (si
@@ -1084,18 +1325,26 @@ class BurnInPanel(QtWidgets.QDialog):
         if self._loading:
             return
         keys = self._selected_keys()
+        if not keys:
+            return
         for key in keys:
             self.ctl.set("bi_%s_rot" % key, float(deg))
         # Escritura directa del literal en los Text2 (el knobChanged tambien
         # lo hace, pero asi funciona aunque el registro cargado sea viejo).
-        self.ctl.apply_rotation(fields=tuple(keys) or None)
+        self.ctl.apply_rotation(fields=tuple(keys))
         self.rotbar.highlight(deg)
+        # La caja visible cambio de forma: el resaltado del ancla puede dejar
+        # de coincidir (o pasar a coincidir).
+        col, row = self._anchor_cell(keys[0])
+        self.anchor.highlight(col, row)
 
     def _on_custom_text(self, text):
         if self._loading or not getattr(self, "_custom_key", None):
             return
         self.ctl.set("bi_%s_text" % self._custom_key, text)
-        self.ctl.nudge_all()
+        # El ancho del panel cambia con el texto: si el campo esta rotado el
+        # pivote hay que recalcularlo, no alcanza con el nudge.
+        self.ctl.apply_rotation([self._custom_key])
 
     def _on_weight(self, style):
         if self._loading:
@@ -1240,18 +1489,24 @@ class BurnInPanel(QtWidgets.QDialog):
                 if "bg" in data:
                     self.chk_bg[key].setChecked(bool(data["bg"]))
                     self.ctl.set("bi_%s_bg" % key, 1.0 if data["bg"] else 0.0)
+                # Al knob va el valor que QUEDO en el slider (clampeado al
+                # rango): un preset con size 0 dejaba el slider en 10 y el
+                # knob en 0, y el panel mentia.
                 if "x" in data:
-                    x = self._num(data["x"], 0.0)
-                    self.slider_x[key].setValue(x * 100.0, emit=False)
-                    self.ctl.set("bi_%s_x" % key, x)
+                    self.slider_x[key].setValue(
+                        self._num(data["x"], 0.0) * 100.0, emit=False
+                    )
+                    self.ctl.set("bi_%s_x" % key, self.slider_x[key].value() / 100.0)
                 if "y" in data:
-                    y = self._num(data["y"], 0.0)
-                    self.slider_y[key].setValue(y * 100.0, emit=False)
-                    self.ctl.set("bi_%s_y" % key, y)
+                    self.slider_y[key].setValue(
+                        self._num(data["y"], 0.0) * 100.0, emit=False
+                    )
+                    self.ctl.set("bi_%s_y" % key, self.slider_y[key].value() / 100.0)
                 if "size" in data:
-                    size = self._num(data["size"], 100.0)
-                    self.slider_size[key].setValue(size, emit=False)
-                    self.ctl.set("bi_%s_size" % key, size)
+                    self.slider_size[key].setValue(
+                        self._num(data["size"], 100.0), emit=False
+                    )
+                    self.ctl.set("bi_%s_size" % key, self.slider_size[key].value())
                 if "rot" in data:
                     self.ctl.set("bi_%s_rot" % key, self._num(data["rot"], 0.0))
             if "weight" in estilo:
@@ -1324,6 +1579,15 @@ _panel = None
 def show_panel():
     """Punto de entrada: lo llama el boton Open LGA Panel del gizmo."""
     global _panel
+    # Un solo panel vivo: el anterior se cierra en vez de quedar huerfano
+    # (sin referencia Python, PySide puede destruirlo a mitad de un evento).
+    if _panel is not None:
+        try:
+            _panel.close()
+            _panel.deleteLater()
+        except Exception:
+            pass
+        _panel = None
     ctl = HieroController()
     ctl.attach()
     _panel = BurnInPanel(ctl)

@@ -1,6 +1,7 @@
-// LGA_RoundedPanels v0.04 | Lega
+// LGA_RoundedPanels v0.05 | Lega
 // Fondos redondeados de los campos del burn-in, en una pasada.
 // SDF de rounded box + antialiasing 1px, con rotacion por campo.
+// v0.05: muestreo en el centro del pixel (pos + 0.5); defaults del gizmo.
 // v0.04: rotacion por campo (ax,ay = ancla; rot en radianes).
 // v0.03: sin funcion miembro, logica inline por campo.
 
@@ -145,17 +146,17 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     defineParam(custom2_ax, "custom2_ax", 0.0f);
     defineParam(custom2_ay, "custom2_ay", 0.0f);
     defineParam(custom2_rot, "custom2_rot", 0.0f);
-    defineParam(corner_radius, "corner_radius", 30.0f);
+    defineParam(corner_radius, "corner_radius", 11.0f);
     defineParam(color_r, "color_r", 0.0f);
     defineParam(color_g, "color_g", 0.0f);
     defineParam(color_b, "color_b", 0.0f);
-    defineParam(bg_opacity, "bg_opacity", 0.8f);
+    defineParam(bg_opacity, "bg_opacity", 0.65f);
   }
 
   void process(int2 pos) {
     SampleType(src) input = src();
-    float ppx = float(pos.x);
-    float ppy = float(pos.y);
+    float ppx = float(pos.x) + 0.5f;
+    float ppy = float(pos.y) + 0.5f;
     float a = 0.0f;
 
     // panel clip

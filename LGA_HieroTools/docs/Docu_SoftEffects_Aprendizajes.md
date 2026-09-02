@@ -282,3 +282,24 @@ seleccionarlos primero.
 `EffectTrackItem.setEnabled()` **no figura en la API documentada de Nuke 16**
 -ni `SubTrackItem` ni `TrackItemBase` la listan- pero existe y es la via buena:
 al llamarla, el knob `disable` del nodo se mueve solo.
+
+## Refrescar el viewer tras un cambio de knobs por API (medido 01-09)
+
+Un `setValue` por API deja al viewer del timeline mostrando el frame CACHEADO
+del estado anterior; saltar el playhead o `nuke.clearRAMCache()` no alcanzan y
+`LGA_NKS_Timeline_Refresh` abre un tab duplicado por llamada. Lo que si anda,
+sin tabs: `hiero.ui.currentViewer().flushCache()` seguido de
+`resumeCaching()` (flushCache PAUSA el cacheo, documentado) mas el nudge de
+opacidad. `hiero.ui.updateViewer()` existe pero pide dos argumentos: no se usa.
+`LGA_NKS_BurnIn` lo programa diferido (QTimer 0 ms) en cada knobChanged de un
+`bi_*`, asi el panel refresca solo.
+
+## Medir texto por API vs en render (medido 01-09)
+
+Por API el Input del gizmo no tiene stream: los campos de metadata miden texto
+vacio (ancho 0) y `parent.width()` da 640x480. Por eso `panel_geo('w')`
+recuerda el ultimo ancho medido EN RENDER por campo y lo devuelve cuando la
+llaman el panel o `apply_rotation`. Trampa medida: cambiar la medicion a
+`QRawFont` (advances de diseno) da los mismos numeros por API que
+`QFontMetricsF`, pero el render dibuja paneles ~1.3x mas anchos y corridos:
+la medicion queda con `QFontMetricsF` sobre el TTF del repo.

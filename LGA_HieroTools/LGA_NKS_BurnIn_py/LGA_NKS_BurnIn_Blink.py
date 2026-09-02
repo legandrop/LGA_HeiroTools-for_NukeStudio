@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Blink v1.04 | Lega
+  LGA_NKS_BurnIn_Blink v1.05 | Lega
 
   Setup del nodo BlinkScript interno del gizmo LGA_BurnIn. Lo llama el
   onCreate del nodo al instanciarse el efecto en el timeline (y al
@@ -16,6 +16,17 @@ ____________________________________________________________________
      de compilar, con el nombre del kernel como prefijo, asi que no se
      pueden escribir en el archivo del gizmo).
 
+  v1.05: Auditoria de la rotacion. (a) apply_rotation NO pisa el pivote
+         de un campo rotado cuando no puede medirlo: en el onCreate el
+         Input todavia no tiene stream y bi_text() devuelve '' (medido
+         en el log), asi que panel_geo('w') daba 0 y el pivote de los
+         campos left/right caia en el borde en vez del centro (los
+         center no dependen del ancho: por eso "algunos si, otros no").
+         Lo mismo si el formato del timeline no se puede resolver: ya no
+         cae a los 640x480 del gizmo. (b) _bind_params re-ata los params
+         cuya expresion no es la esperada (instancias viejas quedaban
+         con el bind de v1.03 o sin ax/ay/rot). (c) _compile_kernel
+         recompila si el kernel cargado no tiene los params de rotacion.
   v1.04: El pivote pasa a knobs literales del gizmo (bi_<f>_ax/ay),
          escritos por apply_rotation y leidos por el kernel: UNA sola
          fuente para texto y fondo (antes cada uno lo calculaba por su
@@ -104,11 +115,32 @@ def _bindings():
     return binds
 
 
+# Param que solo existe en el kernel con rotacion (v0.04): si el nodo tiene el
+# nombre del kernel pero no este knob, es una instancia compilada con un kernel
+# viejo y hay que recompilar (antes el nombre solo bastaba y el fondo no rotaba).
+_KERNEL_SENTINEL = "custom2_rot"
+
+
+def _find_param(node, suffix):
+    """Nombre del knob del kernel para un sufijo (prefijado con el nombre del
+    kernel), o None. Busca por sufijo porque el prefijo lo pone Nuke."""
+    try:
+        names = list(node.knobs())
+    except Exception:
+        return None
+    for name in names:
+        if name == suffix or name.endswith("_" + suffix):
+            return name
+    return None
+
+
 def _compile_kernel(node):
     """Compila el kernel via Load si el nodo no lo tiene ya. True si quedo."""
     try:
         if node["kernelName"].value() == KERNEL_NAME:
-            return True
+            if _find_param(node, _KERNEL_SENTINEL) is not None:
+                return True
+            _log("kernel viejo (sin '{}'): recompilo".format(_KERNEL_SENTINEL))
     except Exception:
         pass
     try:
@@ -125,28 +157,49 @@ def _compile_kernel(node):
     return ok
 
 
+def _norm_expr(text):
+    """Normaliza una expresion para compararla: sin llaves externas ni blancos."""
+    text = str(text or "").strip()
+    while text.startswith("{") and text.endswith("}"):
+        text = text[1:-1].strip()
+    return "".join(text.split())
+
+
+def _current_expr(knob):
+    """Expresion actual del knob (texto), o '' si no tiene."""
+    try:
+        if not knob.hasExpression():
+            return ""
+    except Exception:
+        return ""
+    try:
+        return str(knob.animation(0).expression())
+    except Exception:
+        pass
+    try:
+        return str(knob.toScript())
+    except Exception:
+        return ""
+
+
 def _bind_params(node):
-    """Ata los params del kernel (prefijados con el nombre del kernel) al padre."""
+    """Ata los params del kernel (prefijados con el nombre del kernel) al padre.
+
+    Se re-ata todo knob cuya expresion no sea la esperada: una instancia
+    creada con una version anterior conserva los binds viejos en el .hrox
+    (v1.03 ataba ax/ay a una cuenta por python que podia divergir del texto)
+    y antes se salteaba por tener "alguna" expresion.
+    """
     binds = _bindings()
-    knob_names = list(node.knobs())
     bound = 0
     for suffix, expr in binds.items():
-        target = None
-        for name in knob_names:
-            if name.endswith(suffix) and name != suffix:
-                target = name
-                break
-            if name == suffix:
-                target = name
+        target = _find_param(node, suffix)
         if target is None:
             _log("param no encontrado para sufijo '{}'".format(suffix))
             continue
         knob = node[target]
-        try:
-            if knob.hasExpression():
-                continue
-        except Exception:
-            pass
+        if _norm_expr(_current_expr(knob)) == _norm_expr(expr):
+            continue
         try:
             knob.setExpression(expr)
             bound += 1
@@ -216,20 +269,46 @@ def apply_font(gizmo):
 # el mismo que se bindea a ax/ay del kernel: texto y fondo giran juntos.
 
 
+def _owner_sequence(gizmo):
+    """Secuencia que contiene el efecto (por nombre de nodo), o None. Sirve
+    cuando no hay secuencia activa (onCreate al cargar un proyecto) o la
+    activa es otra."""
+    try:
+        import hiero.core
+
+        name = gizmo.name()
+        for project in hiero.core.projects():
+            for seq in project.sequences():
+                for track in seq.videoTracks():
+                    for sub in track.subTrackItems():
+                        for item in sub:
+                            try:
+                                if item.node().name() == name:
+                                    return seq
+                            except Exception:
+                                continue
+    except Exception:
+        pass
+    return None
+
+
 def _timeline_format(gizmo):
-    """(width, height) del formato del timeline. OJO: gizmo.width()/height()
-    por API devuelve el formato default (640x480), NO el del stream (medido);
-    el formato real sale de la secuencia activa de Hiero."""
+    """(width, height) del formato del timeline, o None si no se puede saber.
+
+    OJO: gizmo.width()/height() por API devuelve el formato default (640x480),
+    NO el del stream (medido): ya no se usa como fallback, porque un pivote
+    en ese espacio deja el fondo en cualquier lado. Sin formato conocido el
+    que llama conserva el pivote guardado."""
     try:
         import hiero.ui
 
-        fmt = hiero.ui.activeSequence().format()
+        seq = hiero.ui.activeSequence()
+        if seq is None:
+            seq = _owner_sequence(gizmo)
+        fmt = seq.format()
         return float(fmt.width()), float(fmt.height())
     except Exception:
-        try:
-            return float(gizmo.width()), float(gizmo.height())
-        except Exception:
-            return 1920.0, 1080.0
+        return None
 
 
 def apply_rotation(gizmo, fields=None):
@@ -244,7 +323,9 @@ def apply_rotation(gizmo, fields=None):
         import LGA_NKS_BurnIn_Logic as bi_logic
     except Exception:
         return
-    fmt_w, fmt_h = _timeline_format(gizmo)
+    fmt = _timeline_format(gizmo)
+    if fmt is None:
+        _log("formato del timeline desconocido: conservo los pivotes guardados")
     for f in fields if fields is not None else FIELDS:
         try:
             text_node = gizmo.node("Text_%s" % f.capitalize())
@@ -256,19 +337,42 @@ def apply_rotation(gizmo, fields=None):
             # aca con el formato REAL (panel_geo('x'/'cx') usa parent.width(),
             # que por API es el default: no sirve fuera del render).
             width = float(bi_logic.panel_geo(f, "w", gizmo, None) or 0.0)
-            anchor = float(gizmo["bi_%s_x" % f].value()) * fmt_w
-            justify = bi_logic.PANEL_ANCHOR.get(f, "left")
-            if justify == "left":
-                cx = anchor + width / 2.0
-            elif justify == "center":
-                cx = anchor
+            # El pivote solo se recalcula si se pudo MEDIR: hace falta el
+            # formato y, en los campos de metadata, un texto. En el onCreate el
+            # Input todavia no tiene stream: bi_text() devuelve '' (medido en
+            # el log), panel_geo('w') da 0 y el pivote de los campos left/right
+            # caia en el borde en vez del centro (los center no dependen del
+            # ancho: por eso "algunos si, otros no"). Sin medida se conserva el
+            # pivote guardado en los knobs (el del .hrox ya es correcto).
+            measurable = fmt is not None and (
+                width > 0.0 or f in ("custom1", "custom2")
+            )
+            if measurable:
+                fmt_w, fmt_h = fmt
+                anchor = float(gizmo["bi_%s_x" % f].value()) * fmt_w
+                justify = bi_logic.PANEL_ANCHOR.get(f, "left")
+                if justify == "left":
+                    cx = anchor + width / 2.0
+                elif justify == "center":
+                    cx = anchor
+                else:
+                    cx = anchor - width / 2.0
+                scale = float(gizmo["bi_scale"].value())
+                size = float(gizmo["bi_%s_size" % f].value())
+                pad = float(gizmo["bi_text_pad"].value())
+                h = 100.0 * scale * size / 100.0 * 1.3 + pad
+                cy = float(gizmo["bi_%s_y" % f].value()) * fmt_h + h / 2.0
             else:
-                cx = anchor - width / 2.0
-            scale = float(gizmo["bi_scale"].value())
-            size = float(gizmo["bi_%s_size" % f].value())
-            pad = float(gizmo["bi_text_pad"].value())
-            h = 100.0 * scale * size / 100.0 * 1.3 + pad
-            cy = float(gizmo["bi_%s_y" % f].value()) * fmt_h + h / 2.0
+                # Sin medida se conserva el pivote guardado en ax/ay, pero la
+                # ROTACION se escribe igual (antes se salteaba el campo y el
+                # texto quedaba sin rotar; medido en el e2e del panel).
+                if rot != 0.0:
+                    _log(
+                        "campo {} rotado sin medida (formato {} / ancho {}): "
+                        "roto sobre el pivote guardado".format(f, fmt, width)
+                    )
+                cx = float(gizmo["bi_%s_ax" % f].value())
+                cy = float(gizmo["bi_%s_ay" % f].value())
             blob = "{1 11 %s %s 0 0 1 1 0 0 %s 0}" % (
                 repr(round(cx, 4)), repr(round(cy, 4)), repr(round(rot, 4))
             )
@@ -277,11 +381,12 @@ def apply_rotation(gizmo, fields=None):
             )
             text_node["animation_layers"].fromScript(blob)
             # El kernel usa EL MISMO pivote via los knobs bi_<f>_ax/ay.
-            try:
-                gizmo["bi_%s_ax" % f].setValue(round(cx, 4))
-                gizmo["bi_%s_ay" % f].setValue(round(cy, 4))
-            except Exception:
-                pass
+            if measurable:
+                try:
+                    gizmo["bi_%s_ax" % f].setValue(round(cx, 4))
+                    gizmo["bi_%s_ay" % f].setValue(round(cy, 4))
+                except Exception:
+                    pass
         except Exception as exc:
             _log("ERROR rotando campo {}: {}".format(f, exc))
 

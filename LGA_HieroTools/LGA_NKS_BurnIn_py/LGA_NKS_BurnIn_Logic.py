@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.06 | Lega
+  LGA_NKS_BurnIn_Logic v1.07 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,9 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.07: panel_geo('w') por API (texto vacio: sin stream) devuelve el
+         ultimo ancho medido en render para ese campo (_last_width), asi
+         el pivote de rotacion y el ancla 3x3 del panel tienen ancho.
   v1.06: _font_path() valida que el path de getFonts exista antes de
          usarlo (getFonts puede traer paths relativos rotos si el ":"
          de la unidad partio NUKE_FONT_PATH; medido) y cae al TTF del
@@ -383,6 +386,9 @@ def bi_ok(field, parent, frame=None):
 # VERIFICADO en NKS (sonda 29-08): render Inter + paneles abrazan.
 
 _measure_cache = {}
+# Ultimo ancho de panel medido por campo EN RENDER (con texto real). Lo usa
+# panel_geo('w') cuando se la llama por API y el texto llega vacio.
+_last_width = {}
 _qt_family_cache = {}  # (family, style) -> familia que informa Qt (carga 1 vez)
 
 # El TTF del repo, fallback cuando no hay `nuke` (banco) o la fuente no esta en
@@ -539,10 +545,18 @@ def panel_geo(field, comp, parent, frame=None):
         if field in _DIGIT_FIELDS:
             text = _digit_template(text)
         if not text:
+            # Por API (panel, apply_rotation, onCreate) el Input del gizmo no
+            # tiene stream y los campos de metadata miden vacio. El render ya
+            # midio ese campo en este mismo proceso: se devuelve el ultimo
+            # ancho conocido para que el pivote y el ancla 3x3 tengan con que
+            # trabajar. Sin ese dato (nunca se rendereo) sigue siendo 0.
+            if comp == "w":
+                return float(_last_width.get(field, 0.0))
             return 0.0
         pad = float(parent["bi_text_pad"].value())
         width = _measure_text(text, _font_px(parent, field), _weight_style(parent))
         width += 2.0 * pad
+        _last_width[field] = width
         if comp == "w":
             return width
         anchor = float(parent["bi_%s_x" % field].value()) * float(parent.width())
