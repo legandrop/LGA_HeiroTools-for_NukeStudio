@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.09 | Lega
+  LGA_NKS_CreateNKScript v1.10 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,10 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.10: Un nodo de color SIN knob file tambien es del look. Nuke no
+         escribe el knob que quedo en su default, asi que un template
+         donde se borraron las expresiones TCL deja tres de los cuatro
+         nodos sin file, y quedaban intactos.
   v1.09: El log dice que hizo con CADA nodo de color: cual es, si estaba
          suelto o adentro de un grupo, y si se reemplazo o quedo intacto
          y por que. Antes no registraba nada y no habia forma de
@@ -885,8 +889,18 @@ def build_script(
         donde = "en el grupo %s" % grupo if grupo else "suelto"
         current = chunk_knob(chunk, "file") or ""
         target = cdl if cls == "OCIOCDLTransform" else clf
+        # Tres formas de que un nodo sea "del look del shot":
+        #   - su path nombra Look_Files
+        #   - es la expresion TCL que resuelve desde root.name
+        #   - esta VACIO: Nuke no escribe el knob file cuando quedo en su
+        #     default, y un CDL con read_from_file y sin archivo esta
+        #     justamente esperando que se le ponga uno. El template v016
+        #     dejo asi a tres de los cuatro nodos.
+        # Un file que apunta a un archivo concreto FUERA de Look_Files no se
+        # toca: eso lo puso alguien a mano y no es el look del shot.
         es_del_look = (
-            LOOK_DIR_NAME in current
+            not current.strip()
+            or LOOK_DIR_NAME in current
             or ("root.name" in current and "glob" in current)
         )
         if not es_del_look:
@@ -904,9 +918,15 @@ def build_script(
                 % (nombre, donde)
             )
             continue
-        set_chunk_knob(chunk, "file", quote_if_needed(target))
+        if current.strip():
+            set_chunk_knob(chunk, "file", quote_if_needed(target))
+            motivo = ""
+        else:
+            # Sin knob file en el template: hay que agregarlo, no reemplazarlo.
+            set_or_add_chunk_knob(chunk, "file", quote_if_needed(target))
+            motivo = " [venia sin file]"
         ocio_tocados += 1
-        log.append("  OCIO %s (%s) -> %s" % (nombre, donde, target))
+        log.append("  OCIO %s (%s)%s -> %s" % (nombre, donde, motivo, target))
     log.append("  OCIO: %d nodos, %d reemplazados" % (ocio_total, ocio_tocados))
     if ocio_intactos:
         # Solo llega aca el caso raro: HAY archivo de look pero el nodo no se
