@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.90 | Lega
+  LGA_NKS_ApplyAMF v0.91 | Lega
 
   Pone y saca los soft effects de color de un shot, siguiendo lo que
   declara el .amf que viene con el shot.
@@ -38,9 +38,10 @@ ____________________________________________________________________
     - EN QUE ORDEN: los <lookTransform> vienen en orden de cadena. El
       primero que se crea queda en el subtrack de abajo, o sea que se
       aplica antes.
-    - CON QUE PARAMETROS: el <cdlWorkingSpace> dice en que espacio opera el
-      CDL (ej. ACEScct, NO el scene_linear que trae el nodo por defecto), y
-      el <file> del LMT nombra el .clf a cargar.
+    - CON QUE PARAMETROS: la cadena corre en ACES2065-1, y el <cdlWorkingSpace>
+      es la excepcion que saca al CDL a ACEScct. Ninguno de los dos es el
+      scene_linear que trae el nodo por defecto. El <file> del LMT nombra el
+      .clf a cargar, que entra y sale en ACES2065-1.
 
   Efectos que sabe crear:
     OCIOCDLTransform  <- el .cdl del shot (grade)
@@ -75,6 +76,18 @@ ____________________________________________________________________
   PENDIENTE: cartel cuando hay mas de un archivo de la misma extension
   en Look_Files. Hoy eso solo avisa por log y usa el primero.
 
+  v0.91: El working space de la cadena pasa a ser ACES2065-1 cuando el .amf
+         no declara otro. El .clf del LMT no trae <cdlWorkingSpace> -solo lo
+         trae el CDL, para salirse a ACEScct-, asi que su nodo quedaba en el
+         default `scene_linear`, que en los configs ACES es ACEScg. El .clf
+         entra y sale en AP0 y arranca con una matriz AP0 a AP1, asi que
+         recibia el gamut equivocado y la LUT corria corrida. Ademas el
+         matcheo contra el enum del knob deja afuera los ROLES: pidiendo
+         ACES2065-1 tambien matchea 'default (ACES - ACES2065-1)', y cual
+         gana dependia del orden del enum. Y si el OCIO config del proyecto
+         no expone el espacio pedido, eso pasa a contar como error y sube al
+         cartel: antes solo dejaba un WARN en el log y el efecto se informaba
+         como creado, o sea que el look salia mal y nadie se enteraba.
   v0.90: Los clips objetivo salen del playhead salvo que haya DOS o mas
          seleccionados. Con uno solo la tool creia estar respetando una
          seleccion del usuario, pero era la autoseleccion de Hiero, y
@@ -140,6 +153,24 @@ DEBUG = False
 # Nombres de carpeta donde viven los archivos de look, colgando del shot.
 INPUT_DIR_NAME = "_input"
 LOOK_DIR_NAME = "Look_Files"
+
+# El espacio en el que corre la cadena de un .amf.
+#
+# La pipeline ACES que describe un .amf opera en ACES2065-1, y por eso el CDL
+# necesita declarar su <cdlWorkingSpace>: salirse a ACEScct es la EXCEPCION,
+# no la regla. Un lookTransform que no declara nada corre en ACES2065-1.
+#
+# Sin esto, el nodo se queda con su default `scene_linear`, que es un ROL del
+# config OCIO y no un espacio: en los configs ACES apunta a ACEScg (AP1). Un
+# .clf de LMT entra y sale en AP0 -lo declara en su propio InputDescriptor y
+# arranca con una matriz AP0 a AP1-, asi que alimentarlo con AP1 le mete una
+# conversion de gamut de mas y corre la LUT sobre datos que no le corresponden.
+#
+# El knob no dice "la entrada esta en", dice "aplicalo en": el nodo convierte
+# de scene_linear a este espacio, aplica el archivo y vuelve. Por eso pedir
+# ACES2065-1 es correcto sea cual sea el working space del proyecto, y por eso
+# la tool NO tiene que consultar el espacio del proyecto ni el del clip.
+AMF_WORKING_SPACE = "ACES2065-1"
 
 # Plan de respaldo, para cuando el shot no trae .amf. Mismo orden que el .amf
 # de referencia: primero el grade, despues el LMT.
@@ -547,7 +578,7 @@ def build_effect_plan(look_dir):
                     "type": "OCIOCDLTransform",
                     "file": cdl_path,
                     "cccid": read_cccid(cdl_path),
-                    "working_space": info["working_space"],
+                    "working_space": info["working_space"] or AMF_WORKING_SPACE,
                 }
             )
             continue
@@ -564,13 +595,17 @@ def build_effect_plan(look_dir):
                     debug_print(f"    {index}. [ERROR] Tampoco hay otro archivo de esa extension")
                     continue
             lmt_path = re.sub(r"[\\/]+", "/", lmt_path)
-            debug_print(f"    {index}. [APLICAR] LMT -> {os.path.basename(lmt_path)}")
+            espacio_lmt = info["working_space"] or AMF_WORKING_SPACE
+            debug_print(
+                f"    {index}. [APLICAR] LMT -> {os.path.basename(lmt_path)} "
+                f"(working space: {espacio_lmt})"
+            )
             plan.append(
                 {
                     "type": "OCIOFileTransform",
                     "file": lmt_path,
                     "cccid": None,
-                    "working_space": info["working_space"],
+                    "working_space": info["working_space"] or AMF_WORKING_SPACE,
                 }
             )
             continue
@@ -583,18 +618,26 @@ def build_effect_plan(look_dir):
 
 
 def _fallback_plan(look_dir):
-    """Plan fijo por extension, para shots sin .amf."""
+    """Plan fijo por extension, para shots sin .amf.
+
+    Sin .amf el unico working space que se puede afirmar es el del .clf: un LMT
+    de ACES entra y sale en ACES2065-1 por convencion, y el archivo mismo lo
+    declara. El del .cdl queda sin tocar a proposito: un .cdl suelto puede estar
+    hecho para ACEScct, ACEScc o lineal, y no hay de donde saberlo. Adivinarlo
+    seria peor que dejar el default y que el log lo diga.
+    """
     plan = []
     for spec in FALLBACK_EFFECTS:
         file_path = find_look_file(look_dir, spec["extension"])
         if not file_path:
             continue
+        es_cdl = spec["type"] == "OCIOCDLTransform"
         plan.append(
             {
                 "type": spec["type"],
                 "file": file_path,
-                "cccid": read_cccid(file_path) if spec["type"] == "OCIOCDLTransform" else None,
-                "working_space": None,
+                "cccid": read_cccid(file_path) if es_cdl else None,
+                "working_space": None if es_cdl else AMF_WORKING_SPACE,
             }
         )
     return plan
@@ -832,6 +875,13 @@ def match_colorspace_option(node, knob_name, wanted):
     El nombre exacto del espacio depende del OCIO config del proyecto: el
     mismo ACEScct puede figurar como 'ACEScct' o 'ACES - ACEScct'. Por eso no
     se hardcodea el string, se busca contra las opciones reales del knob.
+
+    Los ROLES del config quedan afuera. El enum los lista con formato
+    'scene_linear (ACES - ACEScg)', y un rol es una INDIRECCION: apunta a
+    donde el config diga. Pidiendo ACES2065-1 en un config ACES matchean dos
+    opciones, 'ACES - ACES2065-1' y 'default (ACES - ACES2065-1)', y cual gana
+    depende del orden del enum. Hoy las dos dan lo mismo, pero elegir el rol
+    es volver a atarse a lo mismo que hace impredecible el default del nodo.
     """
     if not wanted:
         return None
@@ -844,30 +894,45 @@ def match_colorspace_option(node, knob_name, wanted):
 
     target = _normalize(wanted)
 
-    # De mas estricto a mas laxo. El orden importa: buscando 'ACEScc' primero
-    # por igualdad y sufijo se evita que matchee 'ACEScct' por contencion.
-    for opcion in options:
-        if _normalize(opcion) == target:
-            return opcion
-    for opcion in options:
-        if _normalize(opcion).endswith(target):
-            return opcion
-    for opcion in options:
-        if target in _normalize(opcion):
-            return opcion
+    # Dos pasadas: primero contra los espacios nombrados DIRECTO, y recien
+    # despues contra la lista entera. La segunda pasada no es un adorno: hay
+    # colorspaces directos que tienen parentesis en su propio nombre -en el
+    # config aces_1.2 hay 34, del tipo 'Input - ARRI - V3 LogC (EI160) - Wide
+    # Gamut'-, y descartarlos de una dejaria sin resolver a quien pida uno de
+    # esos. Con las dos pasadas, un rol solo puede ganar si NADA directo sirve.
+    directas = [o for o in options if "(" not in str(o)]
+
+    for candidatas in (directas, options):
+        # De mas estricto a mas laxo. El orden importa: buscando 'ACEScc'
+        # primero por igualdad y sufijo se evita que matchee 'ACEScct' por
+        # contencion.
+        for opcion in candidatas:
+            if _normalize(opcion) == target:
+                return opcion
+        for opcion in candidatas:
+            if _normalize(opcion).endswith(target):
+                return opcion
+        for opcion in candidatas:
+            if target in _normalize(opcion):
+                return opcion
 
     debug_print(f"    [WARN] '{wanted}' no figura entre las opciones de {knob_name}")
     return None
 
 
 def configure_effect_node(node, spec):
-    """Carga el archivo de look y los parametros del .amf en el nodo."""
+    """Carga el archivo de look y los parametros del .amf en el nodo.
+
+    Devuelve (ok, motivo), donde `motivo` es el texto para el cartel del
+    usuario cuando algo quedo mal, o None si salio todo bien.
+    """
     if not node:
         debug_print("    [ERROR] El efecto no tiene nodo.")
-        return False
+        return False, "the effect has no node"
 
     effect_type = spec["type"]
     ok = True
+    motivo = None
 
     if effect_type == "OCIOCDLTransform":
         # read_from_file va PRIMERO: con el knob en False, file y cccid quedan
@@ -881,17 +946,28 @@ def configure_effect_node(node, spec):
     else:
         ok &= _set_knob(node, "file", spec["file"])
 
-    # El working space lo declara el .amf. El default del nodo (scene_linear)
-    # no es el que pide la cadena ACES, y con un grade real da distinto.
+    # El working space sale del .amf, o de AMF_WORKING_SPACE si el .amf no lo
+    # declara. El default del nodo, `scene_linear`, es un rol que en los configs
+    # ACES cae en ACEScg: no es el espacio en el que corre la cadena.
     wanted = spec.get("working_space")
     if wanted:
         opcion = match_colorspace_option(node, "working_space", wanted)
         if opcion:
             ok &= _set_knob(node, "working_space", opcion)
         else:
-            debug_print(f"    [WARN] Se deja el working_space por defecto (el .amf pedia '{wanted}')")
+            # NO es cosmetico y no puede pasar en silencio: el nodo se queda en
+            # `scene_linear`, que en los configs ACES es ACEScg, y el archivo de
+            # look termina corriendo sobre el gamut equivocado. El efecto queda
+            # creado pero MAL, asi que cuenta como error y sube al cartel. Un
+            # resultado incorrecto informado como "creado" es el peor final.
+            debug_print(
+                f"    [ERROR] El OCIO config del proyecto no expone '{wanted}': "
+                f"el working_space queda en el default del nodo y el look sale mal."
+            )
+            motivo = f"the project OCIO config has no '{wanted}' colorspace"
+            ok = False
 
-    return ok
+    return ok, motivo
 
 
 def print_node_knobs(node, titulo):
@@ -934,7 +1010,7 @@ def verify_node(node, effect_type):
             debug_print(f"      {knob_name:<16} = <no legible: {e}>")
 
 
-def apply_effect(track_item, spec, efectos_existentes, sub_track_index):
+def apply_effect(track_item, spec, efectos_existentes, sub_track_index, fallos=None, shot=None):
     """Crea el soft effect si falta. Devuelve 'creado', 'salteado' o 'error'.
 
     `sub_track_index` es la posicion del efecto en la cadena del .amf, y se
@@ -968,7 +1044,9 @@ def apply_effect(track_item, spec, efectos_existentes, sub_track_index):
     debug_print(f"    timelineIn/Out: {_safe_call(effect, 'timelineIn')} / {_safe_call(effect, 'timelineOut')}")
 
     node = _safe_call(effect, "node", None)
-    ok = configure_effect_node(node, spec)
+    ok, motivo = configure_effect_node(node, spec)
+    if motivo and fallos is not None and shot:
+        _anotar_fallo(fallos, shot, motivo)
 
     # El OCIOFileTransform todavia no esta afinado: mostramos todos sus knobs
     # para decidir que mas hay que setear (direction, interpolation...).
@@ -1122,12 +1200,24 @@ def remove_amf_effects(track_items):
 def _anotar_fallo(fallos, shot, motivo):
     """Registra el motivo por el que un shot no se pudo resolver.
 
-    Se queda con el PRIMER motivo de cada shot: si el shot no tiene
-    Look_Files, todos sus clips van a fallar por lo mismo y no aporta
-    nada repetirlo.
+    Un motivo que el shot YA tiene no se repite: si no hay Look_Files, todos
+    sus clips van a fallar por lo mismo y verlo veinte veces no aporta nada.
+
+    Los motivos DISTINTOS si se acumulan. Un mismo clip puede fallar por dos
+    cosas a la vez -el config del proyecto sin ACEScct para el CDL y sin
+    ACES2065-1 para el LMT- y quedarse solo con el primero esconde la mitad
+    del problema. Los motivos posibles son un puñado fijo, asi que el cartel
+    no crece sin control.
     """
-    if shot not in fallos:
+    if not motivo:
+        return
+    anteriores = fallos.get(shot)
+    if anteriores is None:
         fallos[shot] = motivo
+    elif motivo not in anteriores.split("; "):
+        # Se compara contra los motivos YA guardados, no como substring del
+        # texto entero: un motivo que fuera pedazo de otro se perderia.
+        fallos[shot] = "%s; %s" % (anteriores, motivo)
 
 
 def _avisar_fallos(fallos, total_clips):
@@ -1229,7 +1319,7 @@ def process_track_item(track_item, fallos):
     # los clips terminan con sus efectos a distinta altura, con subtracks
     # vacios en el medio.
     for indice, spec in enumerate(plan):
-        resumen[apply_effect(track_item, spec, efectos_existentes, indice)] += 1
+        resumen[apply_effect(track_item, spec, efectos_existentes, indice, fallos, shot)] += 1
 
     debug_print("")
     debug_print(

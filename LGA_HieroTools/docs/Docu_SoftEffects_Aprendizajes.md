@@ -303,3 +303,45 @@ llaman el panel o `apply_rotation`. Trampa medida: cambiar la medicion a
 `QRawFont` (advances de diseno) da los mismos numeros por API que
 `QFontMetricsF`, pero el render dibuja paneles ~1.3x mas anchos y corridos:
 la medicion queda con `QFontMetricsF` sobre el TTF del repo.
+
+## El `working_space` de los nodos OCIO no es "donde esta la entrada" (medido 03-09)
+
+El knob es un SANDWICH, no una declaracion: la doc de Foundry para
+OCIOFileTransform dice que la entrada se convierte de scene linear al espacio
+elegido, se aplica el archivo, y el resultado vuelve a scene linear. O sea que
+el nodo hace las dos conversiones solo. **Consecuencia practica: pedir un
+espacio absoluto es correcto sea cual sea el working space del proyecto, y la
+tool NO tiene que consultar ni el espacio del proyecto ni el del clip** (el
+clip ya fue convertido al working space del timeline antes de que el efecto lo
+vea).
+
+**El default del nodo es una trampa.** Viene en `scene_linear`, que no es un
+espacio sino un ROL del config OCIO. En el `aces_1.2` que traen los proyectos,
+`scene_linear` y `compositing_linear` apuntan los dos a `ACES - ACEScg` (AP1).
+Un `.clf` de LMT entra y sale en ACES2065-1 (AP0) -lo declara en su
+`InputDescriptor` y arranca con una matriz "AP0 to AP1"-, asi que con el
+default recibia AP1 y corria la LUT sobre el gamut equivocado. El error es
+sutil a la vista y sistematico.
+
+**Que dice el `.amf` y que no.** La cadena de un AMF corre en ACES2065-1. El
+unico que declara otro espacio es el CDL, con `<cdlWorkingSpace>`, y eso es la
+EXCEPCION para sacarlo a ACEScct. Un `lookTransform` que no declara nada NO es
+"da igual": es ACES2065-1. Confirmado contra la spec S-2019-001 y la guia de
+implementacion de ACES.
+
+**Al matchear contra el enum del knob, los roles quedan afuera.** Nuke los
+lista con formato `scene_linear (ACES - ACEScg)`. Pidiendo `ACES2065-1` en un
+config ACES matchean DOS opciones, `ACES - ACES2065-1` y
+`default (ACES - ACES2065-1)`, y cual gana depende del orden del enum. Hoy dan
+lo mismo, pero elegir el rol es volver a atarse a la indireccion que causo el
+bug. `LGA_NKS_ApplyAMF.match_colorspace_option` busca en DOS pasadas: primero
+contra las opciones sin parentesis, y despues contra la lista entera. La
+segunda pasada hace falta porque hay colorspaces directos con parentesis en
+su nombre (34 en `aces_1.2`, del tipo `Input - ARRI - V3 LogC (EI160) - Wide
+Gamut`): descartarlos de una dejaria sin resolver a quien pida uno de esos.
+
+**Si el espacio pedido no esta en el config, eso es un ERROR, no un WARN.**
+El nodo se queda en el default y el look sale mal igual, asi que informar el
+efecto como creado es el peor final posible. `configure_effect_node` devuelve
+`(ok, motivo)` y el motivo sube al cartel unico del final, el mismo que ya
+avisa los shots sin `Look_Files`.
