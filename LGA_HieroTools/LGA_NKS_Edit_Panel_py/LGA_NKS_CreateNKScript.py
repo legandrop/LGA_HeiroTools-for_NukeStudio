@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.10 | Lega
+  LGA_NKS_CreateNKScript v1.11 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,11 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
 
+  v1.11: El TimeClip del EditRef vuelve a llevar el rango REAL del clip
+         (1 - N frames del mov, el mismo que el Read) y se posiciona en el
+         timeline con frame_mode "start at". Llevaba el rango ya corrido Y
+         el "start at": el corrimiento se aplicaba dos veces y el TimeClip
+         le pedia al Read frames que el Read no tiene.
   v1.10: Un nodo de color SIN knob file tambien es del look. Nuke no
          escribe el knob que quedo en su default, asi que un template
          donde se borraron las expresiones TCL deja tres de los cuatro
@@ -137,6 +142,10 @@ ASSETS_DIR_NAME = "ASSETS"
 PROJECTS_SUBPATH = ("Comp", "1_projects")
 DEFAULT_HANDLE = 8
 START_FRAME = 1001  # los .nk arrancan siempre en 1001
+# Primer frame del clip del EditRef tal como lo entrega el Read del .mov.
+# Es el rango REAL del clip, no su lugar en el timeline: eso lo resuelve el
+# frame_mode "start at" del TimeClip.
+EDITREF_CLIP_FIRST = 1
 
 # Tamanio de la caja del handle en la ventana de rango. Se ajusta A MANO
 # desde aca: el spinbox va NATIVO a proposito (Style.FORM no lo pinta, ver
@@ -1015,6 +1024,9 @@ def build_script(
             diff = max(0, range_len - editref_frames)
             editref_start = range_first + diff // 2
         editref_end = editref_start + editref_frames - 1
+        # Rango REAL del clip, el que ve el Read del mov. El Write de review
+        # sigue trabajando en frames de timeline (editref_start/editref_end).
+        editref_clip_last = EDITREF_CLIP_FIRST + editref_frames - 1
         for chunk in chunks:
             cls = chunk_class(chunk)
             if cls == "Read" and "editref" in (chunk_knob(chunk, "file") or "").lower():
@@ -1024,24 +1036,31 @@ def build_script(
                 # template y el Read nacia roto.
                 if editref_mov:
                     set_chunk_knob(chunk, "file", quote_if_needed(editref_mov))
-                set_chunk_knob(chunk, "last", str(editref_frames))
-                set_chunk_knob(chunk, "origlast", str(editref_frames))
+                set_chunk_knob(chunk, "first", str(EDITREF_CLIP_FIRST))
+                set_chunk_knob(chunk, "origfirst", str(EDITREF_CLIP_FIRST))
+                set_chunk_knob(chunk, "last", str(editref_clip_last))
+                set_chunk_knob(chunk, "origlast", str(editref_clip_last))
             elif cls == "TimeClip":
-                # El rango del TimeClip es el del EditRef YA colocado en el
-                # script (1001 + handle), no la duracion cruda del mov: su
-                # propio label muestra [knob first] - [knob last].
-                set_or_add_chunk_knob(chunk, "first", str(editref_start))
-                set_or_add_chunk_knob(chunk, "last", str(editref_end))
-                set_or_add_chunk_knob(chunk, "origfirst", str(editref_start))
-                set_or_add_chunk_knob(chunk, "origlast", str(editref_end))
-                set_chunk_knob(chunk, "frame", str(editref_start))
+                # El rango del TimeClip es el REAL del clip del EditRef, el
+                # mismo que entrega el Read (1 - N frames del mov). Quien lo
+                # ubica en el timeline es frame_mode "start at": si ademas se
+                # le escribe el rango ya corrido, el corrimiento se aplica dos
+                # veces y el TimeClip le pide al Read frames que no tiene.
+                set_or_add_chunk_knob(chunk, "first", str(EDITREF_CLIP_FIRST))
+                set_or_add_chunk_knob(chunk, "last", str(editref_clip_last))
+                set_or_add_chunk_knob(chunk, "origfirst", str(EDITREF_CLIP_FIRST))
+                set_or_add_chunk_knob(chunk, "origlast", str(editref_clip_last))
+                set_or_add_chunk_knob(chunk, "frame_mode", '"start at"')
+                set_or_add_chunk_knob(chunk, "frame", str(editref_start))
             elif cls == "Write" and (chunk_knob(chunk, "name") or "").startswith(
                 "WRITE_DNXHD"
             ):
                 set_chunk_knob(chunk, "first", str(editref_start))
                 set_chunk_knob(chunk, "last", str(editref_end))
         log.append(
-            "  EditRef: %d frames, %d-%d" % (editref_frames, editref_start, editref_end)
+            "  EditRef: %d frames, clip %d-%d, start at %d (timeline %d-%d)"
+            % (editref_frames, EDITREF_CLIP_FIRST, editref_clip_last,
+               editref_start, editref_start, editref_end)
         )
     elif editref_mov:
         # Solo si el mov EXISTE pero no se pudo medir: si no existe, ya se
