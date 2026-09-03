@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.91 | Lega
+  LGA_NKS_ApplyAMF v0.92 | Lega
 
   Pone y saca los soft effects de color de un shot, siguiendo lo que
   declara el .amf que viene con el shot.
@@ -73,9 +73,23 @@ ____________________________________________________________________
     timing. Sin trackItem hay que dar timelineIn/timelineOut, y el efecto
     queda suelto en el track (es lo que hace LGA_NKS_FrameNumber_Create).
 
-  PENDIENTE: cartel cuando hay mas de un archivo de la misma extension
-  en Look_Files. Hoy eso solo avisa por log y usa el primero.
+  Con varios plates en el shot, el .amf se elige por el plate del clip
+  (ver pick_amf_for_plate). El aviso de 'hay mas de uno de esa extension'
+  quedo solo para el plan de respaldo, donde no hay .amf que consultar.
 
+  v0.92: El .amf se resuelve por el PLATE del clip y no como 'el unico de
+         esa extension'. Un shot trae un .amf por plate y cada plate tiene
+         su propio grade, asi que quedarse con el primero le ponia a un
+         clip de cbPlate el grade del aPlate. Ahora se toma el del plate
+         del clip en su version mas alta; si el shot no trae uno para ese
+         plate, o el clip no es un plate -un _comp-, se usa el del aPlate,
+         y si tampoco hay, el primero. El .cdl pasa a ser el HERMANO del
+         .amf elegido, y si ese .amf no tiene hermano solo se acepta un
+         .cdl suelto cuando hay UNO en la carpeta: con varios no se puede
+         saber cual es, y aplicar el primero es el bug de nuevo.
+         Ademas la carpeta se lista una vez por corrida y
+         cada plan se arma una vez por plate: el toggle hacia dos listados
+         y dos parseos de XML POR CLIP, todos de los mismos archivos.
   v0.91: El working space de la cadena pasa a ser ACES2065-1 cuando el .amf
          no declara otro. El .clf del LMT no trae <cdlWorkingSpace> -solo lo
          trae el CDL, para salirse a ACEScct-, asi que su nodo quedaba en el
@@ -153,6 +167,24 @@ DEBUG = False
 # Nombres de carpeta donde viven los archivos de look, colgando del shot.
 INPUT_DIR_NAME = "_input"
 LOOK_DIR_NAME = "Look_Files"
+
+# De que plate es una media, y con que version.
+#
+# 'SHOT_cbPlate_v004.1001.exr' -> ('cbplate', 4). El patron es el mismo que
+# usa LGA_NKS_CreateNKScript para leer los plates de un shot; se copia en vez
+# de importarse porque los dos modulos son hermanos y ninguno depende del
+# otro. La version sale del MISMO match que el plate: un prerender como
+# 'SHOT_aPlate_v001_Denoised_v02' tiene dos '_v###' y el que vale es el que
+# viene pegado al plate.
+PLATE_VER_RE = re.compile(r"_([A-Za-z][A-Za-z0-9]*?Plate[0-9]*)_v(\d+)", re.IGNORECASE)
+
+# El plate que se usa cuando el clip NO es un plate.
+#
+# Un _comp, un precomp o un render de review no nombran ningun plate, y el
+# look que les corresponde es el del plate principal. Tambien es el respaldo
+# cuando el clip SI es un plate pero el shot no trae .amf para ese: mejor el
+# del aPlate que ninguno.
+PLATE_POR_DEFECTO = "aplate"
 
 # El espacio en el que corre la cadena de un .amf.
 #
@@ -394,6 +426,117 @@ def resolve_look_dir(shot_dir):
     return re.sub(r"[\\/]+", "/", look_dir)
 
 
+# Cache de UNA corrida. El toggle arma el plan por CLIP, y todos los clips de
+# un shot miran la misma carpeta: sin esto, veinte clips son cuarenta listados
+# y cuarenta parseos de XML de los mismos archivos. Con esto la carpeta se
+# lista una vez y cada plan se arma una vez por plate distinto. Importa mas de
+# lo que parece porque Look_Files vive en el disco del estudio, no en local.
+#
+# NO se persiste entre corridas: entre un toggle y el siguiente el usuario pudo
+# bajar un .amf que faltaba. Hoy eso ya lo garantiza el cargador -el panel corre
+# la tool con execute_external_script, que arma un modulo NUEVO por click y no lo
+# registra en sys.modules, asi que los dos dicts nacen vacios solos-, pero
+# reset_caches() se llama igual al arrancar: el dia que alguien importe este
+# modulo de la forma normal, el cargador deja de salvarnos.
+_ARCHIVOS_CACHE = {}
+_PLAN_CACHE = {}
+
+
+def reset_caches():
+    """Vacia los caches. Se llama al arrancar cada corrida."""
+    _ARCHIVOS_CACHE.clear()
+    _PLAN_CACHE.clear()
+
+
+def _archivos_de(look_dir):
+    """Los archivos de la carpeta de look. Un solo listado por corrida."""
+    if not look_dir:
+        return []
+    if look_dir in _ARCHIVOS_CACHE:
+        return _ARCHIVOS_CACHE[look_dir]
+    try:
+        archivos = sorted(
+            re.sub(r"[\\/]+", "/", entry.path)
+            for entry in os.scandir(look_dir)
+            if entry.is_file()
+        )
+    except OSError as e:
+        debug_print(f"  [ERROR] No se pudo listar '{look_dir}': {e}")
+        archivos = []
+    _ARCHIVOS_CACHE[look_dir] = archivos
+    return archivos
+
+
+def plate_and_version(nombre):
+    """('cbplate', 4) para 'SHOT_cbPlate_v004.exr'. (None, -1) si no hay."""
+    if not nombre:
+        return None, -1
+    match = PLATE_VER_RE.search(str(nombre))
+    if not match:
+        return None, -1
+    return match.group(1).lower(), int(match.group(2))
+
+
+def plate_from_path(path):
+    """El plate de esa media, en minuscula, o None si no nombra ninguno.
+
+    Se mira el nombre del ARCHIVO y no la ruta entera: la carpeta del shot
+    puede nombrar un plate que no es el del clip.
+    """
+    if not path:
+        return None
+    normalizada = re.sub(r"[\\/]+", "/", str(path))
+    return plate_and_version(os.path.basename(normalizada))[0]
+
+
+def pick_amf_for_plate(look_dir, plate):
+    """El .amf que le corresponde a ese plate, o None si no hay ninguno.
+
+    El .amf del plate del clip, en su version mas alta. Si el shot no trae uno
+    para ese plate -o el clip no es un plate, como un _comp-, se cae al
+    PLATE_POR_DEFECTO. Si tampoco esta, el primero de la carpeta, que es el
+    comportamiento que habia antes de resolver por plate.
+
+    Hace falta porque un shot trae un .amf por plate y cada plate tiene su
+    propio grade: quedarse con el primero le pone a un clip de cbPlate el
+    grade del aPlate.
+    """
+    amfs = [p for p in _archivos_de(look_dir) if p.lower().endswith(".amf")]
+    if not amfs:
+        return None
+
+    por_plate = {}
+    for path in amfs:
+        nombre_plate, version = plate_and_version(os.path.basename(path))
+        if nombre_plate is None:
+            continue
+        anterior = por_plate.get(nombre_plate)
+        if anterior is None or version > anterior[0]:
+            por_plate[nombre_plate] = (version, path)
+
+    for buscado in (plate, PLATE_POR_DEFECTO):
+        if buscado and buscado in por_plate:
+            return por_plate[buscado][1]
+    return amfs[0]
+
+
+def sibling_look_file(amf_path, extension):
+    """El hermano del .amf: mismo nombre base, otra extension.
+
+    Es la unica forma precisa de resolver el .cdl cuando el shot trae varios
+    plates: elegido el .amf del cbPlate, su grade es el .cdl del cbPlate y no
+    'el primer .cdl de la carpeta'. La comparacion ignora mayusculas porque hay
+    carpetas donde el .amf dice 'cbPLATE' y el .cdl 'cbPlate'.
+    """
+    if not amf_path:
+        return None
+    buscado = os.path.basename(os.path.splitext(amf_path)[0] + extension).lower()
+    for path in _archivos_de(os.path.dirname(amf_path)):
+        if os.path.basename(path).lower() == buscado:
+            return path
+    return None
+
+
 def find_look_file(look_dir, extension, quiet=False):
     """El unico archivo de esa extension en la carpeta de look.
 
@@ -406,15 +549,10 @@ def find_look_file(look_dir, extension, quiet=False):
     if not look_dir:
         return None
 
-    try:
-        candidates = sorted(
-            entry.path
-            for entry in os.scandir(look_dir)
-            if entry.is_file() and entry.name.lower().endswith(extension)
-        )
-    except OSError as e:
-        debug_print(f"  [ERROR] No se pudo listar '{look_dir}': {e}")
-        return None
+    candidates = [
+        path for path in _archivos_de(look_dir)
+        if path.lower().endswith(extension)
+    ]
 
     if not candidates:
         if not quiet:
@@ -427,7 +565,7 @@ def find_look_file(look_dir, extension, quiet=False):
             debug_print(f"      - {os.path.basename(path)}")
         debug_print(f"  [AVISO] Por ahora se usa: {os.path.basename(candidates[0])}")
 
-    return re.sub(r"[\\/]+", "/", candidates[0])
+    return candidates[0]
 
 
 def read_cccid(cdl_path):
@@ -538,18 +676,40 @@ def read_amf(amf_path):
     ]
 
 
-def build_effect_plan(look_dir):
+def build_effect_plan(look_dir, plate=None):
     """Arma la lista de efectos a crear, en orden.
 
     Con .amf: se respeta el orden y el applied de cada lookTransform, y se
     toman working space y nombre de archivo de ahi. Sin .amf: plan fijo por
     extension.
+
+    `plate` es el plate del clip -'cbplate', 'aplate', None para un _comp- y
+    decide CUAL .amf se lee. El resultado se cachea por (carpeta, plate):
+    todos los clips de un mismo plate comparten plan, asi que el .amf se
+    parsea una vez y no una por clip.
     """
-    amf_path = find_look_file(look_dir, ".amf", quiet=True)
+    clave = (look_dir, plate)
+    if clave in _PLAN_CACHE:
+        return _PLAN_CACHE[clave]
+    plan = _build_effect_plan_sin_cache(look_dir, plate)
+    _PLAN_CACHE[clave] = plan
+    return plan
+
+
+def _build_effect_plan_sin_cache(look_dir, plate):
+    """El trabajo real de build_effect_plan. Ver el cache alla."""
+    amf_path = pick_amf_for_plate(look_dir, plate)
     if not amf_path:
         debug_print("  [AVISO] El shot no trae .amf: se usa el plan fijo por extension.")
         return _fallback_plan(look_dir)
 
+    elegido = plate_from_path(amf_path)
+    if plate and elegido and elegido != plate:
+        debug_print(
+            f"  [AVISO] El shot no trae .amf para '{plate}': se usa el de "
+            f"'{elegido}'"
+        )
+    debug_print(f"  plate del clip       : {plate or '<no es un plate>'}")
     debug_print(f"  amf                  : {amf_path}")
     look_transforms = read_amf(amf_path)
     if not look_transforms:
@@ -565,7 +725,33 @@ def build_effect_plan(look_dir):
             continue
 
         if info["has_cdl"]:
-            cdl_path = find_look_file(look_dir, ".cdl")
+            # El grade es el del .amf elegido, no 'el primer .cdl'. Con varios
+            # plates en la carpeta esa diferencia es el grade de otra toma.
+            cdl_path = sibling_look_file(amf_path, ".cdl")
+            if not cdl_path:
+                # Sin hermano se acepta un .cdl suelto SOLO si hay uno solo en
+                # la carpeta: ahi el nombre no sigue la convencion pero no hay
+                # ambiguedad. Con varios y ninguno hermano, elegir "el primero"
+                # es volver a mezclar el grade de otra toma, que es justo lo que
+                # este cambio arregla. Se prefiere avisar y no crear el CDL.
+                sueltos = [
+                    p for p in _archivos_de(look_dir) if p.lower().endswith(".cdl")
+                ]
+                if len(sueltos) == 1:
+                    cdl_path = sueltos[0]
+                    debug_print(
+                        f"    {index}. [AVISO] El .amf no tiene un .cdl hermano; "
+                        f"se usa el unico de la carpeta: {os.path.basename(cdl_path)}"
+                    )
+                elif sueltos:
+                    debug_print(
+                        f"    {index}. [ERROR] El .amf no tiene un .cdl hermano y hay "
+                        f"{len(sueltos)} .cdl en la carpeta: no se puede saber cual es "
+                        f"el de este plate"
+                    )
+                    # Sin continue, abajo se avisaria "no hay .cdl en la
+                    # carpeta", que es mentira: hay, y ese es el problema.
+                    continue
             if not cdl_path:
                 debug_print(f"    {index}. [ERROR] El .amf pide un CDL y no hay .cdl en la carpeta")
                 continue
@@ -1306,7 +1492,7 @@ def process_track_item(track_item, fallos):
         return resumen
 
     debug_print("  [PLAN SEGUN EL AMF]")
-    plan = build_effect_plan(look_dir)
+    plan = build_effect_plan(look_dir, plate_from_path(media_path))
     if not plan:
         debug_print("  [ERROR] No quedo ningun efecto por aplicar en este clip.")
         _anotar_fallo(fallos, shot, f"no .cdl in {LOOK_DIR_NAME}")
@@ -1503,6 +1689,10 @@ def decidir_modo(track_items):
 
 
 def _main_interno():
+    # Los caches valen para ESTA corrida y nada mas. Ver por que no alcanza con
+    # el cargador en el comentario de _ARCHIVOS_CACHE.
+    reset_caches()
+
     debug_print("\n" + "=" * 70)
     debug_print("  LGA_NKS_ApplyAMF - soft effects de color segun el .amf del shot")
     debug_print(f"  desde {INPUT_DIR_NAME}/{LOOK_DIR_NAME}")
