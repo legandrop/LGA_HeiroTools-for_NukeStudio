@@ -1,3 +1,9 @@
+v3.92:
+
+        - Create NK v000 destaca los denoised faltantes y la conservacion de rutas originales en el cartel de confirmacion, usando el enfasis del pack para reconocer el problema de un vistazo. [ HieroTools - Resaltar denoised en la confirmacion ]
+
+        - Create NK v000 permite continuar cuando faltan denoised (`LGA_NKS_CreateNKScript v1.12`): una sola confirmacion lista todos los faltantes de los plates con slot en el template. Al aceptar conserva los Reads y sus rutas originales, sin reemplazar el shot dentro de esas rutas, y los informa al finalizar. Cancelar no escribe el script. [ HieroTools - Crear NK con denoised pendientes ]
+
 v3.91:
 
         - Create NK v000 corria el EditRef dos veces (`LGA_NKS_CreateNKScript v1.11`): al TimeClip se le escribia el rango YA colocado en el timeline (1005-2082) y ademas quedaba con `frame_mode "start at"` en ese mismo 1005, asi que el corrimiento se aplicaba dos veces y su `original range` declaraba frames que el Read del mov no entrega (el Read sale 1-1078). Ahora el TimeClip lleva el rango REAL del clip, el mismo del Read, y quien lo ubica en el timeline es unicamente el "start at". El Write de review sigue acotado a los frames de timeline, que es lo que corresponde. [ HieroTools - TimeClip del EditRef con el rango real del clip ]

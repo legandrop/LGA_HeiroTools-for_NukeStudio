@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.11 | Lega
+  LGA_NKS_CreateNKScript v1.12 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -10,8 +10,11 @@ ____________________________________________________________________
   plates que no existen, clona trios para plates extra, apunta los
   OCIO (CDL/CLF) a los Look_Files del shot, centra el EditRef y ajusta
   el frame range del proyecto. El resultado se escribe en
-  <shot>/Comp/1_projects/<shot>_comp_v000.nk (si ya existe, avisa y no pisa).
+  <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.12: Una sola confirmacion para todos los denoised faltantes de los
+         plates del shot; permite conservar sus rutas originales del template.
+         El cartel destaca los denoised faltantes y las rutas que se conservan.
   v1.11: El TimeClip del EditRef vuelve a llevar el rango REAL del clip
          (1 - N frames del mov, el mismo que el Read) y se posiciona en el
          timeline con frame_mode "start at". Llevaba el rango ya corrido Y
@@ -126,9 +129,8 @@ def write_log_file(status, lines=None):
 KNOWN_LETTERS = ["a", "b", "c", "d", "e", "f"]
 KNOWN_SPECIALS = ["cb", "rf", "cc", "lg"]
 
-# aPlate y aDenoised nunca se borran: sus anchors estan cableados al resto
-# del comp (stamps en la zona COLOR). Si faltan, es error.
-NEVER_DELETE = {"aPlate", "aDenoised"}
+# aPlate es obligatorio. aDenoised conserva su trio si se acepta continuar.
+NEVER_DELETE = {"aPlate"}
 
 # Layout del backdrop input (medido sobre el template)
 COLUMN_START_X = -2087
@@ -309,6 +311,30 @@ def token_to_key(token, denoised=False):
 def token_sort_key(token):
     base, _, suffix = token.partition("#")
     return (base, int(suffix) if suffix else 0)
+
+
+def missing_denoised_keys(columns):
+    """Slots denoised del template que corresponden a plates reales sin render."""
+    present = {col["key"] for col in columns}
+    return [letter + "Denoised" for letter in KNOWN_LETTERS
+            if letter + "Plate" in present and letter + "Denoised" not in present]
+
+
+def confirm_missing_denoised(parent, missing):
+    """Una unica decision para conservar todos los Reads denoised faltantes."""
+    from LGA_NKS_Shared.LGA_NKS_MessageBox import ask_question
+    from LGA_NKS_Shared.LGA_UI_Style_HieroTools import emphasis
+
+    return ask_question(
+        parent, "Create NK v000",
+        "%s<br>No EXR sequence was found for:<br>%s<br><br>"
+        "Create the script keeping the %s<br>"
+        "in these denoised Reads?"
+        % (emphasis("Missing denoised"),
+           "<br>".join(emphasis(key) for key in missing),
+           emphasis("original template paths")),
+        yes_text="Continue", no_text="Cancel",
+    )
 
 
 def scan_shot(shot_root):
@@ -756,6 +782,7 @@ def build_script(
     editref_frames=None,
     editref_start=None,
     warnings=None,
+    keep_missing_denoised=False,
 ):
     """Genera el texto del .nk nuevo a partir del template.
 
@@ -776,6 +803,12 @@ def build_script(
     if columns is None:
         columns, unknown = scan_shot(shot_root)
     unknown = unknown or []
+    missing_denoised = missing_denoised_keys(columns)
+    if missing_denoised and not keep_missing_denoised:
+        raise CreateNKError(
+            "Missing denoised renders require confirmation: %s"
+            % ", ".join(missing_denoised)
+        )
     for col in columns:
         log.append(
             "  %-12s %s  [%d-%d]"
@@ -809,12 +842,20 @@ def build_script(
     to_delete = []
     col_by_key = {c["key"]: c for c in columns}
     trios = {}
+    preserved_files = {}
     for key in known_keys:
-        trio = trio_indices(chunks, reads[key], for_delete=key not in col_by_key)
+        keep_template = key in missing_denoised
+        trio = trio_indices(
+            chunks, reads[key], for_delete=key not in col_by_key and not keep_template
+        )
         if key in col_by_key:
             fill_read(chunks[reads[key]], col_by_key[key]["info"])
             trios[key] = [chunks[i] for i in trio]
             log.append("  SET %s" % key)
+        elif keep_template:
+            trios[key] = [chunks[i] for i in trio]
+            log.append("  CONSERVAR %s: ruta original del template" % key)
+            warnings.append("%s: kept the original template path (denoised missing)" % key)
         else:
             to_delete.extend(trio)
             log.append("  BORRAR %s" % key)
@@ -864,7 +905,12 @@ def build_script(
     x = COLUMN_START_X
     last_x = x
     started_specials = False
-    for col in columns:
+    layout_columns = list(columns)
+    for key in missing_denoised:
+        plate_index = next(i for i, col in enumerate(layout_columns)
+                           if col["key"] == key.replace("Denoised", "Plate"))
+        layout_columns.insert(plate_index + 1, {"key": key, "token": key[0]})
+    for col in layout_columns:
         base = col["token"].partition("#")[0]
         if not started_specials and base in KNOWN_SPECIALS:
             x += GROUP_GAP
@@ -1080,6 +1126,16 @@ def build_script(
                 "Could not read the EditRef duration: the review range is the template's, check it by hand",
             )
 
+    # Proteger rutas despues de clonar: fDenoised sigue sirviendo de modelo.
+    for key in missing_denoised:
+        for line_index, line in enumerate(chunks[reads[key]]):
+            if re.match(r"^\s+file\s", line):
+                marker = "__LGA_KEEP_DENOISED_%s_%d__" % (key, line_index)
+                if marker in template_text:
+                    raise CreateNKError("Marcador reservado presente en el template")
+                preserved_files[marker] = line
+                chunks[reads[key]][line_index] = marker
+
     # 6. reconstruir texto: sin borrados, con clones insertados tras el trio
     # de fDenoised (las posiciones visuales ya estan recalculadas)
     delete_set = set(to_delete)
@@ -1135,6 +1191,9 @@ def build_script(
     if not same_shot and re.search(re.escape(source_shot), text, re.IGNORECASE):
         raise CreateNKError("Quedaron menciones al shot de origen del template")
 
+    # Restaurar solo las rutas aprobadas, despues de validar el resto del script.
+    for marker, original_line in preserved_files.items():
+        text = text.replace(marker, original_line)
     return text
 
 
@@ -1842,6 +1901,7 @@ def _make_controller():
                     editref_frames=p["editref_frames"],
                     editref_start=p["editref_start"],
                     warnings=build_warnings,
+                    keep_missing_denoised=p.get("keep_missing_denoised", False),
                 )
                 write_script(
                     p["template_path"], text, p["out_path"],
@@ -1922,6 +1982,14 @@ def _make_controller():
                 )
                 return
 
+            missing = missing_denoised_keys(columns)
+            self.keep_missing_denoised = False
+            if missing:
+                if not confirm_missing_denoised(_get_hiero_main_window(), missing):
+                    write_log_file("Cancelado: faltan denoised %s" % ", ".join(missing))
+                    return
+                self.keep_missing_denoised = True
+
             out_path = v000_output(self.shot_root, self.shot_name)
             # Si el v000 ya existe se pregunta, no se aborta: rehacerlo es
             # un caso normal. Sin recomendada, porque pisar es destructivo
@@ -1985,6 +2053,7 @@ def _make_controller():
                     "editref_frames": data["editref_frames"],
                     "editref_start": editref_start,
                     "overwrite": getattr(self, "overwrite", False),
+                    "keep_missing_denoised": self.keep_missing_denoised,
                 }
             )
             self.build_worker.done.connect(self._on_build_done)
@@ -2044,4 +2113,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
