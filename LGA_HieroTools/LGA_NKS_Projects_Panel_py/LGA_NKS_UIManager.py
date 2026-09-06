@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.04 | Lega
+  LGA_NKS_UIManager v1.05 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.05: El toggle de contexto pasa a una fila propia ARRIBA de la lista de
+         proyectos, alineado a la izquierda. Antes compartia la fila del
+         contador, debajo de la lista. La fila solo se crea si el toggle existe.
   v1.04: El toggle de contexto invierte el orden visual: studio a la izquierda
          y client a la derecha. Solo posicion en el layout; el estado activo
          se sigue pintando por identidad del boton.
@@ -75,9 +78,22 @@ class UIManager:
         panel.projects_layout.setAlignment(QtCore.Qt.AlignTop)
 
         scroll_area.setWidget(panel.projects_widget)
+
+        # Toggle de contexto: fila propia ARRIBA de la lista, alineado a la izquierda.
+        # Solo existe para el login habilitado; si no aplica, no se agrega la fila
+        # y la lista queda pegada al borde superior como antes.
+        context_toggle = UIManager._build_context_toggle(panel)
+        if context_toggle is not None:
+            toggle_row = QtWidgets.QHBoxLayout()
+            toggle_row.setContentsMargins(0, 0, 0, 4)
+            toggle_row.setSpacing(6)
+            toggle_row.addWidget(context_toggle, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            toggle_row.addStretch(1)
+            projects_container_layout.addLayout(toggle_row)
+
         projects_container_layout.addWidget(scroll_area)
 
-        # Información de estado + toggle de contexto (alineado a la derecha)
+        # Información de estado (contador), debajo de la lista
         info_row = QtWidgets.QHBoxLayout()
         info_row.setContentsMargins(0, 0, 0, 0)
         info_row.setSpacing(6)
@@ -86,10 +102,6 @@ class UIManager:
         panel.info_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 6px;")
         panel.info_label.setAlignment(QtCore.Qt.AlignCenter)
         info_row.addWidget(panel.info_label, 1)
-
-        context_toggle = UIManager._build_context_toggle(panel)
-        if context_toggle is not None:
-            info_row.addWidget(context_toggle, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
 
         projects_container_layout.addLayout(info_row)
 

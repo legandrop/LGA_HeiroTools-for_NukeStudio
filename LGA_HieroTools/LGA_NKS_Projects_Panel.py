@@ -8,7 +8,7 @@ ____________________________________________________________________
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
-  - Toggle pill Studio/Client (alineado a la derecha del contador) visible para lega@wanka.tv.
+  - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
   v2.29: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.

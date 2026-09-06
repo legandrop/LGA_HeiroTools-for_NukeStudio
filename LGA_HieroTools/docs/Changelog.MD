@@ -1,5 +1,7 @@
 v3.92:
 
+        - El toggle Studio/Client del Projects Panel pasa a una fila propia ARRIBA de la lista de proyectos, alineado a la izquierda (`LGA_NKS_UIManager v1.05`). Antes compartia la fila del contador, debajo de la lista, lejos de lo que gobierna. La fila del toggle solo se crea si el toggle existe, asi que para los logins que no lo ven la lista sigue pegada al borde superior como estaba. [ HieroTools - Toggle de contexto arriba de la lista ]
+
         - Create NK v000 destaca los denoised faltantes y la conservacion de rutas originales en el cartel de confirmacion, usando el enfasis del pack para reconocer el problema de un vistazo. [ HieroTools - Resaltar denoised en la confirmacion ]
 
         - Create NK v000 permite continuar cuando faltan denoised (`LGA_NKS_CreateNKScript v1.12`): una sola confirmacion lista todos los faltantes de los plates con slot en el template. Al aceptar conserva los Reads y sus rutas originales, sin reemplazar el shot dentro de esas rutas, y los informa al finalizar. Cancelar no escribe el script. [ HieroTools - Crear NK con denoised pendientes ]
