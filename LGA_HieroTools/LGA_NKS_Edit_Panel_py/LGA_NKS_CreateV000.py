@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.16 | Lega
+  LGA_NKS_CreateV000 v1.17 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,16 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.17: El shot code deja de salir mal cuando el vendor code no esta
+         cargado en la DB de PipeSync. El parseo del filename se desviaba
+         para los dos lados: con un plate real
+         (shot_VND_aPlate_v001.%04d.exr) se comia el sufijo del plate como
+         descripcion, y sin sufijo cortaba el vendor. El v000 se creaba con
+         ese nombre y sin un solo aviso. Ahora, si la carpeta del shot y el
+         parseo son prefijo por bloques uno del otro, manda la carpeta, que
+         sale de cortar la ruta en _input y no depende de la DB. Solo
+         afecta al camino de abrir la tool sola: lanzada desde Import Shot
+         ya recibia el nombre de la carpeta como hint.
   v1.16: Las pestanas usan Style.TABS del modulo en vez de la hoja
          propia: la pestana activa deja de salir en SURFACE_HEADER, dos
          tonos mas clara que su panel, y pasa a WINDOW. Los QColor del
@@ -775,14 +785,75 @@ def _derive_shot_root(media_path):
     return "/".join(parts[:input_index])
 
 
+def _shot_code_from_folder(shot_root):
+    """Nombre de la carpeta del shot: el shot code segun el disco."""
+    if not shot_root:
+        return ""
+    return os.path.basename(shot_root.rstrip("/\\"))
+
+
+def _folder_and_parsed_are_same_shot(folder_code, shot_code):
+    """True si la carpeta y el parseo describen el mismo shot con distinto detalle.
+
+    O sea: uno es prefijo POR BLOQUES del otro, en cualquiera de las dos
+    direcciones. Esa es la firma de un parseo del filename que se desvio, y se
+    desvia para los dos lados por el MISMO motivo: que el vendor code no este
+    cargado en la DB de PipeSync.
+
+      - Se queda CORTO cuando el filename no trae mas bloques que el shot:
+        carpeta PROJA_1013_0800_VEN, parseo PROJA_1013_0800.
+      - Se pasa de LARGO con la convencion real de los plates, que es el caso
+        que de verdad ocurre: el archivo es PROJA_1013_0800_VEN_aPlate_v001
+        .%04d.exr, o sea shot + vendor + plate. Sin el vendor en la DB el
+        bloque base se calcula de 3, los dos bloques que sobran disparan la
+        regla de "shot con descripcion" de _analyze_shotname y el sufijo del
+        plate entra al nombre: el parseo devuelve PROJA_1013_0800_VEN_aPlate.
+
+    En los dos casos manda la carpeta, que sale de cortar la ruta en _input y
+    por lo tanto no depende de la DB. Es ademas lo que ya hacen las tools
+    hermanas: Import Shot y Create NK toman el shot name del nombre de la
+    carpeta y no parsean el filename.
+
+    La comparacion es por BLOQUES y no por caracteres: PROJA_1013_08 no es el
+    mismo shot que PROJA_1013_0800 aunque sea su prefijo literal. Si ninguno es
+    prefijo del otro no hay nada que corregir y se respeta el parseo.
+
+    LIMITE CONOCIDO Y ACEPTADO: sin la DB no hay forma de distinguir un vendor
+    code de cualquier otro sufijo -es exactamente para lo que existe
+    LGA_NKS_Vendors_Config-, asi que una carpeta administrativa tipo
+    PROJA_1013_0800_old tambien le presta su sufijo al nombre del v000. Se
+    acepta a proposito por dos razones: el v000 se escribe DENTRO de esa
+    carpeta, asi que su nombre tiene que ser coherente con donde vive; y
+    validar el bloque contra la DB anularia el arreglo, porque el caso a
+    cubrir es justamente que la DB no lo tenga.
+    """
+    if not folder_code or not shot_code:
+        return False
+    folder_low = folder_code.lower()
+    shot_low = shot_code.lower()
+    if folder_low == shot_low:
+        return False
+    return folder_low.startswith(shot_low + "_") or shot_low.startswith(
+        folder_low + "_"
+    )
+
+
 def _derive_shot_code(clip, shot_root):
     file_name = _clip_file_name(clip)
     base_name = clean_base_name(file_name)
     shot_code = extract_shot_code(base_name)
+    folder_code = _shot_code_from_folder(shot_root)
+    # Ver _folder_and_parsed_are_same_shot: es el caso del vendor code que la DB
+    # no tiene. Import Shot no sufre esto porque nunca parsea el filename -toma
+    # el nombre de la carpeta-, y cuando lanza esta tool le pasa ese nombre como
+    # shot_code_hint, que gana antes de llegar aca. El camino fragil es abrir
+    # Create v000 solo, desde el playhead o desde la seleccion del timeline.
+    if _folder_and_parsed_are_same_shot(folder_code, shot_code):
+        return folder_code
     if shot_code:
         return shot_code
-    if shot_root:
-        return os.path.basename(shot_root.rstrip("/\\"))
+    if folder_code:
+        return folder_code
     try:
         return clip.name()
     except Exception:
